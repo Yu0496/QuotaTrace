@@ -1,4 +1,5 @@
 using UsageTray.Core;
+using UsageTray.Providers.Antigravity;
 
 namespace UsageTray.Services;
 
@@ -60,6 +61,7 @@ public sealed class DashboardSnapshot
     public CostQuality CostQuality { get; init; } = CostQuality.Unavailable;
     public DateTimeOffset? CoverageStart { get; init; }
     public CodexCycleUsageView? CodexWeeklyCycle { get; init; }
+    public IReadOnlyList<AntigravityQuotaEstimate> AntigravityEstimates { get; init; } = [];
     public IReadOnlyList<DailyUsageView> Daily { get; init; } = [];
     public IReadOnlyList<ModelUsageView> Models { get; init; } = [];
     public IReadOnlyList<ProjectUsageView> Projects { get; init; } = [];

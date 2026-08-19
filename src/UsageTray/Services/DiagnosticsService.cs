@@ -27,14 +27,29 @@ public sealed class DiagnosticsService
     {
         var roots = _codexLocator.GetCandidateRoots(settings.ExtraCodexRoots);
         var codexFiles = _codexLocator.DiscoverJsonlFiles(roots);
-        var agJson = _antigravityLocator.DiscoverJsonFiles();
+        var agRoots = _antigravityLocator.GetCandidateAppRoots();
         var agDb = _antigravityLocator.DiscoverDatabaseFiles();
+        var agSummaries = _antigravityLocator.DiscoverSummaryDatabaseFiles();
+        var agGenerations = _repository.GetAntigravityGenerations();
+
+        var agInput = agGenerations.Sum(g => g.InputTokens);
+        var agCacheRead = agGenerations.Sum(g => g.CacheReadTokens);
+        var agCacheWrite = agGenerations.Sum(g => g.CacheWriteTokens);
+        var agThinking = agGenerations.Sum(g => g.ThinkingOutputTokens);
+        var agResponse = agGenerations.Sum(g => g.ResponseOutputTokens);
+        var agOutput = agGenerations.Sum(g => g.OutputTokens);
+        var agInvErrors = agGenerations.Count(g => !g.InvariantHolds);
+
         return $"UsageTray\n版本：{typeof(DiagnosticsService).Assembly.GetName().Version}\nWindows：{RuntimeInformation.OSDescription}\n.NET：{Environment.Version}\n\n" +
-               $"Codex\n路径：{string.Join("; ", roots)}\nJSONL 文件：{codexFiles.Count}\n\n" +
+               $"Codex\n路径：{string.Join("; ", roots)}\nJSONL 文件：{codexFiles.Count}\n" +
                $"解析器版本：{CodexJsonlParser.ParserVersion}\n数据库模式：{_repository.GetFlag("codex_schema_version") ?? "未知"}\n待重建：{_repository.GetFlag("codex_rebuild_required") ?? "未知"}\n" +
                $"Codex 原始快照：{CountAudit("Events")}，重复 EventKey：{AuditNumber("DuplicateEventCount")}，计数回退：{AuditNumber("CounterRewindCount")}\n" +
                "官方 app-server 交叉校验：N/A（当前未配置本地 RPC）\n\n" +
-               $"Antigravity\n历史 JSON：{agJson.Count}\nDB/PB 文件：{agDb.Count}\n历史 token 标记：{_repository.GetFlag("antigravity_history_tokens") ?? "未检测"}\n" +
+               $"Antigravity\n根目录：{string.Join("; ", agRoots)}\n会话 DB 文件：{agDb.Count}\nSummary DB：{agSummaries.Count}\n" +
+               $"已解析 Generations：{agGenerations.Count}\n" +
+               $"Token 分布：Input(未命中)={agInput:N0}, CacheRead={agCacheRead:N0}, CacheWrite={agCacheWrite:N0}, Thinking={agThinking:N0}, Response={agResponse:N0}, AggregateOutput={agOutput:N0}\n" +
+               $"全库恒等式校验(Output == Thinking + Response)：错误数={agInvErrors}\n" +
+               $"历史 token 标记：{_repository.GetFlag("antigravity_history_tokens") ?? "未检测"}\n\n" +
                "说明：此报告不包含 prompt、response、CSRF、OAuth 或邮箱。";
     }
 

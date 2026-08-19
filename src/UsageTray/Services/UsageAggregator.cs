@@ -9,11 +9,13 @@ public sealed class UsageAggregator
 {
     private readonly UsageRepository _repository;
     private readonly PricingService _pricing;
+    private readonly AntigravityQuotaEstimator _antigravityQuotaEstimator;
 
-    public UsageAggregator(UsageRepository repository, PricingService pricing)
+    public UsageAggregator(UsageRepository repository, PricingService pricing, AntigravityQuotaEstimator? antigravityQuotaEstimator = null)
     {
         _repository = repository;
         _pricing = pricing;
+        _antigravityQuotaEstimator = antigravityQuotaEstimator ?? new AntigravityQuotaEstimator(pricing);
     }
 
     public DashboardSnapshot BuildSnapshot(DateRange range, ProviderKind? provider = null, bool isWeeklyCycle = false)
@@ -152,6 +154,8 @@ public sealed class UsageAggregator
             new[] { _repository.GetCoverageStart(ProviderKind.Codex), _repository.GetCoverageStart(ProviderKind.Antigravity) }
                 .Where(value => value.HasValue).Select(value => value!.Value).OrderBy(value => value).FirstOrDefault();
         var codexWeeklyCycle = BuildCodexWeeklyCycle(quotas, warnings);
+        var antigravityEstimates = BuildAntigravityEstimates();
+
         return new DashboardSnapshot
         {
             Range = range,
@@ -169,6 +173,7 @@ public sealed class UsageAggregator
             CostQuality = aggregate.Quality,
             CoverageStart = coverage == default ? null : coverage,
             CodexWeeklyCycle = codexWeeklyCycle,
+            AntigravityEstimates = antigravityEstimates,
             Daily = daily,
             Models = models,
             Projects = projects,
@@ -176,6 +181,20 @@ public sealed class UsageAggregator
             Warnings = warnings.ToList(),
             RefreshedAt = DateTimeOffset.Now
         };
+    }
+
+    private IReadOnlyList<AntigravityQuotaEstimate> BuildAntigravityEstimates()
+    {
+        try
+        {
+            var agSnapshots = _repository.GetQuotaSnapshots(ProviderKind.Antigravity);
+            var agGenerations = _repository.GetAntigravityGenerations();
+            return _antigravityQuotaEstimator.EstimateAll(agSnapshots, agGenerations);
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     private CodexCycleUsageView? BuildCodexWeeklyCycle(IReadOnlyList<QuotaView> quotas, HashSet<string> warnings)

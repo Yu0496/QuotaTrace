@@ -138,6 +138,33 @@ internal sealed class QuotaPopupForm : Form
             var others = agSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
             y += MeasureQuotaWindowHeight(others);
         }
+
+        // Antigravity Estimates
+        if (_snapshot.AntigravityEstimates is { Count: > 0 } agEstimates && agEstimates.Any(e => e.EstimatedFullQuotaUsd.HasValue))
+        {
+            y += 2;
+            y += _boldFont.Height + 3;
+            foreach (var est in agEstimates.Where(e => e.EstimatedFullQuotaUsd.HasValue))
+            {
+                y += _regularFont.Height + 4;
+            }
+        }
+
+        // Antigravity Local Logs
+        var agModels = _snapshot.Models.Where(m => m.Provider == ProviderKind.Antigravity).ToList();
+        y += 2;
+        y += _boldFont.Height + 3;
+        if (agModels.Count > 0)
+        {
+            y += _regularFont.Height + 3;
+            y += _regularFont.Height + 3;
+            y += _regularFont.Height + 4;
+        }
+        else
+        {
+            y += _regularFont.Height + 4;
+        }
+
         y += 6;
         y += 1; // Divider
         y += 8;
@@ -241,7 +268,7 @@ internal sealed class QuotaPopupForm : Form
         var agPlan = agSnapshots.Select(s => s.PlanTier).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
         var agOffline = agViews.Count > 0 && agViews.All(v => v.IsOffline);
 
-        DrawSectionHeader(g, padX, ref y, "Antigravity 额度", agPlan, agOffline ? "离线" : null, Color.FromArgb(59, 130, 246));
+        DrawSectionHeader(g, padX, ref y, "Antigravity 额度与估算", agPlan, agOffline ? "离线" : null, Color.FromArgb(59, 130, 246));
 
         if (agSnapshots.Count == 0)
         {
@@ -257,6 +284,54 @@ internal sealed class QuotaPopupForm : Form
             if (weekly.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "周窗口", weekly);
             var others = agSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
             if (others.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "其他窗口", others);
+        }
+
+        // Antigravity Quota Estimates
+        if (_snapshot.AntigravityEstimates is { Count: > 0 } agEstimates && agEstimates.Any(e => e.EstimatedFullQuotaUsd.HasValue))
+        {
+            y += 2;
+            using var estHeaderBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
+            g.DrawString("额度 API 等值估算 (按真实用量与配额推算)", _boldFont, estHeaderBrush, padX + 8, y);
+            y += _boldFont.Height + 3;
+
+            foreach (var est in agEstimates.Where(e => e.EstimatedFullQuotaUsd.HasValue))
+            {
+                var label = $"{est.DisplayName} - {est.WindowKind}";
+                var valText = $"约 ${est.EstimatedFullQuotaUsd!.Value:0.00}";
+                var confText = $"（置信度：{est.Confidence}）";
+                DrawKeyValueHighlight(g, padX + 16, ref y, label, valText, confText, Color.FromArgb(5, 150, 105));
+            }
+        }
+
+        // Antigravity Local Logs
+        var agModels = _snapshot.Models.Where(m => m.Provider == ProviderKind.Antigravity).ToList();
+        y += 2;
+        using var agLogHeaderBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
+        g.DrawString("本地历史会话用量", _boldFont, agLogHeaderBrush, padX + 8, y);
+        y += _boldFont.Height + 3;
+
+        if (agModels.Count > 0)
+        {
+            var input = agModels.Sum(item => item.NonCachedInputTokens);
+            var cacheRead = agModels.Sum(item => item.CachedTokens);
+            var cacheCreation = agModels.Sum(item => item.CacheCreationTokens);
+            var output = agModels.Sum(item => item.OutputTokens);
+            var cost = agModels.Count > 0 && agModels.All(item => item.ApiEquivalentUsd.HasValue) ? agModels.Sum(item => item.ApiEquivalentUsd!.Value) : (decimal?)null;
+            var costText = cost.HasValue ? "$" + cost.Value.ToString("0.00") : "—";
+
+            using var textBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
+            g.DrawString($"Input（未命中）: {FormatTokens(input)}    |    Cache Read: {FormatTokens(cacheRead)}", _regularFont, textBrush, padX + 16, y);
+            y += _regularFont.Height + 3;
+            g.DrawString($"Cache Creation: {FormatTokens(cacheCreation)}    |    Output: {FormatTokens(output)}", _regularFont, textBrush, padX + 16, y);
+            y += _regularFont.Height + 3;
+
+            DrawKeyValueHighlight(g, padX + 16, ref y, "API 已用等值", costText, $"（范围 {FormatRange(_snapshot.Range)}）", Color.FromArgb(37, 99, 235));
+        }
+        else
+        {
+            using var muted = new SolidBrush(Color.FromArgb(148, 163, 184));
+            g.DrawString("本次统计范围没有可显示的 Antigravity token。", _regularFont, muted, padX + 16, y);
+            y += _regularFont.Height + 4;
         }
 
         y += 6;

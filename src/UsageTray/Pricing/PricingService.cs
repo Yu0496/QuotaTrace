@@ -169,7 +169,7 @@ public sealed class PricingService
         return longPrice is null ? rule : rule with { LongContextPrice = longPrice, LongContextThresholdTokens = 272_000 };
     }
 
-    private static PricingDocument BuiltInDefaults() => new(
+    public static PricingDocument BuiltInDefaults() => new(
         2, new DateOnly(2026, 8, 20),
         [
             new PricingRule("Codex", "gpt-5.6", MatchMode.Exact, 5m, 0.5m, 6.25m, 30m,
@@ -195,20 +195,28 @@ public sealed class PricingService
             new PricingRule("Codex", "gpt-4.1*", MatchMode.Wildcard, 2m, 0.5m, null, 8m,
                 "https://platform.openai.com/pricing", new DateOnly(2026, 8, 20)),
             new PricingRule("Antigravity", "gemini-3.7-flash*", MatchMode.Wildcard, 0.75m, 0.075m, null, 3.75m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), false),
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-3.6-flash*", MatchMode.Wildcard, 0.75m, 0.075m, null, 3.75m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), false),
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-3.5-flash-lite*", MatchMode.Wildcard, 0.3m, 0.03m, null, 2.5m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), false),
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-3.5-flash*", MatchMode.Wildcard, 1.5m, 0.15m, null, 9m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), false),
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-3.1-flash-lite*", MatchMode.Wildcard, 0.25m, 0.025m, null, 1.5m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), false),
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "gemini-3.1-pro*", MatchMode.Wildcard, 1.25m, 0.3125m, null, 10m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-2.5-pro*", MatchMode.Wildcard, 1.25m, 0.3125m, null, 10m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), false),
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-2.5-flash*", MatchMode.Wildcard, 0.3m, 0.03m, null, 2.5m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), false),
-            new PricingRule("Antigravity", "claude-3-7-sonnet*", MatchMode.Wildcard, 3m, 0.3m, null, 15m,
-                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), false)
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3-7-sonnet*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3-5-sonnet*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3-5-haiku*", MatchMode.Wildcard, 0.8m, 0.08m, 1.0m, 4m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3-opus*", MatchMode.Wildcard, 15m, 1.5m, 18.75m, 75m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true)
         ]);
 }

@@ -144,6 +144,32 @@ CREATE TABLE IF NOT EXISTS recorder_state (
     last_recorded_at_utc TEXT NOT NULL,
     counter_epoch INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS antigravity_generations (
+    provider TEXT NOT NULL,
+    source_db TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    generation_id TEXT NULL,
+    response_id TEXT NULL,
+    event_utc TEXT NOT NULL,
+    local_date TEXT NOT NULL,
+    project_key TEXT NOT NULL DEFAULT '',
+    model_id TEXT NOT NULL DEFAULT '',
+    display_name TEXT NULL,
+    input_tokens INTEGER NOT NULL,
+    cache_read_tokens INTEGER NOT NULL,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    thinking_output_tokens INTEGER NOT NULL DEFAULT 0,
+    response_output_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL,
+    source_idx INTEGER NOT NULL,
+    quality INTEGER NOT NULL DEFAULT 0,
+    dedupe_key TEXT NOT NULL PRIMARY KEY
+);
+CREATE INDEX IF NOT EXISTS ix_ag_gen_time ON antigravity_generations(provider, event_utc);
+CREATE INDEX IF NOT EXISTS ix_ag_gen_date ON antigravity_generations(provider, local_date);
+CREATE INDEX IF NOT EXISTS ix_ag_gen_model ON antigravity_generations(provider, model_id);
+CREATE INDEX IF NOT EXISTS ix_ag_gen_conv ON antigravity_generations(provider, conversation_id);
+CREATE INDEX IF NOT EXISTS ix_ag_gen_source ON antigravity_generations(provider, source_db);
 CREATE TABLE IF NOT EXISTS app_metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

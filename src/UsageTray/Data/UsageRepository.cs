@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using UsageTray.Core;
+using UsageTray.Providers.Antigravity;
 using UsageTray.Providers.Codex;
 
 namespace UsageTray.Data;
@@ -182,6 +183,74 @@ public sealed class UsageRepository
         transaction.Commit();
     }
 
+    public void ReplaceAntigravitySource(FileInfo file, IReadOnlyList<AntigravityGenerationUsage> generations,
+        IReadOnlyList<UsageBucket> buckets, string? conversationId, string? projectKey, string? lastModel, string? error)
+    {
+        using var connection = _database.OpenConnection();
+        using var transaction = connection.BeginTransaction();
+
+        Execute(transaction, connection, "DELETE FROM antigravity_generations WHERE provider=$provider AND source_db=$path",
+            ("$provider", ProviderKind.Antigravity.ToStorageString()), ("$path", file.FullName));
+        Execute(transaction, connection, "DELETE FROM file_usage WHERE provider=$provider AND source_path=$path",
+            ("$provider", ProviderKind.Antigravity.ToStorageString()), ("$path", file.FullName));
+
+        foreach (var gen in generations)
+        {
+            using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = @"INSERT OR IGNORE INTO antigravity_generations(provider,source_db,conversation_id,generation_id,
+                response_id,event_utc,local_date,project_key,model_id,display_name,input_tokens,cache_read_tokens,cache_write_tokens,
+                thinking_output_tokens,response_output_tokens,output_tokens,source_idx,quality,dedupe_key)
+                VALUES($provider,$sourceDb,$convId,$genId,$respId,$utc,$localDate,$project,$model,$display,$input,$cacheRead,$cacheWrite,
+                $thinking,$respOutput,$output,$sourceIdx,$quality,$dedupeKey)";
+            insert.Parameters.AddWithValue("$provider", ProviderKind.Antigravity.ToStorageString());
+            insert.Parameters.AddWithValue("$sourceDb", file.FullName);
+            insert.Parameters.AddWithValue("$convId", gen.ConversationId);
+            insert.Parameters.AddWithValue("$genId", (object?)gen.GenerationId ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$respId", (object?)gen.ResponseId ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$utc", gen.Timestamp.ToUniversalTime().ToString("O"));
+            insert.Parameters.AddWithValue("$localDate", DateOnly.FromDateTime(gen.Timestamp.ToLocalTime().DateTime).ToString("yyyy-MM-dd"));
+            insert.Parameters.AddWithValue("$project", gen.ProjectKey ?? string.Empty);
+            insert.Parameters.AddWithValue("$model", gen.Model);
+            insert.Parameters.AddWithValue("$display", (object?)gen.DisplayName ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$input", gen.InputTokens);
+            insert.Parameters.AddWithValue("$cacheRead", gen.CacheReadTokens);
+            insert.Parameters.AddWithValue("$cacheWrite", gen.CacheWriteTokens);
+            insert.Parameters.AddWithValue("$thinking", gen.ThinkingOutputTokens);
+            insert.Parameters.AddWithValue("$respOutput", gen.ResponseOutputTokens);
+            insert.Parameters.AddWithValue("$output", gen.OutputTokens);
+            insert.Parameters.AddWithValue("$sourceIdx", gen.SourceRowIdx);
+            insert.Parameters.AddWithValue("$quality", (int)gen.Quality);
+            insert.Parameters.AddWithValue("$dedupeKey", gen.EffectiveKey);
+            insert.ExecuteNonQuery();
+        }
+
+        foreach (var bucket in buckets)
+        {
+            InsertBucket(connection, transaction, bucket, file.FullName, conversationId);
+        }
+
+        using var state = connection.CreateCommand();
+        state.Transaction = transaction;
+        state.CommandText = @"INSERT INTO source_files(provider,path,file_size,mtime_utc_ticks,parsed_bytes,parser_version,session_id,project_key,last_model,last_error)
+            VALUES($provider,$path,$size,$mtime,$parsed,2,$session,$project,$model,$error)
+            ON CONFLICT(provider,path) DO UPDATE SET file_size=excluded.file_size,mtime_utc_ticks=excluded.mtime_utc_ticks,
+            parsed_bytes=excluded.parsed_bytes,parser_version=excluded.parser_version,session_id=excluded.session_id,
+            project_key=excluded.project_key,last_model=excluded.last_model,last_error=excluded.last_error";
+        state.Parameters.AddWithValue("$provider", ProviderKind.Antigravity.ToStorageString());
+        state.Parameters.AddWithValue("$path", file.FullName);
+        state.Parameters.AddWithValue("$size", file.Length);
+        state.Parameters.AddWithValue("$mtime", file.LastWriteTimeUtc.Ticks);
+        state.Parameters.AddWithValue("$parsed", file.Length);
+        state.Parameters.AddWithValue("$session", (object?)conversationId ?? DBNull.Value);
+        state.Parameters.AddWithValue("$project", (object?)projectKey ?? DBNull.Value);
+        state.Parameters.AddWithValue("$model", (object?)lastModel ?? DBNull.Value);
+        state.Parameters.AddWithValue("$error", (object?)error ?? DBNull.Value);
+        state.ExecuteNonQuery();
+
+        transaction.Commit();
+    }
+
     public void DeleteSource(ProviderKind provider, string path)
     {
         using var connection = _database.OpenConnection();
@@ -190,6 +259,9 @@ public sealed class UsageRepository
             ("$provider", provider.ToStorageString()), ("$path", path));
         if (provider == ProviderKind.Codex)
             Execute(transaction, connection, "DELETE FROM codex_snapshots WHERE provider=$provider AND source_path=$path",
+                ("$provider", provider.ToStorageString()), ("$path", path));
+        if (provider == ProviderKind.Antigravity)
+            Execute(transaction, connection, "DELETE FROM antigravity_generations WHERE provider=$provider AND source_db=$path",
                 ("$provider", provider.ToStorageString()), ("$path", path));
         Execute(transaction, connection, "DELETE FROM source_files WHERE provider=$provider AND path=$path",
             ("$provider", provider.ToStorageString()), ("$path", path));
@@ -391,44 +463,84 @@ public sealed class UsageRepository
         }).ToList();
     }
 
+    public IReadOnlyList<AntigravityGenerationUsage> GetAntigravityGenerations(DateTimeOffset? startUtc = null, DateTimeOffset? endUtc = null)
+    {
+        var list = new List<AntigravityGenerationUsage>();
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        var sql = "SELECT conversation_id,generation_id,response_id,event_utc,model_id,display_name,input_tokens,cache_read_tokens,cache_write_tokens,thinking_output_tokens,response_output_tokens,output_tokens,project_key,source_db,source_idx,quality FROM antigravity_generations WHERE provider=$provider";
+        if (startUtc.HasValue) sql += " AND event_utc >= $start";
+        if (endUtc.HasValue) sql += " AND event_utc <= $end";
+        sql += " ORDER BY event_utc ASC, source_idx ASC";
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("$provider", ProviderKind.Antigravity.ToStorageString());
+        if (startUtc.HasValue) command.Parameters.AddWithValue("$start", startUtc.Value.ToUniversalTime().ToString("O"));
+        if (endUtc.HasValue) command.Parameters.AddWithValue("$end", (endUtc ?? DateTimeOffset.UtcNow).ToUniversalTime().ToString("O"));
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            list.Add(new AntigravityGenerationUsage(
+                reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                DateTimeOffset.Parse(reader.GetString(3)),
+                reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.GetInt64(6),
+                reader.GetInt64(7),
+                reader.GetInt64(8),
+                reader.GetInt64(9),
+                reader.GetInt64(10),
+                reader.GetInt64(11),
+                reader.IsDBNull(12) || string.IsNullOrEmpty(reader.GetString(12)) ? null : reader.GetString(12),
+                reader.GetString(13),
+                reader.GetInt32(14),
+                (DataQuality)reader.GetInt32(15)
+            ));
+        }
+        return list;
+    }
+
     public IReadOnlyList<UsageBucket> GetAntigravityUsageInUtcWindow(DateTimeOffset startUtc, DateTimeOffset? endUtc = null)
     {
-        var result = new List<UsageBucket>();
+        var generations = GetAntigravityGenerations(startUtc, endUtc);
+        if (generations.Count > 0)
+        {
+            return AntigravitySqliteHistoryParser.ConvertToBuckets(generations, "antigravity://window");
+        }
+
+        var startDate = DateOnly.FromDateTime(startUtc.ToLocalTime().DateTime);
+        var endDate = DateOnly.FromDateTime((endUtc ?? DateTimeOffset.UtcNow).ToLocalTime().DateTime);
+        return GetUsage(new DateRange(startDate, endDate), ProviderKind.Antigravity);
+    }
+
+    public IReadOnlyList<QuotaSnapshot> GetQuotaSnapshots(ProviderKind provider, string? modelOrPoolId = null)
+    {
         using var connection = _database.OpenConnection();
-        var includeLive = !string.Equals(GetFlag(connection, "antigravity_history_tokens"), "1", StringComparison.Ordinal);
-
-        if (includeLive)
+        using var command = connection.CreateCommand();
+        var sql = "SELECT provider,captured_at_utc,model_or_pool_id,label,remaining_fraction,reset_at_utc,window_kind,source,plan_tier FROM quota_snapshots WHERE provider=$provider";
+        if (!string.IsNullOrWhiteSpace(modelOrPoolId)) sql += " AND model_or_pool_id=$pool";
+        sql += " ORDER BY captured_at_utc ASC";
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("$provider", provider.ToStorageString());
+        if (!string.IsNullOrWhiteSpace(modelOrPoolId)) command.Parameters.AddWithValue("$pool", modelOrPoolId);
+        using var reader = command.ExecuteReader();
+        var list = new List<QuotaSnapshot>();
+        while (reader.Read())
         {
-            using var command = connection.CreateCommand();
-            command.CommandText = @"SELECT provider,local_date,project_key,model_id,input_tokens,cached_input_tokens,
-                cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,source_path,conversation_id,
-                '' AS service_tier,0 AS long_context_request_count,0 AS request_shape_uncertain_count,0 AS long_context_input_tokens,
-                0 AS long_context_cached_input_tokens,0 AS long_context_cache_write_input_tokens,0 AS long_context_output_tokens,1 AS cache_write_available
-                FROM usage_events WHERE provider=$provider AND event_utc >= $startUtc AND event_utc <= $endUtc";
-            command.Parameters.AddWithValue("$provider", ProviderKind.Antigravity.ToStorageString());
-            command.Parameters.AddWithValue("$startUtc", startUtc.ToUniversalTime().ToString("O"));
-            command.Parameters.AddWithValue("$endUtc", (endUtc ?? DateTimeOffset.UtcNow).ToUniversalTime().ToString("O"));
-            using var reader = command.ExecuteReader();
-            while (reader.Read()) result.Add(ReadBucket(reader));
+            list.Add(new QuotaSnapshot(
+                provider,
+                DateTimeOffset.Parse(reader.GetString(1)),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetDouble(4),
+                reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5)),
+                reader.GetString(6),
+                reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8)
+            ));
         }
-        else
-        {
-            var startDate = DateOnly.FromDateTime(startUtc.ToLocalTime().DateTime);
-            var endDate = DateOnly.FromDateTime((endUtc ?? DateTimeOffset.UtcNow).ToLocalTime().DateTime);
-            return GetUsage(new DateRange(startDate, endDate), ProviderKind.Antigravity);
-        }
-
-        return result
-            .GroupBy(bucket => new { bucket.Provider, bucket.LocalDate, bucket.ProjectKey, bucket.ModelId, bucket.SourcePath, bucket.ConversationId, bucket.ServiceTier })
-            .Select(group => new UsageBucket(group.Key.Provider, group.Key.LocalDate, group.Key.ProjectKey, group.Key.ModelId,
-                group.Sum(item => item.InputTokens), group.Sum(item => item.CachedInputTokens), group.Sum(item => item.OutputTokens),
-                group.Sum(item => item.RequestCount), group.Max(item => item.Quality), group.Key.SourcePath, group.Key.ConversationId,
-                group.Sum(item => item.CacheWriteInputTokens), group.Max(item => item.CostQuality), group.Key.ServiceTier,
-                group.Sum(item => item.LongContextRequestCount), group.Sum(item => item.RequestShapeUncertainCount),
-                group.Sum(item => item.LongContextInputTokens), group.Sum(item => item.LongContextCachedInputTokens),
-                group.Sum(item => item.LongContextCacheWriteInputTokens), group.Sum(item => item.LongContextOutputTokens),
-                group.All(item => item.CacheWriteAvailable)))
-            .ToList();
+        return list;
     }
 
     public void AddQuotaSnapshots(IEnumerable<QuotaSnapshot> snapshots)

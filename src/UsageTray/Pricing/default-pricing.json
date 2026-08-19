@@ -127,8 +127,8 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 3.75,
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "lastVerifiedAt": "2026-08-19",
-      "cacheSplitValidated": false
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Antigravity",
@@ -139,8 +139,8 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 3.75,
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "lastVerifiedAt": "2026-08-19",
-      "cacheSplitValidated": false
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Antigravity",
@@ -151,8 +151,8 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 2.5,
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "lastVerifiedAt": "2026-08-19",
-      "cacheSplitValidated": false
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Antigravity",
@@ -163,8 +163,8 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 9.0,
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "lastVerifiedAt": "2026-08-19",
-      "cacheSplitValidated": false
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Antigravity",
@@ -175,8 +175,20 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 1.5,
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "lastVerifiedAt": "2026-08-19",
-      "cacheSplitValidated": false
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.1-pro*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.25,
+      "cacheReadPerMillionUsd": 0.3125,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Antigravity",
@@ -187,8 +199,8 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 10.0,
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "lastVerifiedAt": "2026-08-19",
-      "cacheSplitValidated": false
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Antigravity",
@@ -199,8 +211,8 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 2.5,
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "lastVerifiedAt": "2026-08-19",
-      "cacheSplitValidated": false
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Antigravity",
@@ -208,11 +220,47 @@
       "matchMode": "Wildcard",
       "inputPerMillionUsd": 3.0,
       "cacheReadPerMillionUsd": 0.3,
-      "cacheWritePerMillionUsd": null,
+      "cacheWritePerMillionUsd": 3.75,
       "outputPerMillionUsd": 15.0,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
-      "lastVerifiedAt": "2026-08-19",
-      "cacheSplitValidated": false
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-5-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-5-haiku*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.8,
+      "cacheReadPerMillionUsd": 0.08,
+      "cacheWritePerMillionUsd": 1.0,
+      "outputPerMillionUsd": 4.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-opus*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 15.0,
+      "cacheReadPerMillionUsd": 1.5,
+      "cacheWritePerMillionUsd": 18.75,
+      "outputPerMillionUsd": 75.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
     }
   ]
 }

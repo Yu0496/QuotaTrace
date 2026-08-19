@@ -6,8 +6,8 @@ namespace UsageTray.Providers.Antigravity;
 public sealed class AntigravityProvider : IUsageProvider, IDisposable
 {
     private readonly AntigravityHistoryLocator _historyLocator;
-    private readonly AntigravityHistoryParser _historyParser;
     private readonly AntigravitySqliteHistoryParser _sqliteHistoryParser;
+    private readonly AntigravityProjectResolver _projectResolver;
     private readonly AntigravityProcessDiscovery _processDiscovery;
     private readonly AntigravityPortDiscovery _portDiscovery;
     private readonly AntigravityLocalApi _localApi;
@@ -17,15 +17,15 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
 
     public AntigravityProvider(
         AntigravityHistoryLocator? historyLocator = null,
-        AntigravityHistoryParser? historyParser = null,
+        AntigravitySqliteHistoryParser? sqliteHistoryParser = null,
+        AntigravityProjectResolver? projectResolver = null,
         AntigravityProcessDiscovery? processDiscovery = null,
         AntigravityPortDiscovery? portDiscovery = null,
-        AntigravityLocalApi? localApi = null,
-        AntigravitySqliteHistoryParser? sqliteHistoryParser = null)
+        AntigravityLocalApi? localApi = null)
     {
         _historyLocator = historyLocator ?? new AntigravityHistoryLocator();
-        _historyParser = historyParser ?? new AntigravityHistoryParser();
         _sqliteHistoryParser = sqliteHistoryParser ?? new AntigravitySqliteHistoryParser();
+        _projectResolver = projectResolver ?? new AntigravityProjectResolver();
         _processDiscovery = processDiscovery ?? new AntigravityProcessDiscovery();
         _portDiscovery = portDiscovery ?? new AntigravityPortDiscovery();
         _localApi = localApi ?? new AntigravityLocalApi();
@@ -44,10 +44,15 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
     {
         var usage = new List<UsageBucket>();
         var warnings = new List<string>();
-        var files = _historyLocator.DiscoverJsonFiles();
-        var historicalSourceKnown = string.Equals(context.Repository.GetFlag("antigravity_history_tokens"), "1", StringComparison.Ordinal);
+
+        // 1. Load project summaries
+        _projectResolver.LoadSummariesFromRoots(_historyLocator.GetCandidateAppRoots());
+
+        // 2. Discover & parse conversation databases
+        var dbFiles = _historyLocator.DiscoverConversationDatabaseFiles();
         var historyHasTokens = false;
-        foreach (var path in files)
+
+        foreach (var path in dbFiles)
         {
             cancellationToken.ThrowIfCancellationRequested();
             FileInfo info;
@@ -55,49 +60,31 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
             var fullPath = info.FullName;
             var state = context.ForceFullScan ? null : GetSourceState(context.Repository, fullPath);
             if (!context.ForceFullScan && state is not null && state.FileSize == info.Length && state.MtimeUtcTicks == info.LastWriteTimeUtc.Ticks)
+            {
                 continue;
-            var parsed = _historyParser.ParseFile(fullPath);
+            }
+
+            var parsed = _sqliteHistoryParser.ParseFile(fullPath, _projectResolver);
             var error = parsed.Warnings.Count == 0 ? null : string.Join(" ", parsed.Warnings);
-            context.Repository.ReplaceFileUsage(ProviderKind.Antigravity, fullPath, info, parsed.Buckets,
-                parsed.Buckets.FirstOrDefault()?.ConversationId, parsed.Buckets.FirstOrDefault()?.ProjectKey,
-                parsed.Buckets.FirstOrDefault()?.ModelId, error);
-            RememberSourceState(fullPath, info, parsed.Buckets.FirstOrDefault()?.ConversationId,
-                parsed.Buckets.FirstOrDefault()?.ProjectKey, parsed.Buckets.FirstOrDefault()?.ModelId, error);
+            var firstGen = parsed.Generations.FirstOrDefault();
+            var conversationId = firstGen?.ConversationId ?? Path.GetFileNameWithoutExtension(fullPath);
+            var projectKey = firstGen?.ProjectKey;
+            var modelId = firstGen?.Model;
+
+            context.Repository.ReplaceAntigravitySource(info, parsed.Generations, parsed.Buckets, conversationId, projectKey, modelId, error);
+            RememberSourceState(fullPath, info, conversationId, projectKey, modelId, error);
+
             usage.AddRange(parsed.Buckets);
             warnings.AddRange(parsed.Warnings);
-            historyHasTokens |= parsed.HasUsageEvents;
+            if (parsed.Generations.Count > 0) historyHasTokens = true;
         }
 
-        if (!historicalSourceKnown && !historyHasTokens)
-        {
-            foreach (var path in _historyLocator.DiscoverDatabaseFiles().Where(IsSqliteFile))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                FileInfo info;
-                try { info = new FileInfo(path); if (!info.Exists) continue; } catch { continue; }
-                var fullPath = info.FullName;
-                var state = context.ForceFullScan ? null : GetSourceState(context.Repository, fullPath);
-                if (!context.ForceFullScan && state is not null && state.FileSize == info.Length && state.MtimeUtcTicks == info.LastWriteTimeUtc.Ticks)
-                    continue;
-                var parsed = _sqliteHistoryParser.ParseFile(fullPath);
-                var error = parsed.Warnings.Count == 0 ? null : string.Join(" ", parsed.Warnings);
-                context.Repository.ReplaceFileUsage(ProviderKind.Antigravity, fullPath, info, parsed.Buckets,
-                    parsed.Buckets.FirstOrDefault()?.ConversationId, parsed.Buckets.FirstOrDefault()?.ProjectKey,
-                    parsed.Buckets.FirstOrDefault()?.ModelId, error);
-                RememberSourceState(fullPath, info, parsed.Buckets.FirstOrDefault()?.ConversationId,
-                    parsed.Buckets.FirstOrDefault()?.ProjectKey, parsed.Buckets.FirstOrDefault()?.ModelId, error);
-                usage.AddRange(parsed.Buckets);
-                warnings.AddRange(parsed.Warnings);
-                historyHasTokens |= parsed.HasUsageEvents;
-            }
-        }
-
-        if (historyHasTokens)
+        if (historyHasTokens || string.Equals(context.Repository.GetFlag("antigravity_history_tokens"), "1", StringComparison.Ordinal))
         {
             context.Repository.SetFlag("antigravity_history_tokens", "1");
-            warnings.Add("已发现可回溯的 Antigravity 历史 token；status-line live capture 按来源优先级不参与汇总。");
         }
 
+        // 3. Local API Quota polling
         var processes = _processDiscovery.Discover();
         var quotas = new List<QuotaSnapshot>();
         if (processes.Count > 0)
@@ -131,7 +118,7 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
         }
 
         return new ProviderRefreshResult(usage, quotas, warnings, DateTimeOffset.UtcNow,
-            historyHasTokens || historicalSourceKnown);
+            historyHasTokens || string.Equals(context.Repository.GetFlag("antigravity_history_tokens"), "1", StringComparison.Ordinal));
     }
 
     private SourceFileState? GetSourceState(UsageRepository repository, string path)
@@ -144,11 +131,7 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
 
     private void RememberSourceState(string path, FileInfo file, string? sessionId, string? projectKey, string? lastModel, string? error) =>
         _sourceStates[path] = new SourceFileState(ProviderKind.Antigravity, path, file.Length, file.LastWriteTimeUtc.Ticks,
-            file.Length, sessionId, projectKey, lastModel, error);
-
-    private static bool IsSqliteFile(string path) =>
-        string.Equals(Path.GetExtension(path), ".db", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(Path.GetExtension(path), ".sqlite", StringComparison.OrdinalIgnoreCase);
+            file.Length, sessionId, projectKey, lastModel, error, 2);
 
     public void Dispose() => _localApi.Dispose();
 }

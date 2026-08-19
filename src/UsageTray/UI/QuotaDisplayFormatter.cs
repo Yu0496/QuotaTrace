@@ -1,4 +1,5 @@
 using UsageTray.Core;
+using UsageTray.Providers.Antigravity;
 using UsageTray.Services;
 
 namespace UsageTray.UI;
@@ -95,6 +96,7 @@ internal static class QuotaDisplayFormatter
 
     private static string BuildAntigravitySection(DashboardSnapshot snapshot)
     {
+        var models = snapshot.Models.Where(item => item.Provider == ProviderKind.Antigravity).ToList();
         var snapshots = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity)
             .Select(item => item.Snapshot).ToList();
         var plan = snapshots.Select(item => item.PlanTier).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
@@ -102,7 +104,7 @@ internal static class QuotaDisplayFormatter
             views.All(item => item.IsOffline) ? "离线，显示最后一次快照" : "当前快照";
         var lines = new List<string>
         {
-            $"Antigravity 额度{(string.IsNullOrWhiteSpace(plan) ? string.Empty : $"（{plan}）")}",
+            $"Antigravity 额度与用量{(string.IsNullOrWhiteSpace(plan) ? string.Empty : $"（{plan}）")}",
             $"状态：{status}",
             FormatWindow("5 小时窗口", snapshots.Where(IsFiveHour).ToList()),
             FormatWindow("周窗口", snapshots.Where(IsWeekly).ToList())
@@ -111,8 +113,48 @@ internal static class QuotaDisplayFormatter
         if (other.Count > 0) lines.Add(FormatWindow("其他窗口", other));
         if (snapshots.Count == 0)
             lines.Add("暂无可用 quota 快照，请先刷新并确保 Antigravity 正在运行。");
+
+        // Quota Equivalent Estimates
+        if (snapshot.AntigravityEstimates is { Count: > 0 } estimates)
+        {
+            var weeklyEst = estimates.FirstOrDefault(e => e.WindowKind == "weekly" && e.EstimatedFullQuotaUsd.HasValue);
+            var fiveHourEst = estimates.FirstOrDefault(e => e.WindowKind == "5h" && e.EstimatedFullQuotaUsd.HasValue);
+            if (weeklyEst?.EstimatedFullQuotaUsd is not null)
+            {
+                var conf = FormatConfidence(weeklyEst.Confidence);
+                lines.Add($"完整 Weekly API 等值估算：约 ${weeklyEst.EstimatedFullQuotaUsd.Value:0.00}（置信度：{conf}）");
+            }
+            if (fiveHourEst?.EstimatedFullQuotaUsd is not null)
+            {
+                var conf = FormatConfidence(fiveHourEst.Confidence);
+                lines.Add($"完整 5h API 等值估算：约 ${fiveHourEst.EstimatedFullQuotaUsd.Value:0.00}（置信度：{conf}）");
+            }
+        }
+
+        if (models.Count > 0)
+        {
+            var input = models.Sum(item => item.NonCachedInputTokens);
+            var cacheRead = models.Sum(item => item.CachedTokens);
+            var cacheCreation = models.Sum(item => item.CacheCreationTokens);
+            var output = models.Sum(item => item.OutputTokens);
+            lines.Add($"Input（未命中）：{FormatTokens(input)}；Cache Read：{FormatTokens(cacheRead)}");
+            lines.Add($"Cache Creation：{FormatTokens(cacheCreation)}；Output：{FormatTokens(output)}");
+            lines.Add($"API 已用等值：{FormatCost(GetKnownCost(models))}（范围 {FormatRange(snapshot.Range)}）");
+        }
+        else
+        {
+            lines.Add("本次统计范围没有可显示的 Antigravity token。");
+        }
+
         return string.Join(Environment.NewLine, lines);
     }
+
+    private static string FormatConfidence(QuotaEstimateConfidence confidence) => confidence switch
+    {
+        QuotaEstimateConfidence.High => "High",
+        QuotaEstimateConfidence.Medium => "Medium",
+        _ => "Low"
+    };
 
     private static string BuildCodexSection(DashboardSnapshot snapshot)
     {
