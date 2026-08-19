@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using UsageTray.Core;
+using UsageTray.Providers.Codex;
 
 namespace UsageTray.Data;
 
@@ -12,7 +13,8 @@ public sealed record SourceFileState(
     string? SessionId,
     string? ProjectKey,
     string? LastModel,
-    string? LastError);
+    string? LastError,
+    int ParserVersion = 1);
 
 public sealed record RecorderState(
     string ConversationId,
@@ -38,7 +40,7 @@ public sealed class UsageRepository
     {
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
-        command.CommandText = @"SELECT file_size, mtime_utc_ticks, parsed_bytes, session_id, project_key, last_model, last_error
+        command.CommandText = @"SELECT file_size, mtime_utc_ticks, parsed_bytes, session_id, project_key, last_model, last_error, parser_version
                                 FROM source_files WHERE provider=$provider AND path=$path";
         command.Parameters.AddWithValue("$provider", provider.ToStorageString());
         command.Parameters.AddWithValue("$path", path);
@@ -46,7 +48,7 @@ public sealed class UsageRepository
         if (!reader.Read()) return null;
         return new SourceFileState(provider, path, reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2),
             reader.IsDBNull(3) ? null : reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4),
-            reader.IsDBNull(5) ? null : reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetString(6));
+            reader.IsDBNull(5) ? null : reader.GetString(5), reader.IsDBNull(6) ? null : reader.GetString(6), reader.GetInt32(7));
     }
 
     public void ReplaceFileUsage(ProviderKind provider, string path, FileInfo file, IReadOnlyList<UsageBucket> buckets,
@@ -68,8 +70,11 @@ public sealed class UsageRepository
             using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = @"INSERT INTO file_usage(provider,source_path,local_date,project_key,model_id,input_tokens,
-                cached_input_tokens,cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,session_id)
-                VALUES($provider,$path,$date,$project,$model,$input,$cached,$cachewrite,$output,$requests,$quality,$costquality,$session)";
+                cached_input_tokens,cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,session_id,
+                service_tier,long_context_request_count,request_shape_uncertain_count,long_context_input_tokens,
+                long_context_cached_input_tokens,long_context_cache_write_input_tokens,long_context_output_tokens,cache_write_available)
+                VALUES($provider,$path,$date,$project,$model,$input,$cached,$cachewrite,$output,$requests,$quality,$costquality,$session,
+                $tier,$longRequests,$uncertain,$longInput,$longCached,$longWrite,$longOutput,$cacheAvailable)";
             insert.Parameters.AddWithValue("$provider", provider.ToStorageString());
             insert.Parameters.AddWithValue("$path", path);
             insert.Parameters.AddWithValue("$date", bucket.LocalDate.ToString("yyyy-MM-dd"));
@@ -83,6 +88,14 @@ public sealed class UsageRepository
             insert.Parameters.AddWithValue("$quality", (int)bucket.Quality);
             insert.Parameters.AddWithValue("$costquality", (int)bucket.CostQuality);
             insert.Parameters.AddWithValue("$session", (object?)sessionId ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$tier", (object?)bucket.ServiceTier ?? string.Empty);
+            insert.Parameters.AddWithValue("$longRequests", bucket.LongContextRequestCount);
+            insert.Parameters.AddWithValue("$uncertain", bucket.RequestShapeUncertainCount);
+            insert.Parameters.AddWithValue("$longInput", bucket.LongContextInputTokens);
+            insert.Parameters.AddWithValue("$longCached", bucket.LongContextCachedInputTokens);
+            insert.Parameters.AddWithValue("$longWrite", bucket.LongContextCacheWriteInputTokens);
+            insert.Parameters.AddWithValue("$longOutput", bucket.LongContextOutputTokens);
+            insert.Parameters.AddWithValue("$cacheAvailable", bucket.CacheWriteAvailable ? 1 : 0);
             insert.ExecuteNonQuery();
         }
 
@@ -105,6 +118,141 @@ public sealed class UsageRepository
         state.ExecuteNonQuery();
         transaction.Commit();
     }
+
+    public void ReplaceCodexSource(FileInfo file, IReadOnlyList<CodexTokenSnapshot> snapshots,
+        string? sessionId, string? projectKey, string? lastModel, string? error)
+    {
+        using var connection = _database.OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        Execute(transaction, connection, "DELETE FROM codex_snapshots WHERE provider=$provider AND source_path=$path",
+            ("$provider", ProviderKind.Codex.ToStorageString()), ("$path", file.FullName));
+        Execute(transaction, connection, "DELETE FROM file_usage WHERE provider=$provider AND source_path=$path",
+            ("$provider", ProviderKind.Codex.ToStorageString()), ("$path", file.FullName));
+        foreach (var snapshot in snapshots)
+        {
+            using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = @"INSERT OR REPLACE INTO codex_snapshots(provider,source_path,session_id,captured_at_utc,model_id,project_key,
+                service_tier,input_tokens,cached_input_tokens,cache_write_input_tokens,output_tokens,reasoning_output_tokens,
+                last_input_tokens,last_cached_input_tokens,last_cache_write_input_tokens,last_output_tokens,last_reasoning_output_tokens,
+                context_window_tokens,source_line,event_type,event_key)
+                VALUES($provider,$path,$session,$captured,$model,$project,$tier,$input,$cached,$cachewrite,$output,$reasoning,
+                $lastInput,$lastCached,$lastWrite,$lastOutput,$lastReasoning,$context,$line,$type,$event)";
+            insert.Parameters.AddWithValue("$provider", ProviderKind.Codex.ToStorageString());
+            insert.Parameters.AddWithValue("$path", file.FullName);
+            insert.Parameters.AddWithValue("$session", snapshot.SessionId);
+            insert.Parameters.AddWithValue("$captured", snapshot.CapturedAt.ToUniversalTime().ToString("O"));
+            insert.Parameters.AddWithValue("$model", (object?)snapshot.ModelId ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$project", (object?)snapshot.ProjectKey ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$tier", (object?)snapshot.ServiceTier ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$input", snapshot.TotalUsage.InputTokens);
+            insert.Parameters.AddWithValue("$cached", snapshot.TotalUsage.CachedInputTokens);
+            insert.Parameters.AddWithValue("$cachewrite", (object?)snapshot.TotalUsage.CacheWriteInputTokens ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$output", snapshot.TotalUsage.OutputTokens);
+            insert.Parameters.AddWithValue("$reasoning", (object?)snapshot.TotalUsage.ReasoningOutputTokens ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$lastInput", (object?)snapshot.LastUsage?.InputTokens ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$lastCached", (object?)snapshot.LastUsage?.CachedInputTokens ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$lastWrite", (object?)snapshot.LastUsage?.CacheWriteInputTokens ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$lastOutput", (object?)snapshot.LastUsage?.OutputTokens ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$lastReasoning", (object?)snapshot.LastUsage?.ReasoningOutputTokens ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$context", (object?)snapshot.ContextWindowTokens ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$line", snapshot.SourceLine);
+            insert.Parameters.AddWithValue("$type", snapshot.EventType);
+            insert.Parameters.AddWithValue("$event", snapshot.StableEventKey);
+            insert.ExecuteNonQuery();
+        }
+        using var state = connection.CreateCommand();
+        state.Transaction = transaction;
+        state.CommandText = @"INSERT INTO source_files(provider,path,file_size,mtime_utc_ticks,parsed_bytes,parser_version,session_id,project_key,last_model,last_error)
+            VALUES($provider,$path,$size,$mtime,$parsed,$version,$session,$project,$model,$error)
+            ON CONFLICT(provider,path) DO UPDATE SET file_size=excluded.file_size,mtime_utc_ticks=excluded.mtime_utc_ticks,
+            parsed_bytes=excluded.parsed_bytes,parser_version=excluded.parser_version,session_id=excluded.session_id,
+            project_key=excluded.project_key,last_model=excluded.last_model,last_error=excluded.last_error";
+        state.Parameters.AddWithValue("$provider", ProviderKind.Codex.ToStorageString());
+        state.Parameters.AddWithValue("$path", file.FullName);
+        state.Parameters.AddWithValue("$size", file.Length);
+        state.Parameters.AddWithValue("$mtime", file.LastWriteTimeUtc.Ticks);
+        state.Parameters.AddWithValue("$parsed", file.Length);
+        state.Parameters.AddWithValue("$version", CodexJsonlParser.ParserVersion);
+        state.Parameters.AddWithValue("$session", (object?)sessionId ?? DBNull.Value);
+        state.Parameters.AddWithValue("$project", (object?)projectKey ?? DBNull.Value);
+        state.Parameters.AddWithValue("$model", (object?)lastModel ?? DBNull.Value);
+        state.Parameters.AddWithValue("$error", (object?)error ?? DBNull.Value);
+        state.ExecuteNonQuery();
+        transaction.Commit();
+    }
+
+    public void DeleteSource(ProviderKind provider, string path)
+    {
+        using var connection = _database.OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        Execute(transaction, connection, "DELETE FROM file_usage WHERE provider=$provider AND source_path=$path",
+            ("$provider", provider.ToStorageString()), ("$path", path));
+        if (provider == ProviderKind.Codex)
+            Execute(transaction, connection, "DELETE FROM codex_snapshots WHERE provider=$provider AND source_path=$path",
+                ("$provider", provider.ToStorageString()), ("$path", path));
+        Execute(transaction, connection, "DELETE FROM source_files WHERE provider=$provider AND path=$path",
+            ("$provider", provider.ToStorageString()), ("$path", path));
+        transaction.Commit();
+    }
+
+    public IReadOnlyList<string> GetSourcePaths(ProviderKind provider)
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT path FROM source_files WHERE provider=$provider";
+        command.Parameters.AddWithValue("$provider", provider.ToStorageString());
+        using var reader = command.ExecuteReader();
+        var result = new List<string>();
+        while (reader.Read()) result.Add(reader.GetString(0));
+        return result;
+    }
+
+    public IReadOnlyList<CodexTokenSnapshot> GetCodexSnapshots()
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = @"SELECT source_path,session_id,captured_at_utc,model_id,project_key,service_tier,input_tokens,
+            cached_input_tokens,cache_write_input_tokens,output_tokens,reasoning_output_tokens,last_input_tokens,last_cached_input_tokens,
+            last_cache_write_input_tokens,last_output_tokens,last_reasoning_output_tokens,context_window_tokens,source_line,event_type,event_key
+            FROM codex_snapshots WHERE provider=$provider ORDER BY session_id,captured_at_utc,source_line";
+        command.Parameters.AddWithValue("$provider", ProviderKind.Codex.ToStorageString());
+        using var reader = command.ExecuteReader();
+        var result = new List<CodexTokenSnapshot>();
+        while (reader.Read())
+        {
+            var total = new CodexCumulativeUsage(reader.GetInt64(6), reader.GetInt64(7), reader.GetInt64(9),
+                reader.IsDBNull(8) ? null : reader.GetInt64(8), reader.IsDBNull(10) ? null : reader.GetInt64(10));
+            CodexRequestUsage? last = null;
+            if (!reader.IsDBNull(11) || !reader.IsDBNull(12) || !reader.IsDBNull(14))
+                last = new CodexRequestUsage(reader.IsDBNull(11) ? 0 : reader.GetInt64(11), reader.IsDBNull(12) ? 0 : reader.GetInt64(12),
+                    reader.IsDBNull(14) ? 0 : reader.GetInt64(14), reader.IsDBNull(13) ? null : reader.GetInt64(13),
+                    reader.IsDBNull(15) ? null : reader.GetInt64(15));
+            result.Add(new CodexTokenSnapshot(reader.GetString(1), DateTimeOffset.Parse(reader.GetString(2)),
+                reader.IsDBNull(3) ? null : reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5), total, last, reader.IsDBNull(16) ? null : reader.GetInt64(16),
+                reader.GetString(0), reader.GetInt32(17), reader.GetString(18), reader.GetString(19)));
+        }
+        return result;
+    }
+
+    public void ReplaceCodexLogicalUsage(IReadOnlyList<UsageBucket> buckets)
+    {
+        using var connection = _database.OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        Execute(transaction, connection, "DELETE FROM file_usage WHERE provider=$provider", ("$provider", ProviderKind.Codex.ToStorageString()));
+        foreach (var bucket in buckets) InsertBucket(connection, transaction, bucket, bucket.SourcePath, bucket.ConversationId);
+        transaction.Commit();
+    }
+
+    public void SaveCodexAuditJson(string json)
+    {
+        using var connection = _database.OpenConnection();
+        SetFlag(connection, "codex_last_audit_json", json);
+        SetFlag(connection, "codex_last_audit_at", DateTimeOffset.UtcNow.ToString("O"));
+    }
+
+    public string? GetCodexAuditJson() => GetFlag("codex_last_audit_json");
 
     public void AddUsageEvents(IEnumerable<UsageEvent> events)
     {
@@ -147,7 +295,9 @@ public sealed class UsageRepository
         using (var command = connection.CreateCommand())
         {
             command.CommandText = @"SELECT provider,local_date,project_key,model_id,input_tokens,cached_input_tokens,
-                cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,source_path,session_id
+                cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,source_path,session_id,service_tier,
+                long_context_request_count,request_shape_uncertain_count,long_context_input_tokens,long_context_cached_input_tokens,
+                long_context_cache_write_input_tokens,long_context_output_tokens,cache_write_available
                 FROM file_usage WHERE local_date >= $from AND local_date <= $to" +
                 (provider.HasValue ? " AND provider=$provider" : string.Empty);
             AddRangeParameters(command, range, provider);
@@ -159,7 +309,9 @@ public sealed class UsageRepository
         {
             using var command = connection.CreateCommand();
             command.CommandText = @"SELECT provider,local_date,project_key,model_id,input_tokens,cached_input_tokens,
-                cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,source_path,conversation_id
+                cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,source_path,conversation_id,
+                '' AS service_tier,0 AS long_context_request_count,0 AS request_shape_uncertain_count,0 AS long_context_input_tokens,
+                0 AS long_context_cached_input_tokens,0 AS long_context_cache_write_input_tokens,0 AS long_context_output_tokens,1 AS cache_write_available
                 FROM usage_events WHERE local_date >= $from AND local_date <= $to AND source_kind='statusline'" +
                 (provider.HasValue ? " AND provider=$provider" : string.Empty);
             AddRangeParameters(command, range, provider);
@@ -168,11 +320,114 @@ public sealed class UsageRepository
         }
 
         return result
-            .GroupBy(bucket => new { bucket.Provider, bucket.LocalDate, bucket.ProjectKey, bucket.ModelId, bucket.SourcePath, bucket.ConversationId })
+            .GroupBy(bucket => new { bucket.Provider, bucket.LocalDate, bucket.ProjectKey, bucket.ModelId, bucket.SourcePath, bucket.ConversationId, bucket.ServiceTier })
             .Select(group => new UsageBucket(group.Key.Provider, group.Key.LocalDate, group.Key.ProjectKey, group.Key.ModelId,
                 group.Sum(item => item.InputTokens), group.Sum(item => item.CachedInputTokens), group.Sum(item => item.OutputTokens),
                 group.Sum(item => item.RequestCount), group.Max(item => item.Quality), group.Key.SourcePath, group.Key.ConversationId,
-                group.Sum(item => item.CacheWriteInputTokens), group.Max(item => item.CostQuality)))
+                group.Sum(item => item.CacheWriteInputTokens), group.Max(item => item.CostQuality), group.Key.ServiceTier,
+                group.Sum(item => item.LongContextRequestCount), group.Sum(item => item.RequestShapeUncertainCount),
+                group.Sum(item => item.LongContextInputTokens), group.Sum(item => item.LongContextCachedInputTokens),
+                group.Sum(item => item.LongContextCacheWriteInputTokens), group.Sum(item => item.LongContextOutputTokens),
+                group.All(item => item.CacheWriteAvailable)))
+            .ToList();
+    }
+
+    public IReadOnlyList<UsageBucket> GetCodexUsageInUtcWindow(DateTimeOffset startUtc, DateTimeOffset? endUtc = null)
+    {
+        var snapshots = GetCodexSnapshots();
+        if (snapshots.Count == 0)
+        {
+            var startDate = DateOnly.FromDateTime(startUtc.ToLocalTime().DateTime);
+            var endDate = DateOnly.FromDateTime((endUtc ?? DateTimeOffset.UtcNow).ToLocalTime().DateTime);
+            return GetUsage(new DateRange(startDate, endDate), ProviderKind.Codex);
+        }
+
+        var normalized = new CodexUsageNormalizer().Normalize(snapshots);
+        var filteredAudits = normalized.Events
+            .Where(a => a.CapturedAt >= startUtc && (!endUtc.HasValue || a.CapturedAt <= endUtc.Value))
+            .ToList();
+
+        if (filteredAudits.Count == 0) return [];
+
+        var aggregate = new Dictionary<(DateOnly Date, string Model, string Tier), (long Input, long Cached, long CacheWrite, long Output, int Requests, bool CacheAvailable, int LongRequests, long LongInput, long LongCached, long LongWrite, long LongOutput, int Uncertain)>();
+
+        foreach (var audit in filteredAudits)
+        {
+            var date = DateOnly.FromDateTime(audit.CapturedAt.ToLocalTime().DateTime);
+            var model = string.IsNullOrWhiteSpace(audit.ModelId) ? "Unknown" : audit.ModelId.Trim();
+            var tier = string.Empty;
+            (DateOnly Date, string Model, string Tier) key = (date, model, tier);
+            if (!aggregate.TryGetValue(key, out var acc))
+                acc = (0, 0, 0, 0, 0, true, 0, 0, 0, 0, 0, 0);
+
+            acc.Input += audit.Delta.InputTokens;
+            acc.Cached += Math.Min(Math.Max(0, audit.Delta.CachedInputTokens), Math.Max(0, audit.Delta.InputTokens));
+            acc.CacheWrite += Math.Min(Math.Max(0, audit.Delta.CacheWriteInputTokens), Math.Max(0, audit.Delta.InputTokens - Math.Min(Math.Max(0, audit.Delta.CachedInputTokens), Math.Max(0, audit.Delta.InputTokens))));
+            acc.Output += audit.Delta.OutputTokens;
+            acc.Requests++;
+            acc.CacheAvailable &= audit.Delta.CacheWriteAvailable;
+            if (audit.RequestUsageQuality == CodexRequestUsageQuality.Unknown) acc.Uncertain++;
+            if (audit.IsLongContext)
+            {
+                acc.LongRequests++;
+                acc.LongInput += audit.Delta.InputTokens;
+                acc.LongCached += Math.Min(Math.Max(0, audit.Delta.CachedInputTokens), Math.Max(0, audit.Delta.InputTokens));
+                acc.LongWrite += Math.Min(Math.Max(0, audit.Delta.CacheWriteInputTokens), Math.Max(0, audit.Delta.InputTokens - Math.Min(Math.Max(0, audit.Delta.CachedInputTokens), Math.Max(0, audit.Delta.InputTokens))));
+                acc.LongOutput += audit.Delta.OutputTokens;
+            }
+            aggregate[key] = acc;
+        }
+
+        return aggregate.Select(pair =>
+        {
+            var val = pair.Value;
+            var costQuality = !val.CacheAvailable ? CostQuality.CacheWriteUnavailable :
+                val.Uncertain > 0 ? CostQuality.RequestShapeUnavailable :
+                val.Cached > 0 || val.CacheWrite > 0 ? CostQuality.ExactTokenSplit : CostQuality.ExactTokensNoCache;
+            return new UsageBucket(ProviderKind.Codex, pair.Key.Date, string.Empty, pair.Key.Model,
+                val.Input, val.Cached, val.Output, val.Requests, DataQuality.Derived, "codex://weekly-cycle", null,
+                val.CacheWrite, costQuality, pair.Key.Tier, val.LongRequests, val.Uncertain,
+                val.LongInput, val.LongCached, val.LongWrite, val.LongOutput, val.CacheAvailable);
+        }).ToList();
+    }
+
+    public IReadOnlyList<UsageBucket> GetAntigravityUsageInUtcWindow(DateTimeOffset startUtc, DateTimeOffset? endUtc = null)
+    {
+        var result = new List<UsageBucket>();
+        using var connection = _database.OpenConnection();
+        var includeLive = !string.Equals(GetFlag(connection, "antigravity_history_tokens"), "1", StringComparison.Ordinal);
+
+        if (includeLive)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = @"SELECT provider,local_date,project_key,model_id,input_tokens,cached_input_tokens,
+                cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,source_path,conversation_id,
+                '' AS service_tier,0 AS long_context_request_count,0 AS request_shape_uncertain_count,0 AS long_context_input_tokens,
+                0 AS long_context_cached_input_tokens,0 AS long_context_cache_write_input_tokens,0 AS long_context_output_tokens,1 AS cache_write_available
+                FROM usage_events WHERE provider=$provider AND event_utc >= $startUtc AND event_utc <= $endUtc";
+            command.Parameters.AddWithValue("$provider", ProviderKind.Antigravity.ToStorageString());
+            command.Parameters.AddWithValue("$startUtc", startUtc.ToUniversalTime().ToString("O"));
+            command.Parameters.AddWithValue("$endUtc", (endUtc ?? DateTimeOffset.UtcNow).ToUniversalTime().ToString("O"));
+            using var reader = command.ExecuteReader();
+            while (reader.Read()) result.Add(ReadBucket(reader));
+        }
+        else
+        {
+            var startDate = DateOnly.FromDateTime(startUtc.ToLocalTime().DateTime);
+            var endDate = DateOnly.FromDateTime((endUtc ?? DateTimeOffset.UtcNow).ToLocalTime().DateTime);
+            return GetUsage(new DateRange(startDate, endDate), ProviderKind.Antigravity);
+        }
+
+        return result
+            .GroupBy(bucket => new { bucket.Provider, bucket.LocalDate, bucket.ProjectKey, bucket.ModelId, bucket.SourcePath, bucket.ConversationId, bucket.ServiceTier })
+            .Select(group => new UsageBucket(group.Key.Provider, group.Key.LocalDate, group.Key.ProjectKey, group.Key.ModelId,
+                group.Sum(item => item.InputTokens), group.Sum(item => item.CachedInputTokens), group.Sum(item => item.OutputTokens),
+                group.Sum(item => item.RequestCount), group.Max(item => item.Quality), group.Key.SourcePath, group.Key.ConversationId,
+                group.Sum(item => item.CacheWriteInputTokens), group.Max(item => item.CostQuality), group.Key.ServiceTier,
+                group.Sum(item => item.LongContextRequestCount), group.Sum(item => item.RequestShapeUncertainCount),
+                group.Sum(item => item.LongContextInputTokens), group.Sum(item => item.LongContextCachedInputTokens),
+                group.Sum(item => item.LongContextCacheWriteInputTokens), group.Sum(item => item.LongContextOutputTokens),
+                group.All(item => item.CacheWriteAvailable)))
             .ToList();
     }
 
@@ -204,11 +459,22 @@ public sealed class UsageRepository
     {
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
-        command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
-            q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
-            INNER JOIN (SELECT model_or_pool_id,window_kind,MAX(captured_at_utc) AS latest FROM quota_snapshots WHERE provider=$provider GROUP BY model_or_pool_id,window_kind) x
-            ON q.model_or_pool_id=x.model_or_pool_id AND q.window_kind=x.window_kind AND q.captured_at_utc=x.latest
-            WHERE q.provider=$provider ORDER BY q.model_or_pool_id,q.window_kind";
+        if (provider == ProviderKind.Codex)
+        {
+            command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
+                q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
+                INNER JOIN (SELECT window_kind,MAX(captured_at_utc) AS latest FROM quota_snapshots WHERE provider=$provider GROUP BY window_kind) x
+                ON q.window_kind=x.window_kind AND q.captured_at_utc=x.latest
+                WHERE q.provider=$provider ORDER BY q.window_kind";
+        }
+        else
+        {
+            command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
+                q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
+                INNER JOIN (SELECT model_or_pool_id,window_kind,MAX(captured_at_utc) AS latest FROM quota_snapshots WHERE provider=$provider GROUP BY model_or_pool_id,window_kind) x
+                ON q.model_or_pool_id=x.model_or_pool_id AND q.window_kind=x.window_kind AND q.captured_at_utc=x.latest
+                WHERE q.provider=$provider ORDER BY q.model_or_pool_id,q.window_kind";
+        }
         command.Parameters.AddWithValue("$provider", provider.ToStorageString());
         using var reader = command.ExecuteReader();
         var list = new List<QuotaSnapshot>();
@@ -218,7 +484,10 @@ public sealed class UsageRepository
                 reader.IsDBNull(4) ? null : reader.GetDouble(4), reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5)),
                 reader.GetString(6), reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8)));
         }
-        return list;
+        return list
+            .GroupBy(item => provider == ProviderKind.Codex ? item.WindowKind : $"{item.ModelOrPoolId}_{item.WindowKind}")
+            .Select(group => group.OrderByDescending(item => item.CapturedAt).First())
+            .ToList();
     }
 
     public RecorderState? GetRecorderState(string conversationId)
@@ -310,7 +579,54 @@ public sealed class UsageRepository
             string.IsNullOrEmpty(reader.GetString(2)) ? null : reader.GetString(2),
             string.IsNullOrEmpty(reader.GetString(3)) ? null : reader.GetString(3), reader.GetInt64(4), reader.GetInt64(5),
             reader.GetInt64(7), reader.GetInt32(8), (DataQuality)reader.GetInt32(9), reader.GetString(11),
-            reader.IsDBNull(12) ? null : reader.GetString(12), reader.GetInt64(6), (CostQuality)reader.GetInt32(10));
+            reader.IsDBNull(12) ? null : reader.GetString(12), reader.GetInt64(6), (CostQuality)reader.GetInt32(10),
+            string.IsNullOrEmpty(reader.GetString(13)) ? null : reader.GetString(13), reader.GetInt32(14), reader.GetInt32(15),
+            reader.GetInt64(16), reader.GetInt64(17), reader.GetInt64(18), reader.GetInt64(19), reader.GetInt64(20) != 0);
+    }
+
+    private static void InsertBucket(SqliteConnection connection, SqliteTransaction transaction, UsageBucket bucket,
+        string sourcePath, string? conversationId)
+    {
+        using var insert = connection.CreateCommand();
+        insert.Transaction = transaction;
+        insert.CommandText = @"INSERT INTO file_usage(provider,source_path,local_date,project_key,model_id,input_tokens,
+            cached_input_tokens,cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,session_id,service_tier,
+            long_context_request_count,request_shape_uncertain_count,long_context_input_tokens,long_context_cached_input_tokens,
+            long_context_cache_write_input_tokens,long_context_output_tokens,cache_write_available)
+            VALUES($provider,$path,$date,$project,$model,$input,$cached,$cachewrite,$output,$requests,$quality,$costquality,$session,$tier,
+            $longRequests,$uncertain,$longInput,$longCached,$longWrite,$longOutput,$cacheAvailable)";
+        insert.Parameters.AddWithValue("$provider", bucket.Provider.ToStorageString());
+        insert.Parameters.AddWithValue("$path", sourcePath);
+        insert.Parameters.AddWithValue("$date", bucket.LocalDate.ToString("yyyy-MM-dd"));
+        insert.Parameters.AddWithValue("$project", bucket.ProjectKey ?? string.Empty);
+        insert.Parameters.AddWithValue("$model", bucket.ModelId ?? string.Empty);
+        insert.Parameters.AddWithValue("$input", bucket.InputTokens);
+        insert.Parameters.AddWithValue("$cached", bucket.CachedInputTokens);
+        insert.Parameters.AddWithValue("$cachewrite", bucket.CacheWriteInputTokens);
+        insert.Parameters.AddWithValue("$output", bucket.OutputTokens);
+        insert.Parameters.AddWithValue("$requests", bucket.RequestCount);
+        insert.Parameters.AddWithValue("$quality", (int)bucket.Quality);
+        insert.Parameters.AddWithValue("$costquality", (int)bucket.CostQuality);
+        insert.Parameters.AddWithValue("$session", (object?)conversationId ?? DBNull.Value);
+        insert.Parameters.AddWithValue("$tier", (object?)bucket.ServiceTier ?? string.Empty);
+        insert.Parameters.AddWithValue("$longRequests", bucket.LongContextRequestCount);
+        insert.Parameters.AddWithValue("$uncertain", bucket.RequestShapeUncertainCount);
+        insert.Parameters.AddWithValue("$longInput", bucket.LongContextInputTokens);
+        insert.Parameters.AddWithValue("$longCached", bucket.LongContextCachedInputTokens);
+        insert.Parameters.AddWithValue("$longWrite", bucket.LongContextCacheWriteInputTokens);
+        insert.Parameters.AddWithValue("$longOutput", bucket.LongContextOutputTokens);
+        insert.Parameters.AddWithValue("$cacheAvailable", bucket.CacheWriteAvailable ? 1 : 0);
+        insert.ExecuteNonQuery();
+    }
+
+    private static void Execute(SqliteTransaction transaction, SqliteConnection connection, string sql,
+        params (string Name, object Value)[] parameters)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value);
+        command.ExecuteNonQuery();
     }
 
     private static string? GetFlag(SqliteConnection connection, string key)

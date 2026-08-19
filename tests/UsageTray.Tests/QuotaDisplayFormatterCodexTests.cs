@@ -20,7 +20,7 @@ public sealed class QuotaDisplayFormatterCodexTests
 
         var text = QuotaDisplayFormatter.BuildPopupText(snapshot);
 
-        Assert.Contains("Codex 用量（本地 session 日志）", text, StringComparison.Ordinal);
+        Assert.Contains("Codex 额度与用量", text, StringComparison.Ordinal);
         Assert.Contains("Input（未命中）：550", text, StringComparison.Ordinal);
         Assert.Contains("Cache Read：400", text, StringComparison.Ordinal);
         Assert.Contains("Cache Creation：50", text, StringComparison.Ordinal);

@@ -81,7 +81,8 @@ public sealed class RefreshCoordinator : IDisposable
         finally { _refreshLock.Release(); }
     }
 
-    public DashboardSnapshot BuildSnapshot(DateRange range, ProviderKind? provider = null) => _aggregator.BuildSnapshot(range, provider);
+    public DashboardSnapshot BuildSnapshot(DateRange range, ProviderKind? provider = null, bool isWeeklyCycle = false) =>
+        _aggregator.BuildSnapshot(range, provider, isWeeklyCycle);
 
     public void UpdateSettings(AppSettings settings)
     {
@@ -94,6 +95,10 @@ public sealed class RefreshCoordinator : IDisposable
     {
         Range = snapshot.Range,
         ProviderFilter = snapshot.ProviderFilter,
+        IsWeeklyCycleWindow = snapshot.IsWeeklyCycleWindow,
+        RangeDisplayOverride = snapshot.RangeDisplayOverride,
+        WindowStartUtc = snapshot.WindowStartUtc,
+        WindowEndUtc = snapshot.WindowEndUtc,
         ApiEquivalentUsd = snapshot.ApiEquivalentUsd,
         InputTokens = snapshot.InputTokens,
         CachedTokens = snapshot.CachedTokens,
@@ -102,6 +107,7 @@ public sealed class RefreshCoordinator : IDisposable
         UnpricedTokens = snapshot.UnpricedTokens,
         CostQuality = snapshot.CostQuality,
         CoverageStart = snapshot.CoverageStart,
+        CodexWeeklyCycle = snapshot.CodexWeeklyCycle,
         Daily = snapshot.Daily,
         Models = snapshot.Models,
         Projects = snapshot.Projects,

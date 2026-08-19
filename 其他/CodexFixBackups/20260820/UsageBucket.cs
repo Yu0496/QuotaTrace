@@ -13,15 +13,7 @@ public sealed record UsageBucket(
     string SourcePath,
     string? ConversationId = null,
     long CacheWriteInputTokens = 0,
-    CostQuality CostQuality = CostQuality.ExactTokensNoCache,
-    string? ServiceTier = null,
-    int LongContextRequestCount = 0,
-    int RequestShapeUncertainCount = 0,
-    long LongContextInputTokens = 0,
-    long LongContextCachedInputTokens = 0,
-    long LongContextCacheWriteInputTokens = 0,
-    long LongContextOutputTokens = 0,
-    bool CacheWriteAvailable = true)
+    CostQuality CostQuality = CostQuality.ExactTokensNoCache)
 {
     // 本地来源保留原始的总 input；以下三个属性转换成 Sub2API token 模式：
     // input = 未命中缓存输入，cache_read = 缓存读取，cache_creation = 缓存创建。
@@ -36,11 +28,6 @@ public sealed record UsageBucket(
     public long TotalInputTokens => NonCachedInputTokens + CacheReadTokens + CacheCreationTokens;
 
     public long DisplayedTotalTokens => TotalInputTokens + Math.Max(0, OutputTokens);
-
-    public bool HasLongContextTokens => LongContextRequestCount > 0 || LongContextInputTokens > 0 ||
-                                         LongContextCachedInputTokens > 0 || LongContextOutputTokens > 0;
-
-    public bool HasRequestShapeUncertainty => RequestShapeUncertainCount > 0;
 
     public TokenUsage Usage => new(InputTokens, CachedInputTokens, OutputTokens, CacheWriteInputTokens);
 }

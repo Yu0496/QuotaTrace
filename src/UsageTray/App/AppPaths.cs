@@ -10,10 +10,12 @@ public static class AppPaths
     public static string PricingPath => Path.Combine(LocalRoot, "pricing.json");
     public static string LogsPath => Path.Combine(LocalRoot, "logs");
     public static string RecorderPath => Path.Combine(LocalRoot, "status-recorder");
+    public static string DiagnosticsPath => Path.Combine(LocalRoot, "diagnostics");
     public static void EnsureDirectories()
     {
         Directory.CreateDirectory(LocalRoot);
         Directory.CreateDirectory(LogsPath);
         Directory.CreateDirectory(RecorderPath);
+        Directory.CreateDirectory(DiagnosticsPath);
     }
 }

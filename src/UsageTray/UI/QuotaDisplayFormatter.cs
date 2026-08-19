@@ -25,18 +25,72 @@ internal static class QuotaDisplayFormatter
         var antigravitySnapshots = snapshot.Quotas
             .Where(item => item.Snapshot.Provider == ProviderKind.Antigravity)
             .Select(item => item.Snapshot).ToList();
-        var shortText = FormatCompact(antigravitySnapshots.FirstOrDefault(IsFiveHour));
-        var weeklyText = FormatCompact(antigravitySnapshots.FirstOrDefault(IsWeekly));
+        var ag5h = antigravitySnapshots.Where(IsFiveHour).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
+        var agWeekly = antigravitySnapshots.Where(IsWeekly).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
+
+        var shortText = FormatCompactWithResetOnZero(ag5h);
+        var weeklyText = FormatCompactWithResetOnZero(agWeekly);
+
         var codexModels = snapshot.Models.Where(item => item.Provider == ProviderKind.Codex).ToList();
         var codexQuota = snapshot.Quotas
             .Where(item => item.Snapshot.Provider == ProviderKind.Codex)
             .Select(item => item.Snapshot).ToList();
-        var codexText = codexQuota.Count > 0
-            ? $"5h {FormatCompact(codexQuota.FirstOrDefault(IsFiveHour))}"
-            : codexModels.Count == 0 ? "无日志" : GetKnownCost(codexModels).HasValue ? "$" + GetKnownCost(codexModels)!.Value.ToString("0.00") : "—";
-        var result = $"AG 5h {shortText} | 周 {weeklyText} | Codex {codexText}";
+        var codexWeekly = codexQuota.Where(IsWeekly).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
+        var codex5h = codexQuota.Where(IsFiveHour).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
+
+        string codexText;
+        if (codexWeekly != null)
+        {
+            var isWeeklyZero = codexWeekly.RemainingFraction.HasValue && codexWeekly.RemainingFraction.Value <= 0.0001;
+            var is5hZero = codex5h is { RemainingFraction: not null } && codex5h.RemainingFraction.Value <= 0.0001;
+
+            if (isWeeklyZero)
+            {
+                codexText = $"0%({FormatCompactReset(codexWeekly)})";
+            }
+            else if (is5hZero)
+            {
+                codexText = $"5h 0%({FormatCompactReset(codex5h!)}) / 周 {FormatCompact(codexWeekly)}";
+            }
+            else
+            {
+                codexText = FormatCompact(codexWeekly);
+            }
+        }
+        else if (codex5h != null)
+        {
+            codexText = FormatCompactWithResetOnZero(codex5h);
+        }
+        else
+        {
+            codexText = codexModels.Count == 0 ? "无日志" : GetKnownCost(codexModels).HasValue ? "$" + GetKnownCost(codexModels)!.Value.ToString("0.00") : "—";
+        }
+
+        var agPart = $"AG 5h {shortText} / 周 {weeklyText}";
+        var result = $"{agPart} | Codex {codexText}";
         if (result.Length > 63) result = result[..63];
         return result;
+    }
+
+    private static string FormatCompactWithResetOnZero(QuotaSnapshot? snapshot)
+    {
+        if (snapshot == null) return "—";
+        if (!snapshot.RemainingFraction.HasValue) return "未知";
+        var frac = snapshot.RemainingFraction.Value;
+        if (frac <= 0.0001)
+        {
+            return $"0%({FormatCompactReset(snapshot)})";
+        }
+        return $"{frac:P0}";
+    }
+
+    private static string FormatCompactReset(QuotaSnapshot snapshot)
+    {
+        if (!snapshot.ResetAt.HasValue) return "未知";
+        var local = snapshot.ResetAt.Value.ToLocalTime();
+        return local.Date == DateTime.Today
+            ? local.ToString("HH:mm")
+            : local.ToString("MM-dd HH:mm");
     }
 
     private static string BuildAntigravitySection(DashboardSnapshot snapshot)
@@ -67,9 +121,29 @@ internal static class QuotaDisplayFormatter
         var codexQuotas = codexQuotaViews.Select(item => item.Snapshot).ToList();
         var lines = new List<string>
         {
-            "Codex 用量（本地 session 日志）",
-            $"状态：{(models.Count == 0 ? "本次范围未发现可用日志" : "已读取本地 Codex session JSONL")}"
+            "Codex 额度与用量"
         };
+
+        if (codexQuotas.Count > 0)
+        {
+            lines.Add(FormatWindow("5 小时窗口", codexQuotas.Where(IsFiveHour).ToList()));
+            lines.Add(FormatWindow("周窗口", codexQuotas.Where(IsWeekly).ToList()));
+        }
+        else
+        {
+            lines.Add("5 小时窗口：剩余未知；重置时间未知（当前 session 未写入 rate_limits）");
+            lines.Add("周窗口：剩余未知；重置时间未知（当前 session 未写入 rate_limits）");
+        }
+
+        if (snapshot.CodexWeeklyCycle is { } cycle)
+        {
+            var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : "未知";
+            var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
+            var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : "待产生消耗后推算";
+            lines.Add($"本轮周消耗：{cycleCostText}（已消耗 {usedText}）");
+            lines.Add($"周满额预估：{estCostText}");
+        }
+
         if (models.Count > 0)
         {
             var input = models.Sum(item => item.NonCachedInputTokens);
@@ -85,18 +159,6 @@ internal static class QuotaDisplayFormatter
             lines.Add("本次统计范围没有可显示的 Codex token。");
         }
 
-        if (codexQuotas.Count > 0)
-        {
-            var status = codexQuotaViews.All(item => item.IsOffline) ? "离线，显示最后一次日志快照" : "当前日志快照";
-            lines.Add($"额度状态：{status}");
-            lines.Add(FormatWindow("5 小时窗口", codexQuotas.Where(IsFiveHour).ToList()));
-            lines.Add(FormatWindow("周窗口", codexQuotas.Where(IsWeekly).ToList()));
-        }
-        else
-        {
-            lines.Add("5 小时窗口：剩余未知；重置时间未知（当前 session 未写入 rate_limits）");
-            lines.Add("周窗口：剩余未知；重置时间未知（当前 session 未写入 rate_limits）");
-        }
         return string.Join(Environment.NewLine, lines);
     }
 

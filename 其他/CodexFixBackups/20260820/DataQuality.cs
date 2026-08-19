@@ -12,9 +12,6 @@ public enum CostQuality
 {
     ExactTokenSplit = 0,
     ExactTokensNoCache = 1,
-    CacheWriteUnavailable = 2,
-    RequestShapeUnavailable = 3,
-    LongContextUncertain = 4,
-    PartialPrice = 5,
-    Unavailable = 6
+    PartialPrice = 2,
+    Unavailable = 3
 }

@@ -12,6 +12,9 @@ internal static class Program
         if (args.Any(arg => string.Equals(arg, "--status-recorder", StringComparison.OrdinalIgnoreCase)))
             return AntigravityStatusRecorderCli.RunAsync(args).GetAwaiter().GetResult();
 
+        if (args.Any(arg => string.Equals(arg, "--rebuild-codex", StringComparison.OrdinalIgnoreCase)))
+            return CodexMaintenanceCli.Rebuild();
+
         if (!SingleInstance.TryAcquire("Global\\UsageTray.SingleInstance", out var singleInstance)) return 0;
         using (singleInstance)
         {

@@ -61,41 +61,8 @@ CREATE TABLE IF NOT EXISTS file_usage (
     data_quality INTEGER NOT NULL,
     cost_quality INTEGER NOT NULL DEFAULT 1,
     session_id TEXT NULL,
-    service_tier TEXT NOT NULL DEFAULT '',
-    long_context_request_count INTEGER NOT NULL DEFAULT 0,
-    request_shape_uncertain_count INTEGER NOT NULL DEFAULT 0,
-    long_context_input_tokens INTEGER NOT NULL DEFAULT 0,
-    long_context_cached_input_tokens INTEGER NOT NULL DEFAULT 0,
-    long_context_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0,
-    long_context_output_tokens INTEGER NOT NULL DEFAULT 0,
-    cache_write_available INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY(provider, source_path, local_date, project_key, model_id)
 );
-CREATE TABLE IF NOT EXISTS codex_snapshots (
-    provider TEXT NOT NULL,
-    source_path TEXT NOT NULL,
-    session_id TEXT NOT NULL,
-    captured_at_utc TEXT NOT NULL,
-    model_id TEXT NULL,
-    project_key TEXT NULL,
-    service_tier TEXT NULL,
-    input_tokens INTEGER NOT NULL,
-    cached_input_tokens INTEGER NOT NULL,
-    cache_write_input_tokens INTEGER NULL,
-    output_tokens INTEGER NOT NULL,
-    reasoning_output_tokens INTEGER NULL,
-    last_input_tokens INTEGER NULL,
-    last_cached_input_tokens INTEGER NULL,
-    last_cache_write_input_tokens INTEGER NULL,
-    last_output_tokens INTEGER NULL,
-    last_reasoning_output_tokens INTEGER NULL,
-    context_window_tokens INTEGER NULL,
-    source_line INTEGER NOT NULL,
-    event_type TEXT NOT NULL,
-    event_key TEXT NOT NULL,
-    PRIMARY KEY(provider, source_path, event_key)
-);
-CREATE INDEX IF NOT EXISTS ix_codex_snapshots_session ON codex_snapshots(provider, session_id, captured_at_utc);
 CREATE TABLE IF NOT EXISTS usage_events (
     event_id TEXT PRIMARY KEY,
     provider TEXT NOT NULL,
@@ -149,36 +116,6 @@ CREATE TABLE IF NOT EXISTS app_metadata (
     value TEXT NOT NULL
 );";
         command.ExecuteNonQuery();
-        EnsureColumn(connection, "file_usage", "service_tier", "TEXT NOT NULL DEFAULT ''");
-        EnsureColumn(connection, "file_usage", "long_context_request_count", "INTEGER NOT NULL DEFAULT 0");
-        EnsureColumn(connection, "file_usage", "request_shape_uncertain_count", "INTEGER NOT NULL DEFAULT 0");
-        EnsureColumn(connection, "file_usage", "long_context_input_tokens", "INTEGER NOT NULL DEFAULT 0");
-        EnsureColumn(connection, "file_usage", "long_context_cached_input_tokens", "INTEGER NOT NULL DEFAULT 0");
-        EnsureColumn(connection, "file_usage", "long_context_cache_write_input_tokens", "INTEGER NOT NULL DEFAULT 0");
-        EnsureColumn(connection, "file_usage", "long_context_output_tokens", "INTEGER NOT NULL DEFAULT 0");
-        EnsureColumn(connection, "file_usage", "cache_write_available", "INTEGER NOT NULL DEFAULT 1");
-        using var metadata = connection.CreateCommand();
-        metadata.CommandText = "SELECT value FROM app_metadata WHERE key='codex_schema_version'";
-        var version = metadata.ExecuteScalar() as string;
-        if (!string.Equals(version, DatabaseMigrations.CurrentVersion.ToString(), StringComparison.Ordinal))
-        {
-            using var mark = connection.CreateCommand();
-            mark.CommandText = "INSERT INTO app_metadata(key,value) VALUES('codex_rebuild_required','1') ON CONFLICT(key) DO UPDATE SET value='1'; INSERT INTO app_metadata(key,value) VALUES('codex_schema_version',$version) ON CONFLICT(key) DO UPDATE SET value=excluded.value;";
-            mark.Parameters.AddWithValue("$version", DatabaseMigrations.CurrentVersion.ToString());
-            mark.ExecuteNonQuery();
-        }
-    }
-
-    private static void EnsureColumn(SqliteConnection connection, string table, string column, string definition)
-    {
-        using var check = connection.CreateCommand();
-        check.CommandText = $"PRAGMA table_info({table});";
-        using var reader = check.ExecuteReader();
-        while (reader.Read())
-            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase)) return;
-        using var alter = connection.CreateCommand();
-        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
-        alter.ExecuteNonQuery();
     }
 
     public void Dispose() { }

@@ -11,7 +11,6 @@ public sealed class MainForm : Form
     private readonly AppSettingsStore _settingsStore;
     private readonly ComboBox _providerCombo;
     private readonly ComboBox _rangeCombo;
-    private readonly Button _pricingButton;
     private readonly Label _apiValue;
     private readonly Label _apiNote;
     private readonly Label _inputValue;
@@ -60,11 +59,11 @@ public sealed class MainForm : Form
         _rangeCombo = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = Math.Max(120, TextRenderer.MeasureText("自定义…", Font).Width + 36),
+            Width = Math.Max(130, TextRenderer.MeasureText("本次周额度", Font).Width + 36),
             Height = buttonHeight,
             Margin = new Padding(0, 0, 8, 0)
         };
-        _rangeCombo.Items.AddRange(["今天", "7天", "30天", "本月", "自定义…"]);
+        _rangeCombo.Items.AddRange(["今天", "7天", "30天", "本月", "本次周额度", "自定义…"]);
         _rangeCombo.SelectedIndex = 1;
 
         var refresh = new Button
@@ -77,16 +76,6 @@ public sealed class MainForm : Form
             Padding = new Padding(8, 2, 8, 2)
         };
         refresh.Click += async (_, _) => await RefreshViewAsync(false);
-        _pricingButton = new Button
-        {
-            Text = "获取最新价格",
-            Width = Math.Max(128, TextRenderer.MeasureText("获取最新价格", Font).Width + 24),
-            Height = buttonHeight,
-            Margin = new Padding(0, 0, 6, 0),
-            AutoSize = false,
-            Padding = new Padding(8, 2, 8, 2)
-        };
-        _pricingButton.Click += async (_, _) => await UpdatePricingAsync();
         var settingsButton = new Button
         {
             Text = "设置",
@@ -103,7 +92,6 @@ public sealed class MainForm : Form
         };
         var toolTip = new ToolTip();
         toolTip.SetToolTip(refresh, "增量刷新：仅重新解析新增或发生变化的本地记录。程序启动时会自动全量读取一次；全量重读请到设置中执行。");
-        toolTip.SetToolTip(_pricingButton, "手动从 OpenAI/Gemini 官方 HTTPS 定价页获取价格；不会上传本地用量数据。启动时不会自动联网更新。");
         toolTip.SetToolTip(_rangeCombo, "选择自定义…后填写开始日期和结束日期，按本地日历统计。");
         _providerCombo.SelectedIndexChanged += (_, _) => ApplyCurrentSelection();
         _rangeCombo.SelectedIndexChanged += (_, _) => HandleRangeSelectionChanged();
@@ -119,7 +107,7 @@ public sealed class MainForm : Form
         top.Controls.AddRange([
             FieldLabel("Provider", controlVerticalOffset), _providerCombo,
             FieldLabel("日期", controlVerticalOffset), _rangeCombo,
-            refresh, _pricingButton, settingsButton
+            refresh, settingsButton
         ]);
 
         _apiValue = MetricLabel();
@@ -266,8 +254,11 @@ public sealed class MainForm : Form
         foreach (var row in snapshot.Projects)
             _projects.Rows.Add(row.DisplayName, row.Provider.ToStorageString(), FormatTokens(row.Tokens), FormatTokens(row.NonCachedInputTokens), FormatTokens(row.OutputTokens), FormatCost(row.ApiEquivalentUsd));
         var warningText = snapshot.Warnings.Count == 0 ? string.Empty : string.Join("；", snapshot.Warnings.Take(3));
+        var rangeText = !string.IsNullOrWhiteSpace(snapshot.RangeDisplayOverride)
+            ? snapshot.RangeDisplayOverride
+            : $"范围：{FormatRange(snapshot.Range)}";
         _status.Text = string.IsNullOrEmpty(warningText)
-            ? $"范围：{FormatRange(snapshot.Range)}；最后刷新：{snapshot.RefreshedAt.ToLocalTime():HH:mm:ss}"
+            ? $"{rangeText}；最后刷新：{snapshot.RefreshedAt.ToLocalTime():HH:mm:ss}"
             : warningText;
     }
 
@@ -289,29 +280,10 @@ public sealed class MainForm : Form
         catch (Exception exception) { _status.Text = $"刷新失败：{exception.Message}"; }
     }
 
-    private async Task UpdatePricingAsync()
-    {
-        if (!_pricingButton.Enabled) return;
-        _pricingButton.Enabled = false;
-        try
-        {
-            _status.Text = "正在从官方定价页获取最新价格…";
-            var result = await _coordinator.UpdatePricingAsync();
-            ApplyCurrentSelection();
-            var message = result.UpdatedCount > 0
-                ? $"已更新 {result.UpdatedCount} 条价格规则（{result.FetchedAt.ToLocalTime():HH:mm:ss}）"
-                : "未更新价格，已保留本地规则";
-            if (result.Warnings.Count > 0) message += $"；{result.Warnings[0]}";
-            _status.Text = message;
-        }
-        catch (Exception exception) { _status.Text = $"获取价格失败：{exception.Message}"; }
-        finally { _pricingButton.Enabled = true; }
-    }
-
     private void HandleRangeSelectionChanged()
     {
         if (_ignoreRangeSelection) return;
-        if (_rangeCombo.SelectedIndex != 4)
+        if (_rangeCombo.SelectedIndex != 5)
         {
             _previousRangeIndex = _rangeCombo.SelectedIndex;
             ApplyCurrentSelection();
@@ -322,29 +294,31 @@ public sealed class MainForm : Form
         if (dialog.ShowDialog(this) == DialogResult.OK && dialog.SelectedRange is not null)
         {
             _customRange = dialog.SelectedRange;
-            _previousRangeIndex = 4;
+            _previousRangeIndex = 5;
             ApplyCurrentSelection();
             return;
         }
 
         _ignoreRangeSelection = true;
-        _rangeCombo.SelectedIndex = _previousRangeIndex == 4 ? 1 : _previousRangeIndex;
+        _rangeCombo.SelectedIndex = _previousRangeIndex == 5 ? 1 : _previousRangeIndex;
         _ignoreRangeSelection = false;
     }
 
     private void ApplyCurrentSelection()
     {
         var provider = _providerCombo.SelectedIndex switch { 1 => ProviderKind.Codex, 2 => ProviderKind.Antigravity, _ => (ProviderKind?)null };
+        var isWeeklyCycle = _rangeCombo.SelectedIndex == 4;
         var range = _rangeCombo.SelectedIndex switch
         {
             0 => DateRange.Today(),
             1 => DateRange.LastDays(7),
             2 => DateRange.LastDays(30),
             3 => DateRange.ThisMonth(),
-            4 => _customRange,
+            4 => DateRange.LastDays(7), // 精确周周期窗口将在 BuildSnapshot 内部动态计算
+            5 => _customRange,
             _ => DateRange.LastDays(7)
         };
-        ApplySnapshot(_coordinator.BuildSnapshot(range, provider));
+        ApplySnapshot(_coordinator.BuildSnapshot(range, provider, isWeeklyCycle));
     }
 
     private Label FieldLabel(string text, int topOffset) => new()

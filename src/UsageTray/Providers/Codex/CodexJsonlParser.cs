@@ -6,23 +6,29 @@ namespace UsageTray.Providers.Codex;
 
 public sealed class CodexJsonlParser
 {
+    public const int ParserVersion = 3;
+
     private static readonly string[] InputNames = ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "input", "total_input_tokens", "totalInputTokens"];
     private static readonly string[] CachedNames = ["cached_input_tokens", "cachedInputTokens", "cache_read_input_tokens", "cacheReadInputTokens", "cached", "cache_read"];
     private static readonly string[] CacheWriteNames = ["cache_creation_input_tokens", "cacheCreationInputTokens", "cache_write_input_tokens", "cacheWriteInputTokens", "cache_write"];
     private static readonly string[] OutputNames = ["output_tokens", "outputTokens", "completion_tokens", "completionTokens", "output", "total_output_tokens", "totalOutputTokens"];
+    private static readonly string[] ReasoningNames = ["reasoning_output_tokens", "reasoningOutputTokens", "reasoning_tokens", "reasoningTokens"];
+
+    private readonly CodexUsageNormalizer _normalizer;
+
+    public CodexJsonlParser(CodexUsageNormalizer? normalizer = null) => _normalizer = normalizer ?? new CodexUsageNormalizer();
 
     public CodexParseResult ParseFile(string path)
     {
-        var aggregate = new Dictionary<BucketKey, MutableBucket>();
-        var counters = new Dictionary<string, Counter>(StringComparer.OrdinalIgnoreCase);
+        var snapshots = new List<CodexTokenSnapshot>();
         var quotaByWindow = new Dictionary<string, QuotaSnapshot>(StringComparer.OrdinalIgnoreCase);
         var warnings = new List<string>();
         string? sessionId = null;
         string? projectPath = null;
+        string? serviceTier = null;
         string? lastModel = null;
         string? planTier = null;
         var warningCount = 0;
-        var hasTokenData = false;
         DateTimeOffset? coverageStart = null;
         var lineNumber = 0;
         try
@@ -37,8 +43,11 @@ public sealed class CodexJsonlParser
                 {
                     using var document = JsonDocument.Parse(line);
                     var root = document.RootElement;
-                    sessionId ??= JsonValueReader.FindConversationId(root) ?? Path.GetFileNameWithoutExtension(path);
-                    projectPath ??= JsonValueReader.FindProjectPath(root);
+                    sessionId ??= FindSessionId(root) ?? Path.GetFileNameWithoutExtension(path);
+                    var currentProject = JsonValueReader.FindProjectPath(root);
+                    if (!string.IsNullOrWhiteSpace(currentProject)) projectPath = currentProject;
+                    var currentTier = JsonValueReader.FindString(root, "service_tier", "serviceTier", "tier");
+                    if (!string.IsNullOrWhiteSpace(currentTier)) serviceTier = currentTier;
                     var model = NormalizeModel(JsonValueReader.FindModel(root));
                     if (!string.IsNullOrWhiteSpace(model)) lastModel = model;
                     var timestamp = JsonValueReader.FindTimestamp(root) ?? File.GetLastWriteTimeUtc(path);
@@ -46,38 +55,12 @@ public sealed class CodexJsonlParser
                     planTier ??= JsonValueReader.FindString(root, "plan_type", "planType", "plan_tier", "planTier");
                     ExtractRateLimits(root, timestamp, planTier, quotaByWindow);
 
-                    var fields = FindTokenFields(root);
-                    if (fields is null || fields.Input < 0 || fields.Output < 0) continue;
-                    hasTokenData = true;
-                    var effectiveModel = model ?? lastModel ?? "Unknown";
-                    var usage = fields;
-                    if (fields.IsCumulative)
-                    {
-                        var previous = counters.TryGetValue(effectiveModel, out var old) ? old : default;
-                        if (fields.Input < previous.Input || fields.Output < previous.Output)
-                        {
-                            counters[effectiveModel] = new Counter(fields.Input, fields.Cached, fields.CacheWrite, fields.Output);
-                            continue;
-                        }
-                        usage = fields with
-                        {
-                            Input = fields.Input - previous.Input,
-                            Cached = Math.Max(0, fields.Cached - previous.Cached),
-                            CacheWrite = Math.Max(0, fields.CacheWrite - previous.CacheWrite),
-                            Output = fields.Output - previous.Output,
-                            IsCumulative = false
-                        };
-                        counters[effectiveModel] = new Counter(fields.Input, fields.Cached, fields.CacheWrite, fields.Output);
-                    }
-                    if (usage.Input == 0 && usage.Output == 0 && usage.CacheWrite == 0) continue;
-                    var key = new BucketKey(DateOnly.FromDateTime(timestamp.ToLocalTime().DateTime), ProjectResolver.Normalize(projectPath), effectiveModel);
-                    if (!aggregate.TryGetValue(key, out var bucket)) aggregate[key] = bucket = new MutableBucket();
-                    bucket.Input += usage.Input;
-                    bucket.Cached += Math.Min(usage.Cached, usage.Input);
-                    bucket.CacheWrite += Math.Min(usage.CacheWrite, Math.Max(0, usage.Input - usage.Cached));
-                    bucket.Output += usage.Output;
-                    bucket.Requests++;
-                    bucket.Quality = fields.IsCumulative ? DataQuality.Derived : DataQuality.Exact;
+                    if (!TryReadTokenEvent(root, out var tokenEvent)) continue;
+                    var effectiveSession = sessionId ?? Path.GetFileNameWithoutExtension(path);
+                    var snapshot = new CodexTokenSnapshot(effectiveSession, timestamp, model ?? lastModel,
+                        ProjectResolver.Normalize(projectPath), currentTier ?? serviceTier ?? tokenEvent.ServiceTier, tokenEvent.Total, tokenEvent.Last,
+                        tokenEvent.ContextWindow, path, lineNumber, tokenEvent.EventType);
+                    snapshots.Add(snapshot);
                 }
                 catch (JsonException)
                 {
@@ -92,56 +75,123 @@ public sealed class CodexJsonlParser
             warnings.Add($"无法读取 Codex 文件：{path}（{exception.Message}）");
         }
 
-        var buckets = aggregate.Select(pair => new UsageBucket(ProviderKind.Codex, pair.Key.LocalDate, pair.Key.ProjectKey, pair.Key.Model,
-            pair.Value.Input, pair.Value.Cached, pair.Value.Output, pair.Value.Requests, pair.Value.Quality, path, sessionId, pair.Value.CacheWrite,
-            pair.Value.Cached > 0 || pair.Value.CacheWrite > 0 ? CostQuality.ExactTokenSplit : CostQuality.ExactTokensNoCache)).ToList();
-        return new CodexParseResult(buckets, sessionId, ProjectResolver.Normalize(projectPath), lastModel, warningCount, hasTokenData, coverageStart,
-            warnings, quotaByWindow.Values.OrderBy(item => item.WindowKind).ToList());
+        var normalized = _normalizer.Normalize(snapshots);
+        warnings.AddRange(normalized.Warnings);
+        warningCount += normalized.Warnings.Count;
+        return new CodexParseResult(normalized.Buckets, sessionId, ProjectResolver.Normalize(projectPath), lastModel,
+            warningCount, snapshots.Count > 0, coverageStart, warnings,
+            quotaByWindow.Values.OrderBy(item => item.WindowKind).ToList(), snapshots, normalized);
     }
+
+    private static string? FindSessionId(JsonElement root)
+    {
+        var direct = JsonValueReader.FindConversationId(root);
+        if (!string.IsNullOrWhiteSpace(direct)) return direct;
+        foreach (var item in JsonValueReader.EnumerateObjects(root))
+        {
+            if (!JsonValueReader.TryGetString(item, out var type, "type") ||
+                !string.Equals(type, "session_meta", StringComparison.OrdinalIgnoreCase)) continue;
+            if (JsonValueReader.TryGetString(item, out var id, "id", "session_id", "sessionId", "conversation_id", "conversationId")) return id;
+            if (JsonValueReader.TryGetProperty(item, out var payload, "payload") &&
+                JsonValueReader.TryGetString(payload, out id, "id", "session_id", "sessionId", "conversation_id", "conversationId")) return id;
+        }
+        return null;
+    }
+
+    private static bool TryReadTokenEvent(JsonElement root, out ParsedTokenEvent result)
+    {
+        foreach (var item in JsonValueReader.EnumerateObjects(root))
+        {
+            if (!JsonValueReader.TryGetString(item, out var type, "type") ||
+                !string.Equals(type, "token_count", StringComparison.OrdinalIgnoreCase)) continue;
+            var info = item;
+            if (JsonValueReader.TryGetProperty(item, out var infoObject, "info") && infoObject.ValueKind == JsonValueKind.Object)
+                info = infoObject;
+            if (!TryGetNamedUsage(info, out var total, "total_token_usage", "totalTokenUsage") && !TryParseUsage(info, out total)) continue;
+            CodexRequestUsage? last = null;
+            if (TryGetNamedUsage(info, out var lastUsage, "last_token_usage", "lastTokenUsage")) last = ToRequestUsage(lastUsage);
+            var context = JsonValueReader.GetLong(info, "model_context_window", "modelContextWindow", "context_window", "contextWindow");
+            var tier = JsonValueReader.FindString(info, "service_tier", "serviceTier", "tier");
+            result = new ParsedTokenEvent(total, last, context, tier, "token_count");
+            return true;
+        }
+
+        // Older fixtures and exported logs may have a cumulative usage object without a token_count type.
+        foreach (var item in JsonValueReader.EnumerateObjects(root))
+        {
+            if (!TryGetNamedUsage(item, out var total, "total_token_usage", "totalTokenUsage")) continue;
+            CodexRequestUsage? last = null;
+            if (TryGetNamedUsage(item, out var lastUsage, "last_token_usage", "lastTokenUsage")) last = ToRequestUsage(lastUsage);
+            result = new ParsedTokenEvent(total, last, JsonValueReader.GetLong(item, "model_context_window", "modelContextWindow"), null, "token_count");
+            return true;
+        }
+
+        foreach (var item in JsonValueReader.EnumerateObjects(root))
+        {
+            if (!TryParseUsage(item, out var total)) continue;
+            var isExplicitUsage = JsonValueReader.HasAny(item, "input_tokens", "inputTokens", "output_tokens", "outputTokens", "prompt_tokens", "completion_tokens");
+            if (!isExplicitUsage) continue;
+            result = new ParsedTokenEvent(total, null, null, null, "usage");
+            return true;
+        }
+        result = default!;
+        return false;
+    }
+
+    private static bool TryGetNamedUsage(JsonElement parent, out CodexCumulativeUsage usage, params string[] names)
+    {
+        if (JsonValueReader.TryGetProperty(parent, out var value, names) && value.ValueKind == JsonValueKind.Object)
+            return TryParseUsage(value, out usage);
+        usage = default!;
+        return false;
+    }
+
+    private static bool TryParseUsage(JsonElement item, out CodexCumulativeUsage usage)
+    {
+        var input = JsonValueReader.GetLong(item, InputNames);
+        var output = JsonValueReader.GetLong(item, OutputNames);
+        if (!input.HasValue && !output.HasValue)
+        {
+            usage = default!;
+            return false;
+        }
+        usage = new CodexCumulativeUsage(Math.Max(0, input ?? 0), Math.Max(0, JsonValueReader.GetLong(item, CachedNames) ?? 0),
+            Math.Max(0, output ?? 0), JsonValueReader.GetLong(item, CacheWriteNames), JsonValueReader.GetLong(item, ReasoningNames));
+        return true;
+    }
+
+    private static CodexRequestUsage ToRequestUsage(CodexCumulativeUsage usage) =>
+        new(usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, usage.CacheWriteInputTokens, usage.ReasoningOutputTokens);
 
     private static void ExtractRateLimits(JsonElement root, DateTimeOffset capturedAt, string? planTier,
         Dictionary<string, QuotaSnapshot> quotaByWindow)
     {
         foreach (var item in JsonValueReader.EnumerateObjects(root))
         {
-            if (!JsonValueReader.TryGetProperty(item, out var rateLimits, "rate_limits", "rateLimits") ||
-                rateLimits.ValueKind != JsonValueKind.Object) continue;
-
+            if (!JsonValueReader.TryGetProperty(item, out var rateLimits, "rate_limits", "rateLimits") || rateLimits.ValueKind != JsonValueKind.Object) continue;
             foreach (var windowName in new[] { "primary", "secondary" })
             {
-                if (!JsonValueReader.TryGetProperty(rateLimits, out var window, windowName) ||
-                    window.ValueKind != JsonValueKind.Object) continue;
+                if (!JsonValueReader.TryGetProperty(rateLimits, out var window, windowName) || window.ValueKind != JsonValueKind.Object) continue;
                 var usedPercent = JsonValueReader.GetDouble(window, "used_percent", "usedPercent");
                 if (!usedPercent.HasValue || usedPercent.Value is < 0 or > 100) continue;
                 var minutes = JsonValueReader.GetLong(window, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
                 var kind = ClassifyWindow(windowName, minutes);
-                var reset = ReadReset(window, capturedAt);
-                var snapshot = new QuotaSnapshot(
-                    ProviderKind.Codex,
-                    capturedAt,
-                    $"codex-{windowName}",
-                    $"Codex {kind}",
-                    1d - usedPercent.Value / 100d,
-                    reset,
-                    kind,
-                    "codex-session-rate-limits",
-                    planTier);
-                if (!quotaByWindow.TryGetValue(kind, out var previous) || snapshot.CapturedAt >= previous.CapturedAt)
-                    quotaByWindow[kind] = snapshot;
+                var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, $"codex-{kind}", $"Codex {kind}",
+                    1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), kind, "codex-session-rate-limits", planTier);
+                if (!quotaByWindow.TryGetValue(kind, out var previous) || snapshot.CapturedAt >= previous.CapturedAt) quotaByWindow[kind] = snapshot;
             }
         }
     }
 
-    private static string ClassifyWindow(string windowName, long? minutes) =>
-        minutes switch
-        {
-            <= 360 and > 0 => "5h",
-            >= 10_000 => "weekly",
-            > 0 => $"{minutes}m",
-            _ when string.Equals(windowName, "primary", StringComparison.OrdinalIgnoreCase) => "5h",
-            _ when string.Equals(windowName, "secondary", StringComparison.OrdinalIgnoreCase) => "weekly",
-            _ => "unknown"
-        };
+    private static string ClassifyWindow(string windowName, long? minutes) => minutes switch
+    {
+        <= 360 and > 0 => "5h",
+        >= 10_000 => "weekly",
+        > 0 => $"{minutes}m",
+        _ when string.Equals(windowName, "primary", StringComparison.OrdinalIgnoreCase) => "5h",
+        _ when string.Equals(windowName, "secondary", StringComparison.OrdinalIgnoreCase) => "weekly",
+        _ => "unknown"
+    };
 
     private static DateTimeOffset? ReadReset(JsonElement window, DateTimeOffset capturedAt)
     {
@@ -151,59 +201,12 @@ public sealed class CodexJsonlParser
             try { return reset.Value > 10_000_000_000 ? DateTimeOffset.FromUnixTimeMilliseconds(reset.Value) : DateTimeOffset.FromUnixTimeSeconds(reset.Value); }
             catch (ArgumentOutOfRangeException) { }
         }
-
-        if (JsonValueReader.GetLong(window, "resets_in_seconds", "resetsInSeconds") is { } seconds && seconds >= 0)
-            return capturedAt.AddSeconds(seconds);
-        if (JsonValueReader.TryGetString(window, out var text, "resets_at", "resetsAt") &&
-            DateTimeOffset.TryParse(text, out var parsed)) return parsed;
+        if (JsonValueReader.GetLong(window, "resets_in_seconds", "resetsInSeconds") is { } seconds && seconds >= 0) return capturedAt.AddSeconds(seconds);
+        if (JsonValueReader.TryGetString(window, out var text, "resets_at", "resetsAt") && DateTimeOffset.TryParse(text, out var parsed)) return parsed;
         return null;
     }
 
     private static string? NormalizeModel(string? model) => string.IsNullOrWhiteSpace(model) ? null : model.Trim();
 
-    private static TokenFields? FindTokenFields(JsonElement root)
-    {
-        TokenFields? best = null;
-        foreach (var item in JsonValueReader.EnumerateObjects(root))
-        {
-            var input = JsonValueReader.GetLong(item, InputNames);
-            var output = JsonValueReader.GetLong(item, OutputNames);
-            if (!input.HasValue && !output.HasValue) continue;
-            var candidate = new TokenFields(Math.Max(0, input ?? 0), Math.Max(0, JsonValueReader.GetLong(item, CachedNames) ?? 0), Math.Max(0, JsonValueReader.GetLong(item, CacheWriteNames) ?? 0), Math.Max(0, output ?? 0), IsCumulativeObject(item, root), ScoreObject(item));
-            if (best is null || candidate.Score > best.Score) best = candidate;
-        }
-        return best;
-    }
-
-    private static bool IsCumulativeObject(JsonElement item, JsonElement root)
-    {
-        if (JsonValueReader.HasAny(item, "total_input_tokens", "totalInputTokens", "total_output_tokens", "totalOutputTokens", "total_token_usage", "totalTokenUsage")) return true;
-        foreach (var candidate in JsonValueReader.EnumerateObjects(root))
-        {
-            if (JsonValueReader.TryGetString(candidate, out var type, "type", "event_type", "eventType") && type?.Contains("token_count", StringComparison.OrdinalIgnoreCase) == true) return true;
-        }
-        return false;
-    }
-
-    private static int ScoreObject(JsonElement item)
-    {
-        var score = 0;
-        if (JsonValueReader.HasAny(item, "total_input_tokens", "totalInputTokens", "total_output_tokens", "totalOutputTokens")) score += 10;
-        if (JsonValueReader.HasAny(item, "input_tokens", "output_tokens", "cached_input_tokens")) score += 5;
-        if (JsonValueReader.HasAny(item, "usage", "total_token_usage", "token_count")) score += 2;
-        return score;
-    }
-
-    private readonly record struct BucketKey(DateOnly LocalDate, string? ProjectKey, string Model);
-    private sealed class MutableBucket
-    {
-        public long Input;
-        public long Cached;
-        public long CacheWrite;
-        public long Output;
-        public int Requests;
-        public DataQuality Quality = DataQuality.Exact;
-    }
-    private readonly record struct Counter(long Input, long Cached, long CacheWrite, long Output);
-    private sealed record TokenFields(long Input, long Cached, long CacheWrite, long Output, bool IsCumulative, int Score);
+    private sealed record ParsedTokenEvent(CodexCumulativeUsage Total, CodexRequestUsage? Last, long? ContextWindow, string? ServiceTier, string EventType);
 }

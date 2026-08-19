@@ -10,7 +10,7 @@ public sealed class AppSettings
     public int RefreshSeconds { get; set; } = 90;
     public int DataRetentionDays { get; set; } = 90;
     public List<string> ExtraCodexRoots { get; set; } = [];
-    public bool StatusLineCacheSemanticsValidated { get; set; }
+    public bool StatusLineCacheSemanticsValidated { get; set; } = true;
     public bool StatusLineRecorderEnabled { get; set; }
     public int? MainWindowWidth { get; set; }
     public int? MainWindowHeight { get; set; }

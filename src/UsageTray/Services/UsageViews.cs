@@ -23,10 +23,31 @@ public sealed record ProjectUsageView(string ProjectKey, string DisplayName, Pro
 
 public sealed record QuotaView(QuotaSnapshot Snapshot, bool IsOffline);
 
+public sealed record CodexCycleUsageView(
+    DateTimeOffset CycleStart,
+    DateTimeOffset? ResetAt,
+    double? RemainingFraction,
+    double? UsedFraction,
+    decimal? CycleCostUsd,
+    decimal? EstimatedWeeklyCostUsd,
+    long CycleInputTokens,
+    long CycleCachedTokens,
+    long CycleCacheCreationTokens,
+    long CycleOutputTokens,
+    CostQuality CostQuality)
+{
+    public long NonCachedInputTokens => Math.Max(0, CycleInputTokens - CycleCachedTokens - CycleCacheCreationTokens);
+    public long TotalTokens => NonCachedInputTokens + CycleCachedTokens + CycleCacheCreationTokens + CycleOutputTokens;
+}
+
 public sealed class DashboardSnapshot
 {
     public DateRange Range { get; init; } = DateRange.Today();
     public ProviderKind? ProviderFilter { get; init; }
+    public bool IsWeeklyCycleWindow { get; init; }
+    public string? RangeDisplayOverride { get; init; }
+    public DateTimeOffset? WindowStartUtc { get; init; }
+    public DateTimeOffset? WindowEndUtc { get; init; }
     public decimal? ApiEquivalentUsd { get; init; }
     // InputTokens 保留数据源原始总 input，便于追溯；界面和 Sub2API 兼容口径使用 NonCachedInputTokens。
     public long InputTokens { get; init; }
@@ -38,6 +59,7 @@ public sealed class DashboardSnapshot
     public long UnpricedTokens { get; init; }
     public CostQuality CostQuality { get; init; } = CostQuality.Unavailable;
     public DateTimeOffset? CoverageStart { get; init; }
+    public CodexCycleUsageView? CodexWeeklyCycle { get; init; }
     public IReadOnlyList<DailyUsageView> Daily { get; init; } = [];
     public IReadOnlyList<ModelUsageView> Models { get; init; } = [];
     public IReadOnlyList<ProjectUsageView> Projects { get; init; } = [];

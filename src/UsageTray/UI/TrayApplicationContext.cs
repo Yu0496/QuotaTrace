@@ -15,15 +15,13 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly UsageDatabase _database;
     private readonly RefreshCoordinator _coordinator;
     private readonly System.Threading.Timer _refreshTimer;
-    private readonly System.Windows.Forms.Timer _quotaPopupTimer;
+    private readonly System.Windows.Forms.Timer _singleClickTimer;
     private readonly SynchronizationContext _uiContext;
     private readonly ToolStripMenuItem _quotaMenuItem;
     private readonly ToolStripMenuItem _pinQuotaMenuItem;
     private MainForm? _mainForm;
     private QuotaPopupForm? _quotaPopup;
     private DashboardSnapshot _lastSnapshot;
-    private Point? _lastTrayMousePosition;
-    private DateTimeOffset? _mouseLeftTrayAt;
     private bool _quotaPopupPinned;
     private bool _contextMenuOpen;
     private bool _disposed;
@@ -42,26 +40,49 @@ public sealed class TrayApplicationContext : ApplicationContext
         _lastSnapshot = _coordinator.CurrentSnapshot;
         _coordinator.SnapshotChanged += (_, snapshot) => _uiContext.Post(_ => ApplySnapshot(snapshot), null);
 
+        _singleClickTimer = new System.Windows.Forms.Timer
+        {
+            Interval = Math.Max(180, Math.Min(350, SystemInformation.DoubleClickTime))
+        };
+        _singleClickTimer.Tick += (_, _) =>
+        {
+            _singleClickTimer.Stop();
+            if (!_contextMenuOpen) ToggleQuotaPopup();
+        };
+
         _applicationIcon = AppIcon.Create();
         _notifyIcon = new NotifyIcon { Icon = _applicationIcon, Visible = true, Text = "AI Usage Tray" };
-        _notifyIcon.MouseMove += (_, _) =>
-        {
-            if (_contextMenuOpen || _notifyIcon.ContextMenuStrip?.Visible == true || _quotaPopupPinned) return;
-            _lastTrayMousePosition = Cursor.Position;
-            _mouseLeftTrayAt = null;
-            ShowQuotaPopup();
-        };
         _notifyIcon.MouseClick += (_, e) =>
         {
-            if (e.Button == MouseButtons.Left) TogglePinnedQuotaPopup();
+            if (e.Button == MouseButtons.Left)
+            {
+                if (_quotaPopup is { IsDisposed: false, Visible: true })
+                {
+                    _singleClickTimer.Stop();
+                    HideQuotaPopup();
+                }
+                else
+                {
+                    _singleClickTimer.Stop();
+                    _singleClickTimer.Start();
+                }
+            }
+        };
+        _notifyIcon.MouseDoubleClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                _singleClickTimer.Stop();
+                HideQuotaPopup();
+                ShowMainForm();
+            }
         };
 
         var menu = new ContextMenuStrip();
         menu.Opening += (_, _) =>
         {
             _contextMenuOpen = true;
-            _quotaPopupTimer!.Stop();
-            _mouseLeftTrayAt = null;
+            _singleClickTimer.Stop();
             HideQuotaPopup();
         };
         menu.Closed += (_, _) =>
@@ -84,28 +105,6 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add("退出", null, (_, _) => ExitApplication());
         _notifyIcon.ContextMenuStrip = menu;
 
-        _quotaPopupTimer = new System.Windows.Forms.Timer { Interval = 100 };
-        _quotaPopupTimer.Tick += (_, _) =>
-        {
-            if (_quotaPopupPinned || _contextMenuOpen)
-            {
-                _quotaPopupTimer.Stop();
-                _mouseLeftTrayAt = null;
-                return;
-            }
-
-            if (!_lastTrayMousePosition.HasValue || Cursor.Position == _lastTrayMousePosition.Value)
-            {
-                _mouseLeftTrayAt = null;
-                return;
-            }
-
-            _mouseLeftTrayAt ??= DateTimeOffset.UtcNow;
-            if (DateTimeOffset.UtcNow - _mouseLeftTrayAt.Value < TimeSpan.FromSeconds(3)) return;
-            _quotaPopupTimer.Stop();
-            _mouseLeftTrayAt = null;
-            HideQuotaPopup();
-        };
         _refreshTimer = new System.Threading.Timer(async _ => await RefreshAsync(false), null,
             TimeSpan.FromSeconds(settings.RefreshSeconds), TimeSpan.FromSeconds(settings.RefreshSeconds));
         ApplySnapshot(_lastSnapshot);
@@ -149,6 +148,14 @@ public sealed class TrayApplicationContext : ApplicationContext
         form.ShowDialog(_mainForm);
     }
 
+    private void ToggleQuotaPopup()
+    {
+        if (_quotaPopup is { IsDisposed: false, Visible: true })
+            HideQuotaPopup();
+        else
+            ShowQuotaPopup();
+    }
+
     private void TogglePinnedQuotaPopup() => SetQuotaPopupPinned(!_quotaPopupPinned);
 
     private void SetQuotaPopupPinned(bool pinned)
@@ -158,8 +165,6 @@ public sealed class TrayApplicationContext : ApplicationContext
         _pinQuotaMenuItem.Checked = pinned;
         if (!pinned)
         {
-            _quotaPopupTimer.Stop();
-            _mouseLeftTrayAt = null;
             HideQuotaPopup();
             return;
         }
@@ -173,16 +178,15 @@ public sealed class TrayApplicationContext : ApplicationContext
         _quotaPopup ??= CreateQuotaPopup();
         _quotaPopup.SetSnapshot(_lastSnapshot);
         _quotaPopup.ShowAt(Cursor.Position);
-        _lastTrayMousePosition = Cursor.Position;
-        _mouseLeftTrayAt = null;
-        _quotaPopupTimer.Stop();
-        if (!_quotaPopupPinned) _quotaPopupTimer.Start();
     }
 
     private QuotaPopupForm CreateQuotaPopup()
     {
         var popup = new QuotaPopupForm();
-        popup.DismissRequested += (_, _) => SetQuotaPopupPinned(false);
+        popup.DismissRequested += (_, _) =>
+        {
+            if (!_quotaPopupPinned) HideQuotaPopup();
+        };
         return popup;
     }
 
@@ -208,8 +212,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (_disposed) return;
         _disposed = true;
-        _quotaPopupTimer.Stop();
-        _quotaPopupTimer.Dispose();
+        _singleClickTimer.Stop();
+        _singleClickTimer.Dispose();
         _quotaPopup?.Dispose();
         _refreshTimer.Dispose();
         _notifyIcon.Visible = false;

@@ -18,16 +18,7 @@ public sealed record PricingRule(
     decimal OutputPerMillionUsd,
     string SourceUrl,
     DateOnly LastVerifiedAt,
-    bool CacheSplitValidated = true,
-    TokenPriceSet? LongContextPrice = null,
-    long LongContextThresholdTokens = 272_000,
-    IReadOnlyDictionary<string, TokenPriceSet>? ServiceTierPrices = null);
-
-public sealed record TokenPriceSet(
-    decimal InputPerMillionUsd,
-    decimal CacheReadPerMillionUsd,
-    decimal? CacheWritePerMillionUsd,
-    decimal OutputPerMillionUsd);
+    bool CacheSplitValidated = true);
 
 public sealed record PricingDocument(
     int SchemaVersion,

@@ -11,8 +11,6 @@ public sealed record CodexParseResult(
     bool HasTokenData,
     DateTimeOffset? CoverageStart,
     IReadOnlyList<string> Warnings,
-    IReadOnlyList<QuotaSnapshot> Quotas = null!,
-    IReadOnlyList<CodexTokenSnapshot>? Snapshots = null!,
-    CodexNormalizationResult? Normalization = null!);
+    IReadOnlyList<QuotaSnapshot> Quotas = null!);
 
 internal sealed record TokenFields(long Input, long Cached, long CacheWrite, long Output, bool IsCumulative, int Score);

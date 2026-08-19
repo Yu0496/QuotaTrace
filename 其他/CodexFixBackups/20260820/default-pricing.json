@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "lastVerifiedAt": "2026-08-20",
+  "schemaVersion": 1,
+  "lastVerifiedAt": "2026-08-19",
   "rules": [
     {
       "provider": "Codex",
@@ -11,10 +11,8 @@
       "cacheWritePerMillionUsd": 6.25,
       "outputPerMillionUsd": 30.0,
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
-      "lastVerifiedAt": "2026-08-20",
-      "cacheSplitValidated": true,
-      "longContextPrice": { "inputPerMillionUsd": 10.0, "cacheReadPerMillionUsd": 1.0, "cacheWritePerMillionUsd": 12.5, "outputPerMillionUsd": 45.0 },
-      "longContextThresholdTokens": 272000
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Codex",
@@ -25,10 +23,8 @@
       "cacheWritePerMillionUsd": 6.25,
       "outputPerMillionUsd": 30.0,
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
-      "lastVerifiedAt": "2026-08-20",
-      "cacheSplitValidated": true,
-      "longContextPrice": { "inputPerMillionUsd": 10.0, "cacheReadPerMillionUsd": 1.0, "cacheWritePerMillionUsd": 12.5, "outputPerMillionUsd": 45.0 },
-      "longContextThresholdTokens": 272000
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Codex",
@@ -39,10 +35,8 @@
       "cacheWritePerMillionUsd": 2.5,
       "outputPerMillionUsd": 12.0,
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
-      "lastVerifiedAt": "2026-08-20",
-      "cacheSplitValidated": true,
-      "longContextPrice": { "inputPerMillionUsd": 4.0, "cacheReadPerMillionUsd": 0.4, "cacheWritePerMillionUsd": 5.0, "outputPerMillionUsd": 18.0 },
-      "longContextThresholdTokens": 272000
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Codex",
@@ -53,10 +47,8 @@
       "cacheWritePerMillionUsd": 0.25,
       "outputPerMillionUsd": 1.2,
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
-      "lastVerifiedAt": "2026-08-20",
-      "cacheSplitValidated": true,
-      "longContextPrice": { "inputPerMillionUsd": 0.4, "cacheReadPerMillionUsd": 0.04, "cacheWritePerMillionUsd": 0.5, "outputPerMillionUsd": 1.8 },
-      "longContextThresholdTokens": 272000
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
     },
     {
       "provider": "Codex",
@@ -103,6 +95,18 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 15.0,
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4",
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.25,
+      "cacheReadPerMillionUsd": 0.125,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://platform.openai.com/pricing",
       "lastVerifiedAt": "2026-08-19",
       "cacheSplitValidated": true
     },
