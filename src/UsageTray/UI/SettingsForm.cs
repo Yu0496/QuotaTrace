@@ -153,9 +153,13 @@ public sealed class SettingsForm : Form
             Margin = new Padding(0, 4, 0, 10)
         };
 
+        var lastScanText = settings.LastFullScanUtc.HasValue
+            ? settings.LastFullScanUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            : "尚未执行（将自动调度）";
+
         var note = new Label
         {
-            Text = "• 普通刷新只处理新增或发生变化的文件；程序启动时自动执行一次全量读取。\r\n• 如需重新解析全部历史记录，请点击下方的“全量重新读取”。",
+            Text = $"• 普通刷新只处理新增或发生变化的文件；程序启动时默认增量扫描，每 7 天自动执行一次全量校准。\r\n• 上次全量扫描时间：{lastScanText}。\r\n• 如需重新解析全部历史记录，请点击下方的“全量重新读取”。",
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
             Margin = new Padding(0, 8, 0, 6)
@@ -192,6 +196,7 @@ public sealed class SettingsForm : Form
             {
                 await _coordinator.RefreshAsync(true);
                 if (IsDisposed || Disposing || !IsHandleCreated) return;
+                note.Text = $"• 普通刷新只处理新增或发生变化的文件；程序启动时默认增量扫描，每 7 天自动执行一次全量校准。\r\n• 上次全量扫描时间：{DateTime.Now:yyyy-MM-dd HH:mm}。\r\n• 如需重新解析全部历史记录，请点击下方的“全量重新读取”。";
                 MessageBox.Show(this, "全量重新读取完成。之后的自动刷新会继续使用增量模式。", "UsageTray", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception exception)

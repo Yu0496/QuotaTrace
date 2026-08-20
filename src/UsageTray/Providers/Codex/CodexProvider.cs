@@ -64,6 +64,7 @@ public sealed class CodexProvider : IUsageProvider
             forceRebuild = sourcePaths.Any(path => context.Repository.GetSourceFile(ProviderKind.Codex, path)?.ParserVersion != CodexJsonlParser.ParserVersion);
         }
 
+        var modifiedFilesCount = 0;
         foreach (var path in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -74,6 +75,7 @@ public sealed class CodexProvider : IUsageProvider
             if (!forceRebuild && state is not null && state.FileSize == info.Length && state.MtimeUtcTicks == info.LastWriteTimeUtc.Ticks &&
                 state.ParserVersion == CodexJsonlParser.ParserVersion) continue;
 
+            modifiedFilesCount++;
             var parsed = _parser.ParseFile(fullPath);
             var readFailure = parsed.Warnings.Any(w => w.StartsWith("无法读取 Codex 文件", StringComparison.Ordinal));
             if (!readFailure)
@@ -90,10 +92,28 @@ public sealed class CodexProvider : IUsageProvider
         }
 
         // A missing source is removable only when every candidate root completed successfully.
+        var deletedFilesCount = 0;
         if (roots.Count > 0 && discovery.SuccessfulRoots.Count == roots.Count)
         {
             var discovered = files.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var stale in sourcePaths.Where(path => !discovered.Contains(path)).ToList()) context.Repository.DeleteSource(ProviderKind.Codex, stale);
+            var staleList = sourcePaths.Where(path => !discovered.Contains(path)).ToList();
+            deletedFilesCount = staleList.Count;
+            foreach (var stale in staleList) context.Repository.DeleteSource(ProviderKind.Codex, stale);
+        }
+
+        // 增量短路优化：若非强制全量重构且无任何会话文件增删改，直接复用已持久化的逻辑用量与最新配额
+        if (!forceRebuild && modifiedFilesCount == 0 && deletedFilesCount == 0)
+        {
+            var existingUsage = context.Repository.GetUsage(new DateRange(DateOnly.MinValue, DateOnly.MaxValue), ProviderKind.Codex);
+            if (existingUsage.Count > 0)
+            {
+                quotas.AddRange(context.Repository.GetLatestQuotas(ProviderKind.Codex));
+                return Task.FromResult(new ProviderRefreshResult(
+                    existingUsage,
+                    quotas.DistinctBy(item => $"{item.WindowKind}|{item.CapturedAt:O}").ToList(),
+                    warnings,
+                    DateTimeOffset.UtcNow));
+            }
         }
 
         var rawSnapshots = context.Repository.GetCodexSnapshots();
@@ -126,8 +146,8 @@ public sealed class CodexProvider : IUsageProvider
             normalized.ConflictingDuplicateCount,
             normalized.SuppressedSourceCount,
             normalized.SuppressedEventCount,
-            normalized.Events,
-            normalized.Sources,
+            eventCount = normalized.Events.Count,
+            sourceCount = normalized.Sources.Count,
             warnings = normalized.Warnings
         });
         context.Repository.SaveCodexAuditJson(auditJson);

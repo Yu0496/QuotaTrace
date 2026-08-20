@@ -1,10 +1,78 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace UsageTray.Providers.Antigravity;
 
 public readonly record struct RawProtobufField(int FieldNumber, int WireType, ulong Varint, ReadOnlyMemory<byte> Bytes);
+
+public ref struct ProtobufSpanReader
+{
+    private readonly ReadOnlySpan<byte> _span;
+    private int _offset;
+
+    public int FieldNumber { get; private set; }
+    public int WireType { get; private set; }
+    public ulong Varint { get; private set; }
+    public ReadOnlySpan<byte> Bytes { get; private set; }
+
+    public ProtobufSpanReader(ReadOnlySpan<byte> span)
+    {
+        _span = span;
+        _offset = 0;
+        FieldNumber = 0;
+        WireType = 0;
+        Varint = 0;
+        Bytes = default;
+    }
+
+    public bool ReadNext()
+    {
+        if (_offset >= _span.Length) return false;
+        var (tag, tagLen) = AntigravityProtobufReader.ReadVarint(_span.Slice(_offset));
+        if (tagLen == 0) return false;
+        _offset += tagLen;
+        FieldNumber = (int)(tag >> 3);
+        WireType = (int)(tag & 7);
+        Varint = 0;
+        Bytes = default;
+
+        if (WireType == 0) // Varint
+        {
+            var (val, valLen) = AntigravityProtobufReader.ReadVarint(_span.Slice(_offset));
+            if (valLen == 0) return false;
+            _offset += valLen;
+            Varint = val;
+            return true;
+        }
+        else if (WireType == 2) // Length-delimited
+        {
+            var (len, lenBytes) = AntigravityProtobufReader.ReadVarint(_span.Slice(_offset));
+            if (lenBytes == 0) return false;
+            _offset += lenBytes;
+            int byteCount = (int)len;
+            if (_offset + byteCount > _span.Length) return false;
+            Bytes = _span.Slice(_offset, byteCount);
+            _offset += byteCount;
+            return true;
+        }
+        else if (WireType == 1) // 64-bit
+        {
+            if (_offset + 8 > _span.Length) return false;
+            Bytes = _span.Slice(_offset, 8);
+            _offset += 8;
+            return true;
+        }
+        else if (WireType == 5) // 32-bit
+        {
+            if (_offset + 4 > _span.Length) return false;
+            Bytes = _span.Slice(_offset, 4);
+            _offset += 4;
+            return true;
+        }
+        return false;
+    }
+}
 
 public static class AntigravityProtobufReader
 {
@@ -27,75 +95,48 @@ public static class AntigravityProtobufReader
     public static List<RawProtobufField> DecodeFields(ReadOnlyMemory<byte> memory)
     {
         var fields = new List<RawProtobufField>();
-        var span = memory.Span;
-        int offset = 0;
-        while (offset < span.Length)
+        var reader = new ProtobufSpanReader(memory.Span);
+        int currentOffset = 0;
+        while (reader.ReadNext())
         {
-            var (tag, tagLen) = ReadVarint(span.Slice(offset));
-            if (tagLen == 0) break;
-            offset += tagLen;
-            int fieldNumber = (int)(tag >> 3);
-            int wireType = (int)(tag & 7);
-
-            if (wireType == 0) // Varint
+            ReadOnlyMemory<byte> fieldBytes = default;
+            if (reader.WireType == 2 && !reader.Bytes.IsEmpty)
             {
-                var (val, valLen) = ReadVarint(span.Slice(offset));
-                if (valLen == 0) break;
-                offset += valLen;
-                fields.Add(new RawProtobufField(fieldNumber, wireType, val, default));
+                // Find offset slice in original memory
+                var len = reader.Bytes.Length;
+                var memorySpan = memory.Span;
+                var index = memorySpan.Slice(currentOffset).IndexOf(reader.Bytes);
+                if (index >= 0)
+                {
+                    currentOffset += index;
+                    fieldBytes = memory.Slice(currentOffset, len);
+                    currentOffset += len;
+                }
             }
-            else if (wireType == 2) // Length-delimited
-            {
-                var (len, lenBytes) = ReadVarint(span.Slice(offset));
-                if (lenBytes == 0) break;
-                offset += lenBytes;
-                int byteCount = (int)len;
-                if (offset + byteCount > span.Length) break;
-                var slice = memory.Slice(offset, byteCount);
-                offset += byteCount;
-                fields.Add(new RawProtobufField(fieldNumber, wireType, 0, slice));
-            }
-            else if (wireType == 1) // 64-bit
-            {
-                if (offset + 8 > span.Length) break;
-                var slice = memory.Slice(offset, 8);
-                offset += 8;
-                fields.Add(new RawProtobufField(fieldNumber, wireType, 0, slice));
-            }
-            else if (wireType == 5) // 32-bit
-            {
-                if (offset + 4 > span.Length) break;
-                var slice = memory.Slice(offset, 4);
-                offset += 4;
-                fields.Add(new RawProtobufField(fieldNumber, wireType, 0, slice));
-            }
-            else
-            {
-                break;
-            }
+            fields.Add(new RawProtobufField(reader.FieldNumber, reader.WireType, reader.Varint, fieldBytes));
         }
         return fields;
     }
 
-    public static DateTimeOffset? DecodeTimestamp(ReadOnlyMemory<byte> memory)
+    public static DateTimeOffset? DecodeTimestamp(ReadOnlySpan<byte> span)
     {
-        if (memory.IsEmpty) return null;
+        if (span.IsEmpty) return null;
         try
         {
-            var fields = DecodeFields(memory);
+            var reader = new ProtobufSpanReader(span);
             ulong seconds = 0;
             long nanos = 0;
             bool hasSeconds = false;
-            foreach (var f in fields)
+            while (reader.ReadNext())
             {
-                if (f.FieldNumber == 1 && f.WireType == 0)
+                if (reader.FieldNumber == 1 && reader.WireType == 0)
                 {
-                    seconds = f.Varint;
+                    seconds = reader.Varint;
                     hasSeconds = true;
                 }
-                else if (f.FieldNumber == 2 && f.WireType == 0)
+                else if (reader.FieldNumber == 2 && reader.WireType == 0)
                 {
-                    nanos = (long)f.Varint;
+                    nanos = (long)reader.Varint;
                 }
             }
 
@@ -108,53 +149,53 @@ public static class AntigravityProtobufReader
         return null;
     }
 
-    public static AntigravityParsedGeneration? ParseGenerationMetadata(ReadOnlyMemory<byte> blob, int sourceIdx)
+    public static AntigravityParsedGeneration? ParseGenerationMetadata(ReadOnlySpan<byte> blob, int sourceIdx)
     {
         if (blob.IsEmpty) return null;
         try
         {
-            var genFields = DecodeFields(blob);
+            var genReader = new ProtobufSpanReader(blob);
             string? generationId = null;
-            ReadOnlyMemory<byte> chatMetaBlob = default;
+            ReadOnlySpan<byte> chatMetaBlob = default;
 
-            foreach (var field in genFields)
+            while (genReader.ReadNext())
             {
-                if (field.FieldNumber == 4 && field.WireType == 2 && !field.Bytes.IsEmpty)
+                if (genReader.FieldNumber == 4 && genReader.WireType == 2 && !genReader.Bytes.IsEmpty)
                 {
-                    generationId = Encoding.UTF8.GetString(field.Bytes.Span);
+                    generationId = Encoding.UTF8.GetString(genReader.Bytes);
                 }
-                else if (field.FieldNumber == 1 && field.WireType == 2 && !field.Bytes.IsEmpty)
+                else if (genReader.FieldNumber == 1 && genReader.WireType == 2 && !genReader.Bytes.IsEmpty)
                 {
-                    chatMetaBlob = field.Bytes;
+                    chatMetaBlob = genReader.Bytes;
                 }
             }
 
             if (chatMetaBlob.IsEmpty) return null;
 
-            var chatFields = DecodeFields(chatMetaBlob);
+            var chatReader = new ProtobufSpanReader(chatMetaBlob);
             string? responseModel = null;
             string? displayName = null;
-            ReadOnlyMemory<byte> usageBlob = default;
+            ReadOnlySpan<byte> usageBlob = default;
 
-            foreach (var field in chatFields)
+            while (chatReader.ReadNext())
             {
-                if (field.FieldNumber == 19 && field.WireType == 2 && !field.Bytes.IsEmpty)
+                if (chatReader.FieldNumber == 19 && chatReader.WireType == 2 && !chatReader.Bytes.IsEmpty)
                 {
-                    responseModel = Encoding.UTF8.GetString(field.Bytes.Span);
+                    responseModel = Encoding.UTF8.GetString(chatReader.Bytes);
                 }
-                else if (field.FieldNumber == 21 && field.WireType == 2 && !field.Bytes.IsEmpty)
+                else if (chatReader.FieldNumber == 21 && chatReader.WireType == 2 && !chatReader.Bytes.IsEmpty)
                 {
-                    displayName = Encoding.UTF8.GetString(field.Bytes.Span);
+                    displayName = Encoding.UTF8.GetString(chatReader.Bytes);
                 }
-                else if (field.FieldNumber == 4 && field.WireType == 2 && !field.Bytes.IsEmpty)
+                else if (chatReader.FieldNumber == 4 && chatReader.WireType == 2 && !chatReader.Bytes.IsEmpty)
                 {
-                    usageBlob = field.Bytes;
+                    usageBlob = chatReader.Bytes;
                 }
             }
 
             if (usageBlob.IsEmpty) return null;
 
-            var usageFields = DecodeFields(usageBlob);
+            var usageReader = new ProtobufSpanReader(usageBlob);
             long inputTokens = 0;
             long aggregateOutputTokens = 0;
             long cacheWriteTokens = 0;
@@ -163,23 +204,23 @@ public static class AntigravityProtobufReader
             long responseOutputTokens = 0;
             string? responseId = null;
 
-            foreach (var field in usageFields)
+            while (usageReader.ReadNext())
             {
-                if (field.WireType == 0)
+                if (usageReader.WireType == 0)
                 {
-                    switch (field.FieldNumber)
+                    switch (usageReader.FieldNumber)
                     {
-                        case 2: inputTokens = (long)field.Varint; break;
-                        case 3: aggregateOutputTokens = (long)field.Varint; break;
-                        case 4: cacheWriteTokens = (long)field.Varint; break;
-                        case 5: cacheReadTokens = (long)field.Varint; break;
-                        case 9: thinkingOutputTokens = (long)field.Varint; break;
-                        case 10: responseOutputTokens = (long)field.Varint; break;
+                        case 2: inputTokens = (long)usageReader.Varint; break;
+                        case 3: aggregateOutputTokens = (long)usageReader.Varint; break;
+                        case 4: cacheWriteTokens = (long)usageReader.Varint; break;
+                        case 5: cacheReadTokens = (long)usageReader.Varint; break;
+                        case 9: thinkingOutputTokens = (long)usageReader.Varint; break;
+                        case 10: responseOutputTokens = (long)usageReader.Varint; break;
                     }
                 }
-                else if (field.FieldNumber == 11 && field.WireType == 2 && !field.Bytes.IsEmpty)
+                else if (usageReader.FieldNumber == 11 && usageReader.WireType == 2 && !usageReader.Bytes.IsEmpty)
                 {
-                    responseId = Encoding.UTF8.GetString(field.Bytes.Span);
+                    responseId = Encoding.UTF8.GetString(usageReader.Bytes);
                 }
             }
 
@@ -203,31 +244,19 @@ public static class AntigravityProtobufReader
         }
     }
 
-    public static DateTimeOffset? ParseStepTimestamp(ReadOnlyMemory<byte> stepMetadataBlob)
+    public static DateTimeOffset? ParseStepTimestamp(ReadOnlySpan<byte> stepMetadataBlob)
     {
         if (stepMetadataBlob.IsEmpty) return null;
         try
         {
-            var fields = DecodeFields(stepMetadataBlob);
-            foreach (var field in fields)
+            var reader = new ProtobufSpanReader(stepMetadataBlob);
+            while (reader.ReadNext())
             {
-                if (field.FieldNumber == 1 && field.WireType == 2)
+                if (reader.WireType == 2 && (reader.FieldNumber == 1 || reader.FieldNumber == 6 ||
+                    reader.FieldNumber == 7 || reader.FieldNumber == 8 || reader.FieldNumber == 22 || reader.FieldNumber == 32))
                 {
-                    var ts = DecodeTimestamp(field.Bytes);
+                    var ts = DecodeTimestamp(reader.Bytes);
                     if (ts.HasValue) return ts;
-                }
-            }
-            // Alternate timestamp fields
-            int[] alternateFieldNumbers = [6, 7, 8, 22, 32];
-            foreach (var fNum in alternateFieldNumbers)
-            {
-                foreach (var field in fields)
-                {
-                    if (field.FieldNumber == fNum && field.WireType == 2)
-                    {
-                        var ts = DecodeTimestamp(field.Bytes);
-                        if (ts.HasValue) return ts;
-                    }
                 }
             }
         }

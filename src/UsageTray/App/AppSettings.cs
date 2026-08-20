@@ -16,6 +16,7 @@ public sealed class AppSettings
     public int? MainWindowHeight { get; set; }
     public int? SettingsWindowWidth { get; set; }
     public int? SettingsWindowHeight { get; set; }
+    public DateTimeOffset? LastFullScanUtc { get; set; }
 
     public void Normalize()
     {

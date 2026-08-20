@@ -33,6 +33,11 @@ public sealed class AntigravitySqliteHistoryParser
 
             using var connection = new SqliteConnection(connectionString);
             connection.Open();
+            using (var pragmaCmd = connection.CreateCommand())
+            {
+                pragmaCmd.CommandText = "PRAGMA cache_size=-2000;";
+                pragmaCmd.ExecuteNonQuery();
+            }
 
             // 1. Read step timestamps
             var stepTimes = new Dictionary<int, DateTimeOffset>();

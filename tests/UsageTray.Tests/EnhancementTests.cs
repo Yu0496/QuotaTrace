@@ -101,5 +101,34 @@ public sealed class EnhancementTests
         Assert.Equal(16, icon16.Width);
         Assert.Equal(16, icon16.Height);
     }
-}
 
+    [Fact]
+    public void MemoryOptimizerTrimMemoryExecutesWithoutExceptions()
+    {
+        // 验证 MemoryOptimizer 执行垃圾回收与修剪时安全无异常
+        MemoryOptimizer.TrimMemory();
+    }
+
+    [Fact]
+    public void ProtobufSpanReaderCorrectlyDecodesFields()
+    {
+        // 编码简单的 protobuf 结构：field 1 (varint = 150), field 2 (len-delimited = "hello")
+        // field 1: tag = (1 << 3) | 0 = 8, varint 150 = 0x96, 0x01
+        // field 2: tag = (2 << 3) | 2 = 18, len = 5, bytes = "hello"
+        byte[] data = [0x08, 0x96, 0x01, 0x12, 0x05, (byte)'h', (byte)'e', (byte)'l', (byte)'l', (byte)'o'];
+
+        var reader = new ProtobufSpanReader(data);
+
+        Assert.True(reader.ReadNext());
+        Assert.Equal(1, reader.FieldNumber);
+        Assert.Equal(0, reader.WireType);
+        Assert.Equal(150UL, reader.Varint);
+
+        Assert.True(reader.ReadNext());
+        Assert.Equal(2, reader.FieldNumber);
+        Assert.Equal(2, reader.WireType);
+        Assert.Equal("hello", System.Text.Encoding.UTF8.GetString(reader.Bytes));
+
+        Assert.False(reader.ReadNext());
+    }
+}

@@ -56,12 +56,21 @@ public sealed class RefreshCoordinator : IDisposable
                     warnings.Add($"{provider.Kind.ToStorageString()} 刷新失败：{exception.Message}");
                 }
             }
+            if (forceFullScan)
+            {
+                _settings.LastFullScanUtc = DateTimeOffset.UtcNow;
+                _settingsStore.Save(_settings);
+            }
             CurrentSnapshot = _aggregator.BuildSnapshot(DateRange.Today());
             if (warnings.Count > 0) CurrentSnapshot = CopyWithWarnings(CurrentSnapshot, warnings);
             SnapshotChanged?.Invoke(this, CurrentSnapshot);
             return CurrentSnapshot;
         }
-        finally { _refreshLock.Release(); }
+        finally
+        {
+            _refreshLock.Release();
+            MemoryOptimizer.TrimMemory();
+        }
     }
 
     public async Task<PricingUpdateResult> UpdatePricingAsync(CancellationToken cancellationToken = default)

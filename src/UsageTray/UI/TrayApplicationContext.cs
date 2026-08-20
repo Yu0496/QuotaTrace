@@ -108,7 +108,10 @@ public sealed class TrayApplicationContext : ApplicationContext
         _refreshTimer = new System.Threading.Timer(async _ => await RefreshAsync(false), null,
             TimeSpan.FromSeconds(settings.RefreshSeconds), TimeSpan.FromSeconds(settings.RefreshSeconds));
         ApplySnapshot(_lastSnapshot);
-        _ = RefreshAsync(true);
+
+        var now = DateTimeOffset.UtcNow;
+        var isWeeklyFullScanDue = !settings.LastFullScanUtc.HasValue || (now - settings.LastFullScanUtc.Value).TotalDays >= 7;
+        _ = RefreshAsync(isWeeklyFullScanDue);
     }
 
     private async Task RefreshAsync(bool force)

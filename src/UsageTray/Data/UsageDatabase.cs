@@ -23,7 +23,7 @@ public sealed class UsageDatabase : IDisposable
         }.ToString());
         connection.Open();
         using var command = connection.CreateCommand();
-        command.CommandText = "PRAGMA busy_timeout=3000; PRAGMA foreign_keys=ON;";
+        command.CommandText = "PRAGMA busy_timeout=3000; PRAGMA foreign_keys=ON; PRAGMA cache_size=-2000;";
         command.ExecuteNonQuery();
         return connection;
     }
