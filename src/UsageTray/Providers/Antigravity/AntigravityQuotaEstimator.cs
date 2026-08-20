@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UsageTray.Core;
@@ -103,35 +103,76 @@ public sealed class AntigravityQuotaEstimator
             .OrderBy(g => g.Timestamp)
             .ToList();
 
-        // Group into Epochs
-        var epochs = BuildEpochs(matchingSnapshots, poolGenerations);
+        // Calculate Window-based cycle start & reset
+        DateTimeOffset cycleStart;
+        DateTimeOffset? resetAt = latestSnapshot.ResetAt;
 
-        // Find current epoch
-        var currentEpoch = epochs.LastOrDefault();
-        var validEpochs = epochs.Where(e => e.ConsumedFraction >= 0.05 && e.FullQuotaEstimateUsd.HasValue).ToList();
-
-        decimal? rollingMedian = null;
-        decimal? observedMin = null;
-        decimal? observedMax = null;
-
-        if (validEpochs.Count > 0)
+        if (windowKind == "weekly")
         {
-            var estimates = validEpochs.Select(e => e.FullQuotaEstimateUsd!.Value).OrderBy(v => v).ToList();
-            observedMin = estimates.First();
-            observedMax = estimates.Last();
-            rollingMedian = estimates.Count % 2 == 1
-                ? estimates[estimates.Count / 2]
-                : (estimates[estimates.Count / 2 - 1] + estimates[estimates.Count / 2]) / 2m;
+            cycleStart = resetAt.HasValue ? resetAt.Value.AddDays(-7) : latestSnapshot.CapturedAt.AddDays(-7);
+            if (cycleStart > DateTimeOffset.UtcNow) cycleStart = latestSnapshot.CapturedAt.AddDays(-7);
+        }
+        else
+        {
+            cycleStart = resetAt.HasValue ? resetAt.Value.AddHours(-5) : latestSnapshot.CapturedAt.AddHours(-5);
+            if (cycleStart > DateTimeOffset.UtcNow) cycleStart = latestSnapshot.CapturedAt.AddHours(-5);
         }
 
-        double? consumedFraction = currentEpoch?.ConsumedFraction;
-        decimal? observedCost = currentEpoch?.ObservedCostUsd;
-        decimal? currentEstimate = currentEpoch?.FullQuotaEstimateUsd;
+        var cycleGens = poolGenerations
+            .Where(g => g.Timestamp >= cycleStart && (!resetAt.HasValue || g.Timestamp <= resetAt.Value))
+            .ToList();
+
+        decimal observedCost = 0;
+        foreach (var gen in cycleGens)
+        {
+            var rule = _pricingService.Rules is not null
+                ? PricingMatcher.Find(_pricingService.Rules, ProviderKind.Antigravity, gen.Model)
+                : null;
+            var isLong = rule?.LongContextPrice is not null && gen.TotalInputTokens > rule.LongContextThresholdTokens;
+
+            var bucket = new UsageBucket(
+                ProviderKind.Antigravity,
+                DateOnly.FromDateTime(gen.Timestamp.ToLocalTime().DateTime),
+                gen.ProjectKey,
+                gen.Model,
+                gen.TotalInputTokens,
+                gen.CacheReadTokens,
+                gen.OutputTokens,
+                1,
+                gen.Quality,
+                gen.SourceDbPath,
+                gen.ConversationId,
+                gen.CacheWriteTokens,
+                CostQuality.ExactTokenSplit,
+                null,
+                isLong ? 1 : 0,
+                0,
+                isLong ? gen.TotalInputTokens : 0,
+                isLong ? gen.CacheReadTokens : 0,
+                isLong ? gen.CacheWriteTokens : 0,
+                isLong ? gen.OutputTokens : 0,
+                true
+            );
+            var calc = _pricingService.Calculate(bucket);
+            if (calc.CostUsd.HasValue)
+            {
+                observedCost += calc.CostUsd.Value;
+            }
+        }
+
+        var remaining = latestSnapshot.RemainingFraction;
+        var consumedFraction = remaining.HasValue ? Math.Clamp(Math.Round(1.0 - remaining.Value, 6), 0.0, 1.0) : (double?)null;
+
+        decimal? currentEstimate = null;
+        if (consumedFraction.HasValue && consumedFraction.Value >= 0.005 && observedCost > 0)
+        {
+            currentEstimate = Math.Round(observedCost / (decimal)consumedFraction.Value, 2, MidpointRounding.AwayFromZero);
+        }
 
         var confidence = QuotaEstimateConfidence.Low;
         if (consumedFraction.HasValue)
         {
-            if (consumedFraction.Value >= 0.30 && (currentEpoch?.GenerationCount ?? 0) >= 5)
+            if (consumedFraction.Value >= 0.30 && cycleGens.Count >= 5)
             {
                 confidence = QuotaEstimateConfidence.High;
             }
@@ -141,10 +182,7 @@ public sealed class AntigravityQuotaEstimator
             }
         }
 
-        // Calculation details for diagnostics / UI
-        var details = currentEpoch is not null
-            ? $"{currentEpoch.StartRemaining:P1} -> {currentEpoch.EndRemaining:P1} (消耗 {currentEpoch.ConsumedFraction:P1})，同期 API 等值 ${currentEpoch.ObservedCostUsd:F2} ({currentEpoch.GenerationCount} 次请求)"
-            : null;
+        var details = $"{remaining:P0} 剩余 (消耗 {consumedFraction:P1})，本轮 API 等值 ${observedCost:F2} ({cycleGens.Count} 次请求)";
 
         return new AntigravityQuotaEstimate(
             latestSnapshot.ModelOrPoolId,
@@ -154,15 +192,16 @@ public sealed class AntigravityQuotaEstimator
             latestSnapshot.ResetAt,
             observedCost,
             consumedFraction,
-            currentEstimate ?? rollingMedian,
+            currentEstimate,
             confidence,
-            epochs.Count,
-            rollingMedian,
-            observedMin,
-            observedMax,
+            cycleGens.Count,
+            currentEstimate,
+            null,
+            null,
             details
         );
     }
+
 
     private List<QuotaEpoch> BuildEpochs(
         IReadOnlyList<QuotaSnapshot> snapshots,
@@ -229,6 +268,11 @@ public sealed class AntigravityQuotaEstimator
         decimal cost = 0;
         foreach (var gen in epochGens)
         {
+            var rule = _pricingService.Rules is not null
+                ? PricingMatcher.Find(_pricingService.Rules, ProviderKind.Antigravity, gen.Model)
+                : null;
+            var isLong = rule?.LongContextPrice is not null && gen.TotalInputTokens > rule.LongContextThresholdTokens;
+
             var bucket = new UsageBucket(
                 ProviderKind.Antigravity,
                 DateOnly.FromDateTime(gen.Timestamp.ToLocalTime().DateTime),
@@ -242,7 +286,15 @@ public sealed class AntigravityQuotaEstimator
                 gen.SourceDbPath,
                 gen.ConversationId,
                 gen.CacheWriteTokens,
-                CostQuality.ExactTokenSplit
+                CostQuality.ExactTokenSplit,
+                null,
+                isLong ? 1 : 0,
+                0,
+                isLong ? gen.TotalInputTokens : 0,
+                isLong ? gen.CacheReadTokens : 0,
+                isLong ? gen.CacheWriteTokens : 0,
+                isLong ? gen.OutputTokens : 0,
+                true
             );
             var calc = _pricingService.Calculate(bucket);
             if (calc.CostUsd.HasValue)

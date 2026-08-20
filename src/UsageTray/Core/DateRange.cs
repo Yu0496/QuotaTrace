@@ -35,4 +35,11 @@ public sealed record DateRange
         var today = DateOnly.FromDateTime((clock ?? TimeProvider.System).GetLocalNow().Date);
         return new DateRange(new DateOnly(today.Year, today.Month, 1), today);
     }
+
+    public static DateRange AllTime(TimeProvider? clock = null)
+    {
+        var today = DateOnly.FromDateTime((clock ?? TimeProvider.System).GetLocalNow().Date);
+        return new DateRange(new DateOnly(2020, 1, 1), today);
+    }
 }
+

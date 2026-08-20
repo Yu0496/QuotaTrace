@@ -2,6 +2,7 @@ using System.Text.Json;
 using UsageTray.Core;
 using UsageTray.Pricing;
 using UsageTray.Providers.Antigravity;
+using UsageTray.Services;
 
 namespace UsageTray.Tests;
 
@@ -62,4 +63,43 @@ public sealed class EnhancementTests
         Assert.Equal(0.2m, gpt.CostUsd);
         Assert.Equal(0.3m, gemini.CostUsd);
     }
+
+    [Fact]
+    public void QuotaSummaryControlInstantiatesAndRendersSnapshotWithoutExceptions()
+    {
+        using var control = new UsageTray.UI.Controls.QuotaSummaryControl();
+        control.Size = new System.Drawing.Size(500, 400);
+
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = new DashboardSnapshot
+        {
+            Range = DateRange.LastDays(7),
+            Quotas =
+            [
+                new QuotaView(new QuotaSnapshot(ProviderKind.Antigravity, now, "gemini-5h", "Gemini (5h)", 0.8, now.AddHours(4), "5h", "local", "Pro"), false),
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Codex weekly", 0.95, now.AddDays(7), "weekly", "rate_limits", "Plus"), false)
+            ]
+        };
+
+        control.SetSnapshot(snapshot);
+        control.Size = new System.Drawing.Size(600, 500);
+
+        var height = control.MeasureHeight(600);
+        Assert.True(height > 0);
+    }
+
+    [Fact]
+    public void AppIconCanBeLoadedFromEmbeddedResource()
+    {
+        using var icon = UsageTray.UI.AppIcon.Create();
+        Assert.NotNull(icon);
+        Assert.True(icon.Width > 0);
+        Assert.True(icon.Height > 0);
+
+        using var icon16 = UsageTray.UI.AppIcon.Create(16, 16);
+        Assert.NotNull(icon16);
+        Assert.Equal(16, icon16.Width);
+        Assert.Equal(16, icon16.Height);
+    }
 }
+

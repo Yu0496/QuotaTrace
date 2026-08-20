@@ -14,6 +14,8 @@ public sealed class AppSettings
     public bool StatusLineRecorderEnabled { get; set; }
     public int? MainWindowWidth { get; set; }
     public int? MainWindowHeight { get; set; }
+    public int? SettingsWindowWidth { get; set; }
+    public int? SettingsWindowHeight { get; set; }
 
     public void Normalize()
     {
@@ -26,7 +28,10 @@ public sealed class AppSettings
             .ToList();
         MainWindowWidth = NormalizeWindowDimension(MainWindowWidth, 740, 4000);
         MainWindowHeight = NormalizeWindowDimension(MainWindowHeight, 500, 3000);
+        SettingsWindowWidth = NormalizeWindowDimension(SettingsWindowWidth, 560, 4000);
+        SettingsWindowHeight = NormalizeWindowDimension(SettingsWindowHeight, 460, 3000);
     }
+
 
     private static int? NormalizeWindowDimension(int? value, int minimum, int maximum) =>
         value.HasValue ? Math.Clamp(value.Value, minimum, maximum) : null;

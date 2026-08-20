@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UsageTray.Core;
 using UsageTray.Pricing;
 using UsageTray.Providers.Antigravity;
+using UsageTray.Services;
 using Xunit;
 
 namespace UsageTray.Tests;
@@ -10,6 +11,12 @@ namespace UsageTray.Tests;
 public sealed class AntigravityQuotaEstimatorTests
 {
     private readonly PricingService _pricing = new("pricing.json", PricingService.BuiltInDefaults());
+    private readonly Xunit.Abstractions.ITestOutputHelper _output;
+
+    public AntigravityQuotaEstimatorTests(Xunit.Abstractions.ITestOutputHelper output)
+    {
+        _output = output;
+    }
 
     [Fact]
     public void ModelPoolCategorizationWorks()
@@ -55,5 +62,33 @@ public sealed class AntigravityQuotaEstimatorTests
         // $2.00 / 0.20 = $10.00
         Assert.Equal(10.00m, Math.Round(weekly.EstimatedFullQuotaUsd.Value, 2));
         Assert.Equal(QuotaEstimateConfidence.Medium, weekly.Confidence);
+    }
+
+    [Fact]
+    public void CopyWithWarningsPreservesAntigravityEstimatesAndAllFields()
+    {
+        var snapshot = new DashboardSnapshot
+        {
+            Range = DateRange.Today(),
+            AntigravityEstimates =
+            [
+                new AntigravityQuotaEstimate("gemini-weekly", "weekly", "Gemini Models", 0.8, DateTimeOffset.UtcNow.AddDays(5), 20.84m, 0.2, 104.20m, QuotaEstimateConfidence.Medium, 50, 104.20m, null, null, null)
+            ],
+            CodexApiEquivalentUsd = 12.34m,
+            AntigravityApiEquivalentUsd = 20.84m,
+            Warnings = ["Old Warning"]
+        };
+
+        var copied = snapshot with
+        {
+            Warnings = snapshot.Warnings.Concat(["New Warning"]).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+        };
+
+        Assert.Single(copied.AntigravityEstimates);
+        Assert.Equal(20.84m, copied.AntigravityEstimates[0].ObservedCostUsd);
+        Assert.Equal(104.20m, copied.AntigravityEstimates[0].EstimatedFullQuotaUsd);
+        Assert.Equal(12.34m, copied.CodexApiEquivalentUsd);
+        Assert.Equal(20.84m, copied.AntigravityApiEquivalentUsd);
+        Assert.Equal(2, copied.Warnings.Count);
     }
 }

@@ -40,11 +40,32 @@ public sealed class UsageAggregator
                 .Select(q => q.Snapshot)
                 .OrderByDescending(q => q.CapturedAt)
                 .FirstOrDefault();
-            var agWeekly = quotas
+
+            var agWeeklySnapshots = quotas
                 .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity && IsWeekly(q.Snapshot))
                 .Select(q => q.Snapshot)
-                .OrderByDescending(q => q.CapturedAt)
-                .FirstOrDefault();
+                .ToList();
+
+            var geminiWeekly = agWeeklySnapshots.FirstOrDefault(s => AntigravityQuotaEstimator.SnapshotMatchesPool(s, "gemini"));
+            var threePWeekly = agWeeklySnapshots.FirstOrDefault(s => AntigravityQuotaEstimator.SnapshotMatchesPool(s, "3p"));
+
+            DateTimeOffset? geminiStart = null;
+            DateTimeOffset? geminiEnd = null;
+            if (geminiWeekly?.ResetAt.HasValue == true)
+            {
+                geminiEnd = geminiWeekly.ResetAt.Value;
+                geminiStart = geminiEnd.Value.AddDays(-7);
+                if (geminiStart > DateTimeOffset.UtcNow) geminiStart = geminiWeekly.CapturedAt.AddDays(-7);
+            }
+
+            DateTimeOffset? threePStart = null;
+            DateTimeOffset? threePEnd = null;
+            if (threePWeekly?.ResetAt.HasValue == true)
+            {
+                threePEnd = threePWeekly.ResetAt.Value;
+                threePStart = threePEnd.Value.AddDays(-7);
+                if (threePStart > DateTimeOffset.UtcNow) threePStart = threePWeekly.CapturedAt.AddDays(-7);
+            }
 
             var cycleBuckets = new List<UsageBucket>();
 
@@ -69,16 +90,22 @@ public sealed class UsageAggregator
             }
             else if (provider == ProviderKind.Antigravity)
             {
-                if (agWeekly?.ResetAt.HasValue == true)
+                if (geminiStart.HasValue || threePStart.HasValue)
                 {
-                    var resetAt = agWeekly.ResetAt.Value;
-                    var cycleStart = resetAt.AddDays(-7);
-                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = agWeekly.CapturedAt.AddDays(-7);
-                    cycleBuckets.AddRange(_repository.GetAntigravityUsageInUtcWindow(cycleStart, resetAt));
-                    windowStartUtc = cycleStart;
-                    windowEndUtc = resetAt;
-                    rangeDisplayOverride = $"Antigravity 本次周额度（{cycleStart.ToLocalTime():yyyy-MM-dd HH:mm} 至 {resetAt.ToLocalTime():yyyy-MM-dd HH:mm}）";
-                    range = new DateRange(DateOnly.FromDateTime(cycleStart.ToLocalTime().DateTime), DateOnly.FromDateTime(DateTime.Now));
+                    cycleBuckets.AddRange(_repository.GetAntigravityUsageInPoolWindows(geminiStart, geminiEnd, threePStart, threePEnd, _pricing.Rules));
+                    var earliest = geminiStart.HasValue && threePStart.HasValue ? (geminiStart < threePStart ? geminiStart : threePStart) : (geminiStart ?? threePStart);
+                    var latest = geminiEnd.HasValue && threePEnd.HasValue ? (geminiEnd > threePEnd ? geminiEnd : threePEnd) : (geminiEnd ?? threePEnd);
+                    windowStartUtc = earliest;
+                    windowEndUtc = latest;
+                    if (geminiStart.HasValue && threePStart.HasValue && geminiStart != threePStart)
+                    {
+                        rangeDisplayOverride = $"Antigravity 本次周额度（Gemini: {geminiStart.Value.ToLocalTime():MM-dd HH:mm}起 | Claude: {threePStart.Value.ToLocalTime():MM-dd HH:mm}起）";
+                    }
+                    else
+                    {
+                        rangeDisplayOverride = $"Antigravity 本次周额度（{earliest!.Value.ToLocalTime():yyyy-MM-dd HH:mm} 至 {latest!.Value.ToLocalTime():yyyy-MM-dd HH:mm}）";
+                    }
+                    range = new DateRange(DateOnly.FromDateTime(earliest!.Value.ToLocalTime().DateTime), DateOnly.FromDateTime(DateTime.Now));
                 }
                 else
                 {
@@ -105,14 +132,13 @@ public sealed class UsageAggregator
                     cycleBuckets.AddRange(_repository.GetUsage(range, ProviderKind.Codex));
                 }
 
-                if (agWeekly?.ResetAt.HasValue == true)
+                if (geminiStart.HasValue || threePStart.HasValue)
                 {
-                    var resetAt = agWeekly.ResetAt.Value;
-                    var cycleStart = resetAt.AddDays(-7);
-                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = agWeekly.CapturedAt.AddDays(-7);
-                    cycleBuckets.AddRange(_repository.GetAntigravityUsageInUtcWindow(cycleStart, resetAt));
-                    earliestStart = earliestStart.HasValue ? (cycleStart < earliestStart.Value ? cycleStart : earliestStart.Value) : cycleStart;
-                    latestEnd = latestEnd.HasValue ? (resetAt > latestEnd.Value ? resetAt : latestEnd.Value) : resetAt;
+                    cycleBuckets.AddRange(_repository.GetAntigravityUsageInPoolWindows(geminiStart, geminiEnd, threePStart, threePEnd, _pricing.Rules));
+                    var agEarliest = geminiStart.HasValue && threePStart.HasValue ? (geminiStart < threePStart ? geminiStart : threePStart) : (geminiStart ?? threePStart);
+                    var agLatest = geminiEnd.HasValue && threePEnd.HasValue ? (geminiEnd > threePEnd ? geminiEnd : threePEnd) : (geminiEnd ?? threePEnd);
+                    earliestStart = earliestStart.HasValue ? (agEarliest < earliestStart.Value ? agEarliest : earliestStart.Value) : agEarliest;
+                    latestEnd = latestEnd.HasValue ? (agLatest > latestEnd.Value ? agLatest : latestEnd.Value) : agLatest;
                 }
                 else
                 {
@@ -153,8 +179,19 @@ public sealed class UsageAggregator
         var coverage = provider.HasValue ? _repository.GetCoverageStart(provider.Value) :
             new[] { _repository.GetCoverageStart(ProviderKind.Codex), _repository.GetCoverageStart(ProviderKind.Antigravity) }
                 .Where(value => value.HasValue).Select(value => value!.Value).OrderBy(value => value).FirstOrDefault();
+        var codexBuckets = buckets.Where(b => b.Provider == ProviderKind.Codex).ToList();
+        var codexCost = codexBuckets.Count > 0 ? _pricing.CalculateAggregate(codexBuckets).PricedCostUsd : 0m;
+
+        var agBuckets = buckets.Where(b => b.Provider == ProviderKind.Antigravity).ToList();
+        var agCost = agBuckets.Count > 0 ? _pricing.CalculateAggregate(agBuckets).PricedCostUsd : 0m;
+        var agGeminiBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) == "gemini").ToList();
+        var agGeminiCost = agGeminiBuckets.Count > 0 ? _pricing.CalculateAggregate(agGeminiBuckets).PricedCostUsd : 0m;
+        var agClaudeBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) != "gemini").ToList();
+        var agClaudeCost = agClaudeBuckets.Count > 0 ? _pricing.CalculateAggregate(agClaudeBuckets).PricedCostUsd : 0m;
+
         var codexWeeklyCycle = BuildCodexWeeklyCycle(quotas, warnings);
-        var antigravityEstimates = BuildAntigravityEstimates();
+        var antigravityEstimates = BuildAntigravityEstimates(quotas);
+
 
         return new DashboardSnapshot
         {
@@ -165,6 +202,10 @@ public sealed class UsageAggregator
             WindowStartUtc = windowStartUtc,
             WindowEndUtc = windowEndUtc,
             ApiEquivalentUsd = aggregate.PricedCostUsd,
+            CodexApiEquivalentUsd = codexCost,
+            AntigravityApiEquivalentUsd = agCost,
+            AntigravityGeminiApiEquivalentUsd = agGeminiCost,
+            AntigravityClaudeApiEquivalentUsd = agClaudeCost,
             InputTokens = buckets.Sum(bucket => bucket.InputTokens),
             CachedTokens = buckets.Sum(bucket => bucket.CachedInputTokens),
             CacheCreationTokens = buckets.Sum(bucket => bucket.CacheWriteInputTokens),
@@ -183,11 +224,19 @@ public sealed class UsageAggregator
         };
     }
 
-    private IReadOnlyList<AntigravityQuotaEstimate> BuildAntigravityEstimates()
+    private IReadOnlyList<AntigravityQuotaEstimate> BuildAntigravityEstimates(IReadOnlyList<QuotaView> quotas)
     {
         try
         {
-            var agSnapshots = _repository.GetQuotaSnapshots(ProviderKind.Antigravity);
+            var agSnapshots = _repository.GetQuotaSnapshots(ProviderKind.Antigravity).ToList();
+            var latestFromQuotas = quotas.Where(q => q.Snapshot.Provider == ProviderKind.Antigravity).Select(q => q.Snapshot).ToList();
+            foreach (var q in latestFromQuotas)
+            {
+                if (!agSnapshots.Any(s => s.ModelOrPoolId == q.ModelOrPoolId && s.CapturedAt == q.CapturedAt))
+                {
+                    agSnapshots.Add(q);
+                }
+            }
             var agGenerations = _repository.GetAntigravityGenerations();
             return _antigravityQuotaEstimator.EstimateAll(agSnapshots, agGenerations);
         }
@@ -196,6 +245,7 @@ public sealed class UsageAggregator
             return [];
         }
     }
+
 
     private CodexCycleUsageView? BuildCodexWeeklyCycle(IReadOnlyList<QuotaView> quotas, HashSet<string> warnings)
     {

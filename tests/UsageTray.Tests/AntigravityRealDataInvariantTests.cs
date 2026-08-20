@@ -41,11 +41,14 @@ public sealed class AntigravityRealDataInvariantTests
         long totalResponse = 0;
         long totalAggregateOutput = 0;
 
+        var allModels = new HashSet<(string Model, string? DisplayName)>();
+
         foreach (var file in files)
         {
             var parseResult = parser.ParseFile(file, resolver);
             foreach (var gen in parseResult.Generations)
             {
+                allModels.Add((gen.Model, gen.DisplayName));
                 totalGenerations++;
                 totalUncachedInput += gen.InputTokens;
                 totalCacheRead += gen.CacheReadTokens;
@@ -62,10 +65,76 @@ public sealed class AntigravityRealDataInvariantTests
             }
         }
 
+        var pricingService = new UsageTray.Pricing.PricingService("dummy", UsageTray.Pricing.PricingService.BuiltInDefaults());
+        long unpricedGenerations = 0;
+        decimal totalEstimatedCostUsd = 0;
+
+        foreach (var file in files)
+        {
+            var parseResult = parser.ParseFile(file, resolver);
+            foreach (var bucket in parseResult.Buckets)
+            {
+                var calc = pricingService.Calculate(bucket);
+                if (calc.CostUsd.HasValue)
+                {
+                    totalEstimatedCostUsd += calc.CostUsd.Value;
+                }
+                else if (bucket.DisplayedTotalTokens > 0)
+                {
+                    unpricedGenerations += bucket.RequestCount;
+                    _output.WriteLine($"Unpriced bucket in {file}: Model='{bucket.ModelId}', Requests={bucket.RequestCount}, Tokens={bucket.DisplayedTotalTokens}");
+                }
+
+            }
+        }
+
         _output.WriteLine($"Scanned {files.Count} databases, {totalGenerations} generations.");
+        foreach (var m in allModels)
+        {
+            var testBucket = new UsageBucket(ProviderKind.Antigravity, DateOnly.FromDateTime(DateTime.Today), null, m.Model, 1000, 500, 500, 1, DataQuality.Exact, "fixture");
+            var rule = UsageTray.Pricing.PricingMatcher.Find(pricingService.Rules, ProviderKind.Antigravity, m.Model);
+            _output.WriteLine($"Model: '{m.Model}' (DisplayName: '{m.DisplayName}') -> Matched Pattern: '{rule?.ModelPattern}', RuleFound={rule != null}");
+        }
         _output.WriteLine($"Token Totals: UncachedInput={totalUncachedInput:N0}, CacheRead={totalCacheRead:N0}, CacheWrite={totalCacheWrite:N0}, Thinking={totalThinking:N0}, Response={totalResponse:N0}, AggregateOutput={totalAggregateOutput:N0}");
+        _output.WriteLine($"Total Estimated Cost across real data: ${totalEstimatedCostUsd:N2}, Unpriced Generations: {unpricedGenerations}");
         _output.WriteLine($"Invariant Check: aggregate == thinking + response. Errors: {totalInvariantErrors}");
 
         Assert.Equal(0, totalInvariantErrors);
+        Assert.Equal(0, unpricedGenerations);
+    }
+
+    [Fact]
+    public async Task LiveLanguageServerQuotaDiscoveryReturnsValidRealSnapshots()
+    {
+        var procDiscovery = new AntigravityProcessDiscovery();
+        var procs = procDiscovery.Discover();
+        _output.WriteLine($"Discovered {procs.Count} processes.");
+        foreach (var p in procs)
+        {
+            _output.WriteLine($"Proc: {p.Name} (PID={p.ProcessId}), CSRF={p.CsrfToken ?? "none"}");
+        }
+
+        var portDiscovery = new AntigravityPortDiscovery();
+        var ports = portDiscovery.DiscoverCandidatePorts(procs);
+        _output.WriteLine($"Candidate Ports ({ports.Count}): {string.Join(", ", ports.Take(10))}");
+
+        var csrfToken = procs.Select(p => p.CsrfToken).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t));
+        using var api = new AntigravityLocalApi();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var quota = await api.TryGetQuotaAsync(ports, csrfToken, cts.Token);
+
+        if (procs.Any(p => p.Name.Contains("language", StringComparison.OrdinalIgnoreCase)))
+        {
+            Assert.NotNull(quota);
+            Assert.NotEmpty(quota.Snapshots);
+            _output.WriteLine($"Successfully fetched live quota from {quota.Endpoint} with {quota.Snapshots.Count} snapshots:");
+            foreach (var snap in quota.Snapshots)
+            {
+                _output.WriteLine($"  - [{snap.WindowKind}] {snap.DisplayLabel} (ID={snap.ModelOrPoolId}): Remaining={snap.RemainingFraction:P1}, Reset={snap.ResetAt:yyyy-MM-dd HH:mm:ss}");
+            }
+        }
     }
 }
+
+
+

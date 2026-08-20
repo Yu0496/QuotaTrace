@@ -32,9 +32,18 @@ public sealed class PricingUpdateService
 
     private static readonly string[] GeminiModels =
     [
-        "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash",
-        "gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-2.5-flash"
+        "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.6-flash-tiered", "gemini-3.5-flash-lite", "gemini-3.5-flash",
+        "gemini-3-flash-a", "gemini-default", "gemini-3.1-flash-lite", "gemini-3.1-pro", "gemini-pro-default", "gemini-pro",
+        "gemini-2.5-pro", "gemini-2.5-flash"
     ];
+
+    private static string CanonicalGeminiModel(string model) => model.ToLowerInvariant() switch
+    {
+        "gemini-3-flash-a" or "gemini-default" => "gemini-3.5-flash",
+        "gemini-pro-default" or "gemini-pro" => "gemini-3.1-pro",
+        "gemini-3.6-flash-tiered" => "gemini-3.6-flash",
+        _ => model
+    };
 
     private readonly HttpClient _httpClient;
 
@@ -95,7 +104,7 @@ public sealed class PricingUpdateService
             {
                 foreach (var pair in geminiIndexes)
                 {
-                    var model = pair.rule.ModelPattern.TrimEnd('*');
+                    var model = CanonicalGeminiModel(pair.rule.ModelPattern.TrimEnd('*'));
                     if (!TryParseGemini(content, model, out var prices)) continue;
                     var old = rules[pair.index];
                     rules[pair.index] = old with

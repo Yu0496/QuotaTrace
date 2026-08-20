@@ -105,10 +105,12 @@ internal static class QuotaDisplayFormatter
         var lines = new List<string>
         {
             $"Antigravity 额度与用量{(string.IsNullOrWhiteSpace(plan) ? string.Empty : $"（{plan}）")}",
-            $"状态：{status}",
-            FormatWindow("5 小时窗口", snapshots.Where(IsFiveHour).ToList()),
-            FormatWindow("周窗口", snapshots.Where(IsWeekly).ToList())
+            $"状态：{status}"
         };
+        var ag5h = snapshots.Where(IsFiveHour).ToList();
+        if (ag5h.Count > 0) lines.Add(FormatWindow("5 小时窗口", ag5h));
+        var agWeekly = snapshots.Where(IsWeekly).ToList();
+        if (agWeekly.Count > 0) lines.Add(FormatWindow("周窗口", agWeekly));
         var other = snapshots.Where(item => !IsFiveHour(item) && !IsWeekly(item)).ToList();
         if (other.Count > 0) lines.Add(FormatWindow("其他窗口", other));
         if (snapshots.Count == 0)
@@ -168,13 +170,16 @@ internal static class QuotaDisplayFormatter
 
         if (codexQuotas.Count > 0)
         {
-            lines.Add(FormatWindow("5 小时窗口", codexQuotas.Where(IsFiveHour).ToList()));
-            lines.Add(FormatWindow("周窗口", codexQuotas.Where(IsWeekly).ToList()));
+            var codex5h = codexQuotas.Where(IsFiveHour).ToList();
+            if (codex5h.Count > 0) lines.Add(FormatWindow("5 小时窗口", codex5h));
+            var codexWeekly = codexQuotas.Where(IsWeekly).ToList();
+            if (codexWeekly.Count > 0) lines.Add(FormatWindow("周窗口", codexWeekly));
+            var others = codexQuotas.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
+            if (others.Count > 0) lines.Add(FormatWindow("其他窗口", others));
         }
         else
         {
-            lines.Add("5 小时窗口：剩余未知；重置时间未知（当前 session 未写入 rate_limits）");
-            lines.Add("周窗口：剩余未知；重置时间未知（当前 session 未写入 rate_limits）");
+            lines.Add("暂无可用 quota 快照（当前 session 未写入 rate_limits）");
         }
 
         if (snapshot.CodexWeeklyCycle is { } cycle)

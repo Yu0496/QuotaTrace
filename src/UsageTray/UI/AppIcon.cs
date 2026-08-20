@@ -1,11 +1,71 @@
 using System.Drawing.Drawing2D;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace UsageTray.UI;
 
 internal static class AppIcon
 {
+    private static readonly byte[]? s_iconBytes = LoadIconBytes();
+
+    private static byte[]? LoadIconBytes()
+    {
+        try
+        {
+            var assembly = typeof(AppIcon).Assembly;
+            using var stream = assembly.GetManifestResourceStream("UsageTray.Resources.app.ico");
+            if (stream != null)
+            {
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                return ms.ToArray();
+            }
+        }
+        catch
+        {
+            // Ignore and use fallback
+        }
+
+        return null;
+    }
+
     public static Icon Create()
+    {
+        if (s_iconBytes is { Length: > 0 })
+        {
+            try
+            {
+                using var ms = new MemoryStream(s_iconBytes);
+                return new Icon(ms);
+            }
+            catch
+            {
+                // Fallback to drawing
+            }
+        }
+
+        return CreateFallback();
+    }
+
+    public static Icon Create(int width, int height)
+    {
+        if (s_iconBytes is { Length: > 0 })
+        {
+            try
+            {
+                using var ms = new MemoryStream(s_iconBytes);
+                return new Icon(ms, width, height);
+            }
+            catch
+            {
+                // Fallback to drawing
+            }
+        }
+
+        return CreateFallback();
+    }
+
+    private static Icon CreateFallback()
     {
         using var bitmap = new Bitmap(32, 32, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         using (var graphics = Graphics.FromImage(bitmap))

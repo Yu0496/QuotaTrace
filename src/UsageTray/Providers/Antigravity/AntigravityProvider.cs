@@ -5,6 +5,8 @@ namespace UsageTray.Providers.Antigravity;
 
 public sealed class AntigravityProvider : IUsageProvider, IDisposable
 {
+    public const int ParserVersion = 3;
+
     private readonly AntigravityHistoryLocator _historyLocator;
     private readonly AntigravitySqliteHistoryParser _sqliteHistoryParser;
     private readonly AntigravityProjectResolver _projectResolver;
@@ -51,6 +53,14 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
         // 2. Discover & parse conversation databases
         var dbFiles = _historyLocator.DiscoverConversationDatabaseFiles();
         var historyHasTokens = false;
+        var pricingRules = context.Pricing?.Rules;
+
+        var sourcePaths = context.Repository.GetSourcePaths(ProviderKind.Antigravity);
+        var forceRebuild = context.ForceFullScan;
+        if (!forceRebuild)
+        {
+            forceRebuild = sourcePaths.Any(path => context.Repository.GetSourceFile(ProviderKind.Antigravity, path)?.ParserVersion != ParserVersion);
+        }
 
         foreach (var path in dbFiles)
         {
@@ -58,25 +68,37 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
             FileInfo info;
             try { info = new FileInfo(path); if (!info.Exists) continue; } catch { continue; }
             var fullPath = info.FullName;
-            var state = context.ForceFullScan ? null : GetSourceState(context.Repository, fullPath);
-            if (!context.ForceFullScan && state is not null && state.FileSize == info.Length && state.MtimeUtcTicks == info.LastWriteTimeUtc.Ticks)
+            var state = forceRebuild ? null : GetSourceState(context.Repository, fullPath);
+            if (!forceRebuild && state is not null && state.FileSize == info.Length && state.MtimeUtcTicks == info.LastWriteTimeUtc.Ticks && state.ParserVersion == ParserVersion)
             {
                 continue;
             }
 
-            var parsed = _sqliteHistoryParser.ParseFile(fullPath, _projectResolver);
+            var parsed = _sqliteHistoryParser.ParseFile(fullPath, _projectResolver, pricingRules);
             var error = parsed.Warnings.Count == 0 ? null : string.Join(" ", parsed.Warnings);
             var firstGen = parsed.Generations.FirstOrDefault();
             var conversationId = firstGen?.ConversationId ?? Path.GetFileNameWithoutExtension(fullPath);
             var projectKey = firstGen?.ProjectKey;
             var modelId = firstGen?.Model;
 
-            context.Repository.ReplaceAntigravitySource(info, parsed.Generations, parsed.Buckets, conversationId, projectKey, modelId, error);
+            context.Repository.ReplaceAntigravitySource(info, parsed.Generations, parsed.Buckets, conversationId, projectKey, modelId, error, ParserVersion);
             RememberSourceState(fullPath, info, conversationId, projectKey, modelId, error);
 
             usage.AddRange(parsed.Buckets);
             warnings.AddRange(parsed.Warnings);
             if (parsed.Generations.Count > 0) historyHasTokens = true;
+        }
+
+        // Clean up deleted/stale source files
+        var candidateRoots = _historyLocator.GetCandidateAppRoots();
+        if (candidateRoots.Count > 0)
+        {
+            var discovered = dbFiles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var stale in sourcePaths.Where(path => !discovered.Contains(path)).ToList())
+            {
+                context.Repository.DeleteSource(ProviderKind.Antigravity, stale);
+                _sourceStates.Remove(stale);
+            }
         }
 
         if (historyHasTokens || string.Equals(context.Repository.GetFlag("antigravity_history_tokens"), "1", StringComparison.Ordinal))
@@ -131,7 +153,7 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
 
     private void RememberSourceState(string path, FileInfo file, string? sessionId, string? projectKey, string? lastModel, string? error) =>
         _sourceStates[path] = new SourceFileState(ProviderKind.Antigravity, path, file.Length, file.LastWriteTimeUtc.Ticks,
-            file.Length, sessionId, projectKey, lastModel, error, 2);
+            file.Length, sessionId, projectKey, lastModel, error, ParserVersion);
 
     public void Dispose() => _localApi.Dispose();
 }

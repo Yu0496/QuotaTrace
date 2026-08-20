@@ -44,4 +44,21 @@ public sealed class CodexRateLimitTests
         Assert.Contains("Codex weekly 90% 剩余", text, StringComparison.Ordinal);
         Assert.DoesNotContain("当前 session 未写入 rate_limits", text, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ParsesWeeklyOnlyRateLimitsFromRecentSessionLog()
+    {
+        using var workspace = new TempWorkspace();
+        var path = workspace.File("session_weekly_only.jsonl");
+        File.WriteAllText(path,
+            "{\"timestamp\":\"2026-08-20T18:00:00Z\",\"type\":\"event_msg\",\"model\":\"gpt-5\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":2000,\"cached_input_tokens\":500,\"output_tokens\":200}},\"rate_limits\":{\"primary\":{\"used_percent\":15,\"window_minutes\":10080,\"resets_at\":1790600000},\"secondary\":null}}}");
+
+        var result = new CodexJsonlParser().ParseFile(path);
+
+        Assert.Single(result.Quotas);
+        var weekly = result.Quotas[0];
+        Assert.Equal("weekly", weekly.WindowKind);
+        Assert.Equal(0.85, weekly.RemainingFraction);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1790600000), weekly.ResetAt);
+    }
 }

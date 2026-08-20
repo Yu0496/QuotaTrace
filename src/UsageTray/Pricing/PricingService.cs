@@ -24,15 +24,23 @@ public sealed class PricingService
     public PricingDocument Document { get; private set; }
     public IReadOnlyList<PricingRule> Rules => Document.Rules;
 
-    public PricingService(string filePath, PricingDocument document)
+    public PricingService(string filePath, PricingDocument document, PricingDocument? defaultTemplate = null)
     {
         FilePath = filePath;
-        Document = MigrateDocument(document);
+        Document = MigrateDocument(document, defaultTemplate);
     }
 
     public static PricingService LoadOrCreate(string filePath, string? bundledDefaultPath = null)
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(filePath)!);
+        PricingDocument? bundled = null;
+        if (!string.IsNullOrWhiteSpace(bundledDefaultPath) && File.Exists(bundledDefaultPath))
+        {
+            try { bundled = JsonSerializer.Deserialize<PricingDocument>(File.ReadAllText(bundledDefaultPath), JsonOptions); }
+            catch { }
+        }
+        var template = bundled ?? BuiltInDefaults();
+
         if (File.Exists(filePath))
         {
             try
@@ -40,7 +48,7 @@ public sealed class PricingService
                 var document = JsonSerializer.Deserialize<PricingDocument>(File.ReadAllText(filePath), JsonOptions);
                 if (document is not null && document.Rules is not null)
                 {
-                    var service = new PricingService(filePath, document);
+                    var service = new PricingService(filePath, document, template);
                     service.Save();
                     return service;
                 }
@@ -48,13 +56,7 @@ public sealed class PricingService
             catch { }
         }
 
-        PricingDocument? bundled = null;
-        if (!string.IsNullOrWhiteSpace(bundledDefaultPath) && File.Exists(bundledDefaultPath))
-        {
-            try { bundled = JsonSerializer.Deserialize<PricingDocument>(File.ReadAllText(bundledDefaultPath), JsonOptions); }
-            catch { }
-        }
-        var result = new PricingService(filePath, bundled ?? BuiltInDefaults());
+        var result = new PricingService(filePath, template);
         result.Save();
         return result;
     }
@@ -145,13 +147,28 @@ public sealed class PricingService
 
     private static CostQuality CombineQuality(CostQuality left, CostQuality right) => (CostQuality)Math.Max((int)left, (int)right);
 
-    private static PricingDocument MigrateDocument(PricingDocument document)
+    private static PricingDocument MigrateDocument(PricingDocument document, PricingDocument? defaultTemplate = null)
     {
         var rules = document.Rules
             .Where(rule => !(rule.Provider.Equals("Codex", StringComparison.OrdinalIgnoreCase) &&
                              rule.MatchMode == MatchMode.Wildcard && rule.ModelPattern.Equals("gpt-5*", StringComparison.OrdinalIgnoreCase)))
             .Select(AddLongContextPrice)
             .ToList();
+
+        // 自动合并内置/模板中新增的官方规则
+        var template = defaultTemplate ?? BuiltInDefaults();
+        var existingKeys = new HashSet<string>(rules.Select(r => $"{r.Provider}::{r.ModelPattern}".ToLowerInvariant()));
+
+        foreach (var rule in template.Rules)
+        {
+            var key = $"{rule.Provider}::{rule.ModelPattern}".ToLowerInvariant();
+            if (!existingKeys.Contains(key))
+            {
+                rules.Add(rule);
+                existingKeys.Add(key);
+            }
+        }
+
         return new PricingDocument(Math.Max(2, document.SchemaVersion), document.LastVerifiedAt, rules);
     }
 
@@ -164,9 +181,12 @@ public sealed class PricingService
             "gpt-5.6" or "gpt-5.6-sol*" => new TokenPriceSet(10m, 1m, 12.5m, 45m),
             "gpt-5.6-terra*" => new TokenPriceSet(4m, 0.4m, 5m, 18m),
             "gpt-5.6-luna*" => new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m),
+            "gemini-3.1-pro*" or "gemini-pro-default*" or "gemini-pro*" => new TokenPriceSet(4m, 1m, null, 18m),
+            "gemini-2.5-pro*" => new TokenPriceSet(2.5m, 0.625m, null, 15m),
             _ => null
         };
-        return longPrice is null ? rule : rule with { LongContextPrice = longPrice, LongContextThresholdTokens = 272_000 };
+        var threshold = pattern.StartsWith("gemini", StringComparison.OrdinalIgnoreCase) ? 200_000 : 272_000;
+        return longPrice is null ? rule : rule with { LongContextPrice = longPrice, LongContextThresholdTokens = threshold };
     }
 
     public static PricingDocument BuiltInDefaults() => new(
@@ -194,29 +214,66 @@ public sealed class PricingService
                 "https://developers.openai.com/api/docs/models/gpt-5.4", new DateOnly(2026, 8, 20)),
             new PricingRule("Codex", "gpt-4.1*", MatchMode.Wildcard, 2m, 0.5m, null, 8m,
                 "https://platform.openai.com/pricing", new DateOnly(2026, 8, 20)),
+            new PricingRule("Antigravity", "claude-sonnet-4-6*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-sonnet*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3-7-sonnet*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3.7-sonnet*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3-5-sonnet*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3.5-sonnet*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-opus-4-6*", MatchMode.Wildcard, 15m, 1.5m, 18.75m, 75m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-opus*", MatchMode.Wildcard, 15m, 1.5m, 18.75m, 75m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3-opus*", MatchMode.Wildcard, 15m, 1.5m, 18.75m, 75m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3.5-opus*", MatchMode.Wildcard, 15m, 1.5m, 18.75m, 75m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3-5-haiku*", MatchMode.Wildcard, 0.8m, 0.08m, 1.0m, 4m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-3.5-haiku*", MatchMode.Wildcard, 0.8m, 0.08m, 1.0m, 4m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "claude-haiku*", MatchMode.Wildcard, 0.8m, 0.08m, 1.0m, 4m,
+                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-3.7-flash*", MatchMode.Wildcard, 0.75m, 0.075m, null, 3.75m,
                 "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-3.6-flash*", MatchMode.Wildcard, 0.75m, 0.075m, null, 3.75m,
                 "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
-            new PricingRule("Antigravity", "gemini-3.5-flash-lite*", MatchMode.Wildcard, 0.3m, 0.03m, null, 2.5m,
+            new PricingRule("Antigravity", "gemini-3.6-flash-tiered*", MatchMode.Wildcard, 0.75m, 0.075m, null, 3.75m,
                 "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-3.5-flash*", MatchMode.Wildcard, 1.5m, 0.15m, null, 9m,
                 "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "gemini-3-flash-a*", MatchMode.Wildcard, 1.5m, 0.15m, null, 9m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "gemini-default*", MatchMode.Wildcard, 1.5m, 0.15m, null, 9m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "gemini-3.5-flash-lite*", MatchMode.Wildcard, 0.3m, 0.03m, null, 2.5m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-3.1-flash-lite*", MatchMode.Wildcard, 0.25m, 0.025m, null, 1.5m,
                 "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
-            new PricingRule("Antigravity", "gemini-3.1-pro*", MatchMode.Wildcard, 1.25m, 0.3125m, null, 10m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "gemini-3.1-pro*", MatchMode.Wildcard, 2.0m, 0.5m, null, 12m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true,
+                new TokenPriceSet(4m, 1m, null, 18m), 200000),
+            new PricingRule("Antigravity", "gemini-pro-default*", MatchMode.Wildcard, 2.0m, 0.5m, null, 12m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true,
+                new TokenPriceSet(4m, 1m, null, 18m), 200000),
+            new PricingRule("Antigravity", "gemini-pro*", MatchMode.Wildcard, 2.0m, 0.5m, null, 12m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true,
+                new TokenPriceSet(4m, 1m, null, 18m), 200000),
             new PricingRule("Antigravity", "gemini-2.5-pro*", MatchMode.Wildcard, 1.25m, 0.3125m, null, 10m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true,
+                new TokenPriceSet(2.5m, 0.625m, null, 15m), 200000),
             new PricingRule("Antigravity", "gemini-2.5-flash*", MatchMode.Wildcard, 0.3m, 0.03m, null, 2.5m,
                 "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
-            new PricingRule("Antigravity", "claude-3-7-sonnet*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
-                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
-            new PricingRule("Antigravity", "claude-3-5-sonnet*", MatchMode.Wildcard, 3m, 0.3m, 3.75m, 15m,
-                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
-            new PricingRule("Antigravity", "claude-3-5-haiku*", MatchMode.Wildcard, 0.8m, 0.08m, 1.0m, 4m,
-                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
-            new PricingRule("Antigravity", "claude-3-opus*", MatchMode.Wildcard, 15m, 1.5m, 18.75m, 75m,
-                "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true)
+            new PricingRule("Antigravity", "gpt-oss-120b*", MatchMode.Wildcard, 0.6m, 0.15m, null, 2.4m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "gpt-oss*", MatchMode.Wildcard, 0.6m, 0.15m, null, 2.4m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true)
         ]);
 }
+

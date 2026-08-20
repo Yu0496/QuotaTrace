@@ -184,7 +184,8 @@ public sealed class UsageRepository
     }
 
     public void ReplaceAntigravitySource(FileInfo file, IReadOnlyList<AntigravityGenerationUsage> generations,
-        IReadOnlyList<UsageBucket> buckets, string? conversationId, string? projectKey, string? lastModel, string? error)
+        IReadOnlyList<UsageBucket> buckets, string? conversationId, string? projectKey, string? lastModel, string? error,
+        int parserVersion = 3)
     {
         using var connection = _database.OpenConnection();
         using var transaction = connection.BeginTransaction();
@@ -233,7 +234,7 @@ public sealed class UsageRepository
         using var state = connection.CreateCommand();
         state.Transaction = transaction;
         state.CommandText = @"INSERT INTO source_files(provider,path,file_size,mtime_utc_ticks,parsed_bytes,parser_version,session_id,project_key,last_model,last_error)
-            VALUES($provider,$path,$size,$mtime,$parsed,2,$session,$project,$model,$error)
+            VALUES($provider,$path,$size,$mtime,$parsed,$version,$session,$project,$model,$error)
             ON CONFLICT(provider,path) DO UPDATE SET file_size=excluded.file_size,mtime_utc_ticks=excluded.mtime_utc_ticks,
             parsed_bytes=excluded.parsed_bytes,parser_version=excluded.parser_version,session_id=excluded.session_id,
             project_key=excluded.project_key,last_model=excluded.last_model,last_error=excluded.last_error";
@@ -242,6 +243,7 @@ public sealed class UsageRepository
         state.Parameters.AddWithValue("$size", file.Length);
         state.Parameters.AddWithValue("$mtime", file.LastWriteTimeUtc.Ticks);
         state.Parameters.AddWithValue("$parsed", file.Length);
+        state.Parameters.AddWithValue("$version", parserVersion);
         state.Parameters.AddWithValue("$session", (object?)conversationId ?? DBNull.Value);
         state.Parameters.AddWithValue("$project", (object?)projectKey ?? DBNull.Value);
         state.Parameters.AddWithValue("$model", (object?)lastModel ?? DBNull.Value);
@@ -421,14 +423,16 @@ public sealed class UsageRepository
 
         if (filteredAudits.Count == 0) return [];
 
-        var aggregate = new Dictionary<(DateOnly Date, string Model, string Tier), (long Input, long Cached, long CacheWrite, long Output, int Requests, bool CacheAvailable, int LongRequests, long LongInput, long LongCached, long LongWrite, long LongOutput, int Uncertain)>();
+        var aggregate = new Dictionary<(DateOnly Date, string ProjectKey, string Model, string Tier), (long Input, long Cached, long CacheWrite, long Output, int Requests, bool CacheAvailable, int LongRequests, long LongInput, long LongCached, long LongWrite, long LongOutput, int Uncertain)>();
 
         foreach (var audit in filteredAudits)
         {
             var date = DateOnly.FromDateTime(audit.CapturedAt.ToLocalTime().DateTime);
+            var projectKey = audit.ProjectKey ?? string.Empty;
             var model = string.IsNullOrWhiteSpace(audit.ModelId) ? "Unknown" : audit.ModelId.Trim();
+
             var tier = string.Empty;
-            (DateOnly Date, string Model, string Tier) key = (date, model, tier);
+            (DateOnly Date, string ProjectKey, string Model, string Tier) key = (date, projectKey, model, tier);
             if (!aggregate.TryGetValue(key, out var acc))
                 acc = (0, 0, 0, 0, 0, true, 0, 0, 0, 0, 0, 0);
 
@@ -456,11 +460,12 @@ public sealed class UsageRepository
             var costQuality = !val.CacheAvailable ? CostQuality.CacheWriteUnavailable :
                 val.Uncertain > 0 ? CostQuality.RequestShapeUnavailable :
                 val.Cached > 0 || val.CacheWrite > 0 ? CostQuality.ExactTokenSplit : CostQuality.ExactTokensNoCache;
-            return new UsageBucket(ProviderKind.Codex, pair.Key.Date, string.Empty, pair.Key.Model,
+            return new UsageBucket(ProviderKind.Codex, pair.Key.Date, pair.Key.ProjectKey, pair.Key.Model,
                 val.Input, val.Cached, val.Output, val.Requests, DataQuality.Derived, "codex://weekly-cycle", null,
                 val.CacheWrite, costQuality, pair.Key.Tier, val.LongRequests, val.Uncertain,
                 val.LongInput, val.LongCached, val.LongWrite, val.LongOutput, val.CacheAvailable);
         }).ToList();
+
     }
 
     public IReadOnlyList<AntigravityGenerationUsage> GetAntigravityGenerations(DateTimeOffset? startUtc = null, DateTimeOffset? endUtc = null)
@@ -501,17 +506,45 @@ public sealed class UsageRepository
         return list;
     }
 
-    public IReadOnlyList<UsageBucket> GetAntigravityUsageInUtcWindow(DateTimeOffset startUtc, DateTimeOffset? endUtc = null)
+    public IReadOnlyList<UsageBucket> GetAntigravityUsageInUtcWindow(DateTimeOffset startUtc, DateTimeOffset? endUtc = null, IReadOnlyList<PricingRule>? pricingRules = null)
     {
         var generations = GetAntigravityGenerations(startUtc, endUtc);
         if (generations.Count > 0)
         {
-            return AntigravitySqliteHistoryParser.ConvertToBuckets(generations, "antigravity://window");
+            return AntigravitySqliteHistoryParser.ConvertToBuckets(generations, "antigravity://window", pricingRules);
         }
 
         var startDate = DateOnly.FromDateTime(startUtc.ToLocalTime().DateTime);
         var endDate = DateOnly.FromDateTime((endUtc ?? DateTimeOffset.UtcNow).ToLocalTime().DateTime);
         return GetUsage(new DateRange(startDate, endDate), ProviderKind.Antigravity);
+    }
+
+    public IReadOnlyList<UsageBucket> GetAntigravityUsageInPoolWindows(
+        DateTimeOffset? geminiStartUtc, DateTimeOffset? geminiEndUtc,
+        DateTimeOffset? threePStartUtc, DateTimeOffset? threePEndUtc,
+        IReadOnlyList<PricingRule>? pricingRules = null)
+    {
+        var allGens = GetAntigravityGenerations();
+        if (allGens.Count == 0) return [];
+
+        var filtered = allGens.Where(gen =>
+        {
+            var pool = AntigravityQuotaEstimator.GetModelQuotaPool(gen.Model);
+            if (pool == "gemini")
+            {
+                if (geminiStartUtc.HasValue && gen.Timestamp < geminiStartUtc.Value) return false;
+                if (geminiEndUtc.HasValue && gen.Timestamp > geminiEndUtc.Value) return false;
+                return true;
+            }
+            else
+            {
+                if (threePStartUtc.HasValue && gen.Timestamp < threePStartUtc.Value) return false;
+                if (threePEndUtc.HasValue && gen.Timestamp > threePEndUtc.Value) return false;
+                return true;
+            }
+        }).ToList();
+
+        return AntigravitySqliteHistoryParser.ConvertToBuckets(filtered, "antigravity://pool-window", pricingRules);
     }
 
     public IReadOnlyList<QuotaSnapshot> GetQuotaSnapshots(ProviderKind provider, string? modelOrPoolId = null)
@@ -571,22 +604,10 @@ public sealed class UsageRepository
     {
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
-        if (provider == ProviderKind.Codex)
-        {
-            command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
-                q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
-                INNER JOIN (SELECT window_kind,MAX(captured_at_utc) AS latest FROM quota_snapshots WHERE provider=$provider GROUP BY window_kind) x
-                ON q.window_kind=x.window_kind AND q.captured_at_utc=x.latest
-                WHERE q.provider=$provider ORDER BY q.window_kind";
-        }
-        else
-        {
-            command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
-                q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
-                INNER JOIN (SELECT model_or_pool_id,window_kind,MAX(captured_at_utc) AS latest FROM quota_snapshots WHERE provider=$provider GROUP BY model_or_pool_id,window_kind) x
-                ON q.model_or_pool_id=x.model_or_pool_id AND q.window_kind=x.window_kind AND q.captured_at_utc=x.latest
-                WHERE q.provider=$provider ORDER BY q.model_or_pool_id,q.window_kind";
-        }
+        command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
+            q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
+            WHERE q.provider=$provider AND q.captured_at_utc=(SELECT MAX(captured_at_utc) FROM quota_snapshots WHERE provider=$provider)
+            ORDER BY q.model_or_pool_id,q.window_kind";
         command.Parameters.AddWithValue("$provider", provider.ToStorageString());
         using var reader = command.ExecuteReader();
         var list = new List<QuotaSnapshot>();

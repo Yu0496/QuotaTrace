@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Microsoft.Data.Sqlite;
@@ -86,6 +86,39 @@ public sealed class AntigravitySqliteHistoryParserTests
     }
 
     [Fact]
+    public void ParsesLongContextGenerationsCorrectly()
+    {
+        var pricingService = new UsageTray.Pricing.PricingService("dummy", UsageTray.Pricing.PricingService.BuiltInDefaults());
+        var gShort = new AntigravityGenerationUsage("c1", "gen1", "resp1", DateTimeOffset.UtcNow, "gemini-3.1-pro", null,
+            InputTokens: 50_000, CacheReadTokens: 10_000, CacheWriteTokens: 0, ThinkingOutputTokens: 1000, ResponseOutputTokens: 2000, OutputTokens: 3000,
+            ProjectKey: "proj", SourceDbPath: "db1", SourceRowIdx: 1);
+        var gLong = new AntigravityGenerationUsage("c1", "gen2", "resp2", DateTimeOffset.UtcNow, "gemini-3.1-pro", null,
+            InputTokens: 180_000, CacheReadTokens: 50_000, CacheWriteTokens: 0, ThinkingOutputTokens: 2000, ResponseOutputTokens: 4000, OutputTokens: 6000,
+            ProjectKey: "proj", SourceDbPath: "db1", SourceRowIdx: 2);
+
+        var buckets = AntigravitySqliteHistoryParser.ConvertToBuckets([gShort, gLong], "db1", pricingService.Rules);
+        Assert.Single(buckets);
+        var bucket = buckets[0];
+
+        Assert.Equal(2, bucket.RequestCount);
+        Assert.Equal(1, bucket.LongContextRequestCount);
+        Assert.Equal(230_000, bucket.LongContextInputTokens); // 180k + 50k
+        Assert.Equal(50_000, bucket.LongContextCachedInputTokens);
+        Assert.Equal(6000, bucket.LongContextOutputTokens);
+
+        var cost = pricingService.Calculate(bucket);
+        Assert.NotNull(cost.CostUsd);
+
+        // Calculation check:
+        // Short request: Uncached = 50,000, Cached = 10,000, Output = 3,000
+        // Short Cost = 50,000 * 2.0 / 1M + 10,000 * 0.5 / 1M + 3,000 * 12.0 / 1M = 0.10 + 0.005 + 0.036 = $0.141
+        // Long request: Uncached = 180,000, Cached = 50,000, Output = 6,000 (at Long rate: In $4, Read $1, Out $18)
+        // Long Cost = 180,000 * 4.0 / 1M + 50,000 * 1.0 / 1M + 6,000 * 18.0 / 1M = 0.72 + 0.05 + 0.108 = $0.878
+        // Total Cost = $0.141 + $0.878 = $1.019
+        Assert.Equal(1.019m, cost.CostUsd.Value);
+    }
+
+    [Fact]
     public void DeduplicationKeyPrefersResponseIdThenGenerationId()
     {
         var g1 = new AntigravityGenerationUsage("c1", "gen1", "resp1", DateTimeOffset.UtcNow, "model", null, 10, 0, 0, 0, 5, 5, null, "db1", 1);
@@ -95,6 +128,47 @@ public sealed class AntigravitySqliteHistoryParserTests
         Assert.Equal("resp1", g1.EffectiveKey);
         Assert.Equal("gen2", g2.EffectiveKey);
         Assert.Equal("c1#3#model#", g3.EffectiveKey);
+    }
+
+    [Fact]
+    public async Task RefreshCleansUpDeletedSourcesProperly()
+    {
+        using var workspace = new TempWorkspace();
+        var appRoot = Path.Combine(workspace.Root, "antigravity_test_root");
+        var convDir = Path.Combine(appRoot, "conversations");
+        Directory.CreateDirectory(convDir);
+
+        var db1 = Path.Combine(convDir, "conv1.db");
+        var db2 = Path.Combine(convDir, "conv2.db");
+
+        File.WriteAllBytes(db1, [0, 1, 2]);
+        File.WriteAllBytes(db2, [0, 1, 2]);
+
+        var dbPath = workspace.File("usage.db");
+        using var db = new UsageTray.Data.UsageDatabase(dbPath);
+        var repo = new UsageTray.Data.UsageRepository(db);
+        var locator = new AntigravityHistoryLocator([appRoot]);
+        var parser = new AntigravitySqliteHistoryParser();
+        var pricing = new UsageTray.Pricing.PricingService("dummy", UsageTray.Pricing.PricingService.BuiltInDefaults());
+        var settings = new UsageTray.App.AppSettings();
+
+        using var provider = new AntigravityProvider(locator, parser);
+
+        // Pre-insert two sources
+        repo.ReplaceAntigravitySource(new FileInfo(db1), [], [new UsageBucket(ProviderKind.Antigravity, DateOnly.FromDateTime(DateTime.Today), null, "gemini-3.7-flash", 100, 0, 100, 1, DataQuality.Exact, db1)], "conv1", null, "gemini-3.7-flash", null, AntigravityProvider.ParserVersion);
+        repo.ReplaceAntigravitySource(new FileInfo(db2), [], [new UsageBucket(ProviderKind.Antigravity, DateOnly.FromDateTime(DateTime.Today), null, "gemini-3.7-flash", 200, 0, 200, 1, DataQuality.Exact, db2)], "conv2", null, "gemini-3.7-flash", null, AntigravityProvider.ParserVersion);
+
+        Assert.Equal(2, repo.GetSourcePaths(ProviderKind.Antigravity).Count);
+
+        // Delete db2 from disk
+        File.Delete(db2);
+
+        var ctx = new UsageTray.Providers.RefreshContext(settings, repo, pricing);
+        await provider.RefreshAsync(ctx, CancellationToken.None);
+
+        var remainingSources = repo.GetSourcePaths(ProviderKind.Antigravity);
+        Assert.Single(remainingSources);
+        Assert.Equal(new FileInfo(db1).FullName, remainingSources[0], ignoreCase: true);
     }
 
     private static byte[] CreateProtobufGenMetadata(

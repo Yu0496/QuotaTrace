@@ -104,9 +104,10 @@ public sealed class CodexUsageNormalizer
                     bucket.LongOutput += delta.OutputTokens;
                 }
 
-                audits.Add(new CodexEventAudit(snapshot.SessionId, snapshot.StableEventKey, snapshot.CapturedAt, model,
+                audits.Add(new CodexEventAudit(snapshot.SessionId, snapshot.ProjectKey, snapshot.StableEventKey, snapshot.CapturedAt, model,
                     snapshot.SourcePath, snapshot.SourceLine, epoch, delta, requestQuality, isLongContext,
                     item.Duplicate, item.Sources));
+
             }
         }
 

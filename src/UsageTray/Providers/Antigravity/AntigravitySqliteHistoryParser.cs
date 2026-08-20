@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Data.Sqlite;
 using UsageTray.Core;
+using UsageTray.Pricing;
 
 namespace UsageTray.Providers.Antigravity;
 
@@ -15,7 +16,7 @@ public sealed record AntigravitySqliteParseResult(
 
 public sealed class AntigravitySqliteHistoryParser
 {
-    public AntigravitySqliteParseResult ParseFile(string path, AntigravityProjectResolver? projectResolver = null)
+    public AntigravitySqliteParseResult ParseFile(string path, AntigravityProjectResolver? projectResolver = null, IReadOnlyList<PricingRule>? pricingRules = null)
     {
         var generations = new List<AntigravityGenerationUsage>();
         var warnings = new List<string>();
@@ -73,7 +74,9 @@ public sealed class AntigravitySqliteHistoryParser
                 var isExactTime = stepTimes.TryGetValue(idx, out var timestamp);
                 if (!isExactTime) timestamp = fallbackTime;
 
-                var model = string.IsNullOrWhiteSpace(parsed.ResponseModel) ? "Unknown" : parsed.ResponseModel.Trim();
+                var model = !string.IsNullOrWhiteSpace(parsed.ResponseModel) && !string.Equals(parsed.ResponseModel.Trim(), "Unknown", StringComparison.OrdinalIgnoreCase)
+                    ? parsed.ResponseModel.Trim()
+                    : InferModelFromDisplayName(parsed.DisplayName);
                 var gen = new AntigravityGenerationUsage(
                     conversationId,
                     parsed.GenerationId,
@@ -100,11 +103,36 @@ public sealed class AntigravitySqliteHistoryParser
             warnings.Add($"无法以只读方式读取 Antigravity SQLite：{path}（{exception.Message}）");
         }
 
-        var buckets = ConvertToBuckets(generations, path);
+        var buckets = ConvertToBuckets(generations, path, pricingRules);
         return new AntigravitySqliteParseResult(generations, buckets, warnings);
     }
 
-    public static IReadOnlyList<UsageBucket> ConvertToBuckets(IEnumerable<AntigravityGenerationUsage> generations, string sourcePath)
+    public static string InferModelFromDisplayName(string? displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) return "Unknown";
+        var name = displayName.Trim().ToLowerInvariant();
+
+        if (name.Contains("sonnet")) return "claude-sonnet-4-6";
+        if (name.Contains("opus")) return "claude-opus-4-6-thinking";
+        if (name.Contains("haiku")) return "claude-3-5-haiku";
+
+        if (name.Contains("3.7") && name.Contains("flash")) return "gemini-3.7-flash";
+        if (name.Contains("3.6") && name.Contains("flash")) return "gemini-3.6-flash";
+        if (name.Contains("3.5") && name.Contains("lite")) return "gemini-3.5-flash-lite";
+        if (name.Contains("3.5") && name.Contains("flash")) return "gemini-3.5-flash";
+        if (name.Contains("3.1") && name.Contains("lite")) return "gemini-3.1-flash-lite";
+        if (name.Contains("3.1") && name.Contains("pro")) return "gemini-3.1-pro";
+        if (name.Contains("2.5") && name.Contains("pro")) return "gemini-2.5-pro";
+        if (name.Contains("2.5") && name.Contains("flash")) return "gemini-2.5-flash";
+        if (name.Contains("gemini") && name.Contains("pro")) return "gemini-3.1-pro";
+        if (name.Contains("gemini") && name.Contains("flash")) return "gemini-3.5-flash";
+
+        if (name.Contains("gpt-oss") || name.Contains("120b")) return "gpt-oss-120b-medium";
+
+        return displayName.Trim();
+    }
+
+    public static IReadOnlyList<UsageBucket> ConvertToBuckets(IEnumerable<AntigravityGenerationUsage> generations, string sourcePath, IReadOnlyList<PricingRule>? pricingRules = null)
     {
         var groupMap = new Dictionary<(DateOnly Date, string? Project, string Model, string? Conv), MutableBucket>();
 
@@ -117,6 +145,11 @@ public sealed class AntigravitySqliteHistoryParser
                 groupMap[key] = acc = new MutableBucket();
             }
 
+            var rule = pricingRules is not null
+                ? PricingMatcher.Find(pricingRules, ProviderKind.Antigravity, gen.Model)
+                : null;
+            var isLong = rule?.LongContextPrice is not null && gen.TotalInputTokens > rule.LongContextThresholdTokens;
+
             acc.UncachedInput += gen.InputTokens;
             acc.CacheRead += gen.CacheReadTokens;
             acc.CacheWrite += gen.CacheWriteTokens;
@@ -125,6 +158,15 @@ public sealed class AntigravitySqliteHistoryParser
             acc.ResponseOutput += gen.ResponseOutputTokens;
             acc.Requests++;
             if (gen.Quality == DataQuality.Derived) acc.Quality = DataQuality.Derived;
+
+            if (isLong)
+            {
+                acc.LongContextRequests++;
+                acc.LongContextInput += gen.TotalInputTokens;
+                acc.LongContextCached += gen.CacheReadTokens;
+                acc.LongContextCacheWrite += gen.CacheWriteTokens;
+                acc.LongContextOutput += gen.OutputTokens;
+            }
         }
 
         return groupMap.Select(pair =>
@@ -152,7 +194,15 @@ public sealed class AntigravitySqliteHistoryParser
                 sourcePath,
                 pair.Key.Conv,
                 val.CacheWrite,
-                costQuality
+                costQuality,
+                null,
+                val.LongContextRequests,
+                0,
+                val.LongContextInput,
+                val.LongContextCached,
+                val.LongContextCacheWrite,
+                val.LongContextOutput,
+                true
             );
         }).ToList();
     }
@@ -167,5 +217,10 @@ public sealed class AntigravitySqliteHistoryParser
         public long ResponseOutput;
         public int Requests;
         public DataQuality Quality = DataQuality.Exact;
+        public int LongContextRequests;
+        public long LongContextInput;
+        public long LongContextCached;
+        public long LongContextCacheWrite;
+        public long LongContextOutput;
     }
 }

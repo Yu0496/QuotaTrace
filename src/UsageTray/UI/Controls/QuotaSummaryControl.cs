@@ -3,10 +3,9 @@ using UsageTray.Core;
 using UsageTray.Providers.Antigravity;
 using UsageTray.Services;
 
+namespace UsageTray.UI.Controls;
 
-namespace UsageTray.UI;
-
-internal sealed class QuotaPopupForm : Form
+public sealed class QuotaSummaryControl : UserControl
 {
     private DashboardSnapshot? _snapshot;
     private readonly Font _titleFont;
@@ -15,115 +14,68 @@ internal sealed class QuotaPopupForm : Form
     private readonly Font _regularFont;
     private readonly Font _smallFont;
 
-    public event EventHandler? DismissRequested;
+    public bool ShowDismissHint { get; set; }
+    public bool ShowHeader { get; set; } = true;
+    public bool ShowFooterNote { get; set; } = true;
+    public bool IsLocked { get; set; }
 
-    public QuotaPopupForm()
+    public QuotaSummaryControl()
     {
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        AutoScaleMode = AutoScaleMode.Dpi;
-        AutoScaleDimensions = new SizeF(96F, 96F);
-        Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-        Icon = AppIcon.Create();
-        FormBorderStyle = FormBorderStyle.None;
-        ShowInTaskbar = false;
-        ShowIcon = false;
-        TopMost = true;
-        StartPosition = FormStartPosition.Manual;
-        BackColor = Color.White;
-        DoubleBuffered = true;
-
         _titleFont = new Font("Segoe UI", 10F, FontStyle.Bold, GraphicsUnit.Point);
         _sectionFont = new Font("Segoe UI", 9F, FontStyle.Bold, GraphicsUnit.Point);
         _boldFont = new Font("Segoe UI", 9F, FontStyle.Bold, GraphicsUnit.Point);
         _regularFont = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
         _smallFont = new Font("Segoe UI", 8F, FontStyle.Regular, GraphicsUnit.Point);
 
-        Deactivate += (_, _) =>
-        {
-            if (!_hasBeenDragged)
-            {
-                DismissRequested?.Invoke(this, EventArgs.Empty);
-            }
-        };
-
-        SetSnapshot(null);
-    }
-
-    private bool _isMouseDown;
-    private bool _isDragging;
-    private bool _hasBeenDragged;
-    private Point _dragStartScreenPoint;
-    private Point _formStartLocation;
-
-    protected override void OnMouseDown(MouseEventArgs e)
-    {
-        base.OnMouseDown(e);
-        if (e.Button == MouseButtons.Left)
-        {
-            _isMouseDown = true;
-            _isDragging = false;
-            _dragStartScreenPoint = PointToScreen(e.Location);
-            _formStartLocation = Location;
-        }
-    }
-
-    protected override void OnMouseMove(MouseEventArgs e)
-    {
-        base.OnMouseMove(e);
-        if (_isMouseDown)
-        {
-            var currentScreen = PointToScreen(e.Location);
-            var dx = currentScreen.X - _dragStartScreenPoint.X;
-            var dy = currentScreen.Y - _dragStartScreenPoint.Y;
-            if (!_isDragging && (Math.Abs(dx) > 3 || Math.Abs(dy) > 3))
-            {
-                _isDragging = true;
-                _hasBeenDragged = true;
-                Invalidate();
-            }
-            if (_isDragging)
-            {
-                Location = new Point(_formStartLocation.X + dx, _formStartLocation.Y + dy);
-            }
-        }
-    }
-
-    protected override void OnMouseUp(MouseEventArgs e)
-    {
-        base.OnMouseUp(e);
-        if (_isMouseDown)
-        {
-            _isMouseDown = false;
-            if (!_isDragging)
-            {
-                DismissRequested?.Invoke(this, EventArgs.Empty);
-            }
-            _isDragging = false;
-        }
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+        BackColor = Color.White;
+        DoubleBuffered = true;
+        AutoScroll = true;
     }
 
     public void SetSnapshot(DashboardSnapshot? snapshot)
     {
         _snapshot = snapshot;
-        RecalculateSize();
+        RecalculateContentSize();
         Invalidate();
     }
 
-    private void RecalculateSize()
+    public int MeasureHeight(int width)
     {
-        using var graphics = CreateGraphics();
-        var width = (int)Math.Round(520f * DeviceDpi / 96f);
-        var height = MeasureContentHeight(graphics, width);
-        ClientSize = new Size(width, height);
+        using var g = CreateGraphics();
+        return MeasureContentHeight(g, width);
+    }
+
+    private void RecalculateContentSize()
+    {
+        if (_titleFont is null || IsDisposed) return;
+        using var g = CreateGraphics();
+        var width = Math.Max(ClientSize.Width, (int)Math.Round(500f * DeviceDpi / 96f));
+        var height = MeasureContentHeight(g, width);
+        AutoScrollMinSize = new Size(width - 20, height);
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        if (_titleFont is null || IsDisposed) return;
+        RecalculateContentSize();
+        Invalidate();
     }
 
     private int MeasureContentHeight(Graphics g, int width)
     {
+        if (_titleFont is null || _regularFont is null) return 60;
         var y = 14;
-        // Header
-        y += _titleFont.Height + 10;
-        y += 1; // Divider
-        y += 8;
+        if (ShowHeader)
+        {
+            y += _titleFont.Height + 10;
+            y += 1; // Divider
+            y += 8;
+        }
 
         if (_snapshot is null)
         {
@@ -144,11 +96,11 @@ internal sealed class QuotaPopupForm : Form
         else
         {
             var fiveHour = agSnapshots.Where(IsFiveHour).ToList();
-            y += MeasureQuotaWindowHeight(fiveHour);
+            if (fiveHour.Count > 0) y += MeasureQuotaWindowHeight(fiveHour);
             var weekly = agSnapshots.Where(IsWeekly).ToList();
-            y += MeasureQuotaWindowHeight(weekly);
+            if (weekly.Count > 0) y += MeasureQuotaWindowHeight(weekly);
             var others = agSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
-            y += MeasureQuotaWindowHeight(others);
+            if (others.Count > 0) y += MeasureQuotaWindowHeight(others);
         }
 
         // Antigravity Weekly Cycle Estimates
@@ -163,11 +115,11 @@ internal sealed class QuotaPopupForm : Form
             {
                 agWeeklyEstimates = weeklySnaps.Select(w =>
                 {
-                    var isGemini = w.DisplayLabel.Contains("Gemini", StringComparison.OrdinalIgnoreCase) || w.ModelOrPoolId.Contains("Gemini", StringComparison.OrdinalIgnoreCase);
+                    var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
                     var name = isGemini ? "Gemini Models" : "Claude and GPT models";
                     var rem = w.RemainingFraction;
                     var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
-                    return new AntigravityQuotaEstimate(w.ModelOrPoolId, "weekly", name, rem, w.ResetAt, 0m, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
+                    return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, 0m, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
                 }).ToList();
             }
         }
@@ -176,14 +128,12 @@ internal sealed class QuotaPopupForm : Form
         {
             y += 2;
             y += _boldFont.Height + 3; // "周订阅统计与预估 (本轮 7 天窗口)"
-            foreach (var est in agWeeklyEstimates)
+            foreach (var _ in agWeeklyEstimates)
             {
                 y += _regularFont.Height + 3; // 本轮周消耗
                 y += _regularFont.Height + 4; // 周满额预估
             }
         }
-
-
 
         y += 6;
         y += 1; // Divider
@@ -222,7 +172,14 @@ internal sealed class QuotaPopupForm : Form
         y += 8;
 
         // Footer / Timestamp
-        y += _smallFont.Height + 10;
+        y += _smallFont.Height + 6;
+
+        if (ShowFooterNote)
+        {
+            y += (_smallFont.Height + 3) * 2 + 6;
+        }
+
+        y += 10;
         return y;
     }
 
@@ -236,30 +193,38 @@ internal sealed class QuotaPopupForm : Form
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
+        if (_titleFont is null || _regularFont is null || _smallFont is null) return;
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-        var bounds = ClientRectangle;
-        using var borderPen = new Pen(Color.FromArgb(203, 213, 225));
-        g.DrawRectangle(borderPen, 0, 0, bounds.Width - 1, bounds.Height - 1);
+        // Apply scroll offset
+        g.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
 
+        var bounds = ClientRectangle;
+        var width = Math.Max(bounds.Width, AutoScrollMinSize.Width);
         var padX = (int)Math.Round(16f * DeviceDpi / 96f);
         var y = (int)Math.Round(12f * DeviceDpi / 96f);
 
-        // Header
         using var titleBrush = new SolidBrush(Color.FromArgb(15, 23, 42));
         using var hintBrush = new SolidBrush(Color.FromArgb(148, 163, 184));
         using var dividerPen = new Pen(Color.FromArgb(226, 232, 240));
 
-        g.DrawString("额度与用量摘要", _titleFont, titleBrush, padX, y);
-        var closeText = _hasBeenDragged ? "已拖动锁定 (点击面板关闭)" : "点击任意位置关闭 (支持拖动)";
-        var closeSize = TextRenderer.MeasureText(g, closeText, _smallFont);
-        g.DrawString(closeText, _smallFont, hintBrush, bounds.Width - padX - closeSize.Width, y + (_titleFont.Height - _smallFont.Height) / 2);
+        // Header
+        if (ShowHeader)
+        {
+            g.DrawString("额度与用量摘要", _titleFont, titleBrush, padX, y);
+            if (ShowDismissHint)
+            {
+                var closeText = IsLocked ? "已拖动锁定 (点击面板关闭)" : "点击任意位置关闭 (支持拖动)";
+                var closeSize = TextRenderer.MeasureText(g, closeText, _smallFont);
+                g.DrawString(closeText, _smallFont, hintBrush, width - padX - closeSize.Width, y + (_titleFont.Height - _smallFont.Height) / 2);
+            }
 
-        y += _titleFont.Height + 8;
-        g.DrawLine(dividerPen, padX, y, bounds.Width - padX, y);
-        y += 8;
+            y += _titleFont.Height + 8;
+            g.DrawLine(dividerPen, padX, y, width - padX, y);
+            y += 8;
+        }
 
         if (_snapshot is null)
         {
@@ -286,17 +251,17 @@ internal sealed class QuotaPopupForm : Form
         else
         {
             var fiveHour = agSnapshots.Where(IsFiveHour)
-                .OrderBy(s => s.DisplayLabel.Contains("gemini", StringComparison.OrdinalIgnoreCase) || s.ModelOrPoolId.Contains("gemini", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
                 .ToList();
             if (fiveHour.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "5 小时窗口", fiveHour);
 
             var weekly = agSnapshots.Where(IsWeekly)
-                .OrderBy(s => s.DisplayLabel.Contains("gemini", StringComparison.OrdinalIgnoreCase) || s.ModelOrPoolId.Contains("gemini", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
                 .ToList();
             if (weekly.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "周窗口", weekly);
 
             var others = agSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s))
-                .OrderBy(s => s.DisplayLabel.Contains("gemini", StringComparison.OrdinalIgnoreCase) || s.ModelOrPoolId.Contains("gemini", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
                 .ToList();
             if (others.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "其他窗口", others);
         }
@@ -313,17 +278,17 @@ internal sealed class QuotaPopupForm : Form
             {
                 agWeeklyEstimates = weeklySnaps.Select(w =>
                 {
-                    var isGemini = w.DisplayLabel.Contains("Gemini", StringComparison.OrdinalIgnoreCase) || w.ModelOrPoolId.Contains("Gemini", StringComparison.OrdinalIgnoreCase);
+                    var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
                     var name = isGemini ? "Gemini Models" : "Claude and GPT models";
                     var rem = w.RemainingFraction;
                     var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
-                    return new AntigravityQuotaEstimate(w.ModelOrPoolId, "weekly", name, rem, w.ResetAt, 0m, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
+                    return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, 0m, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
                 }).ToList();
             }
         }
 
         agWeeklyEstimates = agWeeklyEstimates
-            .OrderBy(e => e.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .OrderBy(e => (e.DisplayName?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
             .ToList();
 
         if (agWeeklyEstimates.Count > 0)
@@ -345,10 +310,8 @@ internal sealed class QuotaPopupForm : Form
             }
         }
 
-
-
         y += 6;
-        g.DrawLine(dividerPen, padX, y, bounds.Width - padX, y);
+        g.DrawLine(dividerPen, padX, y, width - padX, y);
         y += 8;
 
         // Section 2: Codex
@@ -391,7 +354,7 @@ internal sealed class QuotaPopupForm : Form
         }
 
         y += 6;
-        g.DrawLine(dividerPen, padX, y, bounds.Width - padX, y);
+        g.DrawLine(dividerPen, padX, y, width - padX, y);
         y += 8;
 
         // Footer / Timestamp
@@ -401,8 +364,16 @@ internal sealed class QuotaPopupForm : Form
             .ToLocalTime();
         using var footerBrush = new SolidBrush(Color.FromArgb(148, 163, 184));
         g.DrawString($"采样时间：{captured:yyyy-MM-dd HH:mm:ss}", _smallFont, footerBrush, padX, y);
-    }
+        y += _smallFont.Height + 6;
 
+        if (ShowFooterNote)
+        {
+            using var noteBrush = new SolidBrush(Color.FromArgb(160, 174, 192));
+            g.DrawString("• Antigravity 额度通过本地官方 Language Server API 实时获取，不参与 API 等值折算。", _smallFont, noteBrush, padX, y);
+            y += _smallFont.Height + 3;
+            g.DrawString("• Codex 额度通过 Session 产生的 rate_limits 事件记录提取；周满额预估根据本轮实际消耗推算。", _smallFont, noteBrush, padX, y);
+        }
+    }
 
     private void DrawSectionHeader(Graphics g, int x, ref int y, string title, string? badge, string? statusBadge, Color dotColor)
     {
@@ -551,21 +522,6 @@ internal sealed class QuotaPopupForm : Form
         return (text, color);
     }
 
-    public void ShowAt(Point cursor)
-    {
-        _hasBeenDragged = false;
-        var screen = Screen.FromPoint(cursor).WorkingArea;
-        var x = Math.Clamp(cursor.X - Width + 12, screen.Left + 4, screen.Right - Width - 4);
-        var y = Math.Clamp(cursor.Y - Height - 12, screen.Top + 4, screen.Bottom - Height - 4);
-        Location = new Point(x, y);
-        if (!Visible) Show();
-        else BringToFront();
-        TopMost = true;
-    }
-
-
-    protected override bool ShowWithoutActivation => true;
-
     private static string FormatReset(QuotaSnapshot snapshot) => snapshot.ResetAt.HasValue
         ? snapshot.ResetAt.Value.ToLocalTime().ToString("MM-dd HH:mm")
         : "未知";
@@ -574,17 +530,6 @@ internal sealed class QuotaPopupForm : Form
         string.Equals(snapshot.DisplayLabel, snapshot.ModelOrPoolId, StringComparison.OrdinalIgnoreCase)
         ? snapshot.ModelOrPoolId
         : snapshot.DisplayLabel;
-
-    private static string FormatTokens(long value) => value switch
-    {
-        >= 1_000_000 => $"{value / 1_000_000d:0.##}M",
-        >= 1_000 => $"{value / 1_000d:0.##}K",
-        _ => value.ToString("N0")
-    };
-
-    private static string FormatRange(DateRange range) => range.From == range.To
-        ? range.From.ToString("yyyy-MM-dd")
-        : $"{range.From:yyyy-MM-dd} 至 {range.To:yyyy-MM-dd}";
 
     private static bool IsFiveHour(QuotaSnapshot snapshot)
     {
@@ -598,22 +543,20 @@ internal sealed class QuotaPopupForm : Form
     private static IReadOnlyList<QuotaSnapshot> DeduplicateAntigravityQuotas(IEnumerable<QuotaSnapshot> snapshots)
     {
         var list = snapshots.ToList();
-        var hasSpecific = list.Any(s => s.DisplayLabel.Contains("Gemini", StringComparison.OrdinalIgnoreCase) ||
-                                        s.DisplayLabel.Contains("Claude", StringComparison.OrdinalIgnoreCase) ||
-                                        s.DisplayLabel.Contains("GPT", StringComparison.OrdinalIgnoreCase));
+        var hasSpecific = list.Any(s => (s.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) ||
+                                        (s.DisplayLabel?.Contains("Claude", StringComparison.OrdinalIgnoreCase) == true) ||
+                                        (s.DisplayLabel?.Contains("GPT", StringComparison.OrdinalIgnoreCase) == true));
         if (hasSpecific)
         {
-            // 过滤掉无具体模型池归属的泛指项（如 Weekly Limit Remaining、Five Hour Limit Remaining）
-            list = list.Where(s => !s.ModelOrPoolId.Equals("Five Hour Limit Remaining", StringComparison.OrdinalIgnoreCase) &&
-                                   !s.ModelOrPoolId.Equals("Weekly Limit Remaining", StringComparison.OrdinalIgnoreCase) &&
-                                   !s.DisplayLabel.Equals("Five Hour Limit Remaining", StringComparison.OrdinalIgnoreCase) &&
-                                   !s.DisplayLabel.Equals("Weekly Limit Remaining", StringComparison.OrdinalIgnoreCase)).ToList();
+            list = list.Where(s => !string.Equals(s.ModelOrPoolId, "Five Hour Limit Remaining", StringComparison.OrdinalIgnoreCase) &&
+                                   !string.Equals(s.ModelOrPoolId, "Weekly Limit Remaining", StringComparison.OrdinalIgnoreCase) &&
+                                   !string.Equals(s.DisplayLabel, "Five Hour Limit Remaining", StringComparison.OrdinalIgnoreCase) &&
+                                   !string.Equals(s.DisplayLabel, "Weekly Limit Remaining", StringComparison.OrdinalIgnoreCase)).ToList();
         }
         return list;
     }
 
     private static bool IsWeekly(QuotaSnapshot snapshot)
-
     {
         var value = $"{snapshot.WindowKind} {snapshot.ModelOrPoolId} {snapshot.DisplayLabel}".ToLowerInvariant();
         return value.Contains("week", StringComparison.Ordinal) || value.Contains("weekly", StringComparison.Ordinal) ||

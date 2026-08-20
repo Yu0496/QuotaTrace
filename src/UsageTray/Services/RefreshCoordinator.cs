@@ -18,6 +18,7 @@ public sealed class RefreshCoordinator : IDisposable
     private AppSettings _settings;
 
     public DashboardSnapshot CurrentSnapshot { get; private set; }
+    public PricingService Pricing => _pricing;
     public event EventHandler<DashboardSnapshot>? SnapshotChanged;
 
     public RefreshCoordinator(IReadOnlyList<IUsageProvider> providers, AppSettingsStore settingsStore,
@@ -91,30 +92,11 @@ public sealed class RefreshCoordinator : IDisposable
         _settingsStore.Save(settings);
     }
 
-    private static DashboardSnapshot CopyWithWarnings(DashboardSnapshot snapshot, IEnumerable<string> warnings) => new()
-    {
-        Range = snapshot.Range,
-        ProviderFilter = snapshot.ProviderFilter,
-        IsWeeklyCycleWindow = snapshot.IsWeeklyCycleWindow,
-        RangeDisplayOverride = snapshot.RangeDisplayOverride,
-        WindowStartUtc = snapshot.WindowStartUtc,
-        WindowEndUtc = snapshot.WindowEndUtc,
-        ApiEquivalentUsd = snapshot.ApiEquivalentUsd,
-        InputTokens = snapshot.InputTokens,
-        CachedTokens = snapshot.CachedTokens,
-        CacheCreationTokens = snapshot.CacheCreationTokens,
-        OutputTokens = snapshot.OutputTokens,
-        UnpricedTokens = snapshot.UnpricedTokens,
-        CostQuality = snapshot.CostQuality,
-        CoverageStart = snapshot.CoverageStart,
-        CodexWeeklyCycle = snapshot.CodexWeeklyCycle,
-        Daily = snapshot.Daily,
-        Models = snapshot.Models,
-        Projects = snapshot.Projects,
-        Quotas = snapshot.Quotas,
-        Warnings = snapshot.Warnings.Concat(warnings).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-        RefreshedAt = snapshot.RefreshedAt
-    };
+    private static DashboardSnapshot CopyWithWarnings(DashboardSnapshot snapshot, IEnumerable<string> warnings) =>
+        snapshot with
+        {
+            Warnings = snapshot.Warnings.Concat(warnings).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+        };
 
     public void Dispose()
     {

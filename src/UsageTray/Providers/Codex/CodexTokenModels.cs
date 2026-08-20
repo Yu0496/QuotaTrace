@@ -76,6 +76,7 @@ public sealed record CodexDeltaUsage(
 
 public sealed record CodexEventAudit(
     string SessionId,
+    string? ProjectKey,
     string EventKey,
     DateTimeOffset CapturedAt,
     string ModelId,
@@ -87,6 +88,7 @@ public sealed record CodexEventAudit(
     bool IsLongContext,
     bool IsDuplicate,
     IReadOnlyList<string> DuplicateSources);
+
 
 public sealed record CodexSourceAudit(
     string SessionId,

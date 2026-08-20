@@ -21,7 +21,8 @@ public sealed class CodexJsonlParser
     public CodexParseResult ParseFile(string path)
     {
         var snapshots = new List<CodexTokenSnapshot>();
-        var quotaByWindow = new Dictionary<string, QuotaSnapshot>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, QuotaSnapshot>? latestQuotas = null;
+        DateTimeOffset? latestQuotaTime = null;
         var warnings = new List<string>();
         string? sessionId = null;
         string? projectPath = null;
@@ -53,7 +54,15 @@ public sealed class CodexJsonlParser
                     var timestamp = JsonValueReader.FindTimestamp(root) ?? File.GetLastWriteTimeUtc(path);
                     coverageStart = coverageStart is null || timestamp < coverageStart ? timestamp : coverageStart;
                     planTier ??= JsonValueReader.FindString(root, "plan_type", "planType", "plan_tier", "planTier");
-                    ExtractRateLimits(root, timestamp, planTier, quotaByWindow);
+                    var extractedQuotas = ExtractRateLimits(root, timestamp, planTier);
+                    if (extractedQuotas is { Count: > 0 })
+                    {
+                        if (latestQuotaTime is null || timestamp >= latestQuotaTime)
+                        {
+                            latestQuotas = extractedQuotas;
+                            latestQuotaTime = timestamp;
+                        }
+                    }
 
                     if (!TryReadTokenEvent(root, out var tokenEvent)) continue;
                     var effectiveSession = sessionId ?? Path.GetFileNameWithoutExtension(path);
@@ -78,9 +87,10 @@ public sealed class CodexJsonlParser
         var normalized = _normalizer.Normalize(snapshots);
         warnings.AddRange(normalized.Warnings);
         warningCount += normalized.Warnings.Count;
+        var quotaList = latestQuotas?.Values.OrderBy(item => item.WindowKind).ToList() ?? [];
         return new CodexParseResult(normalized.Buckets, sessionId, ProjectResolver.Normalize(projectPath), lastModel,
             warningCount, snapshots.Count > 0, coverageStart, warnings,
-            quotaByWindow.Values.OrderBy(item => item.WindowKind).ToList(), snapshots, normalized);
+            quotaList, snapshots, normalized);
     }
 
     private static string? FindSessionId(JsonElement root)
@@ -163,12 +173,13 @@ public sealed class CodexJsonlParser
     private static CodexRequestUsage ToRequestUsage(CodexCumulativeUsage usage) =>
         new(usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, usage.CacheWriteInputTokens, usage.ReasoningOutputTokens);
 
-    private static void ExtractRateLimits(JsonElement root, DateTimeOffset capturedAt, string? planTier,
-        Dictionary<string, QuotaSnapshot> quotaByWindow)
+    private static Dictionary<string, QuotaSnapshot>? ExtractRateLimits(JsonElement root, DateTimeOffset capturedAt, string? planTier)
     {
+        Dictionary<string, QuotaSnapshot>? result = null;
         foreach (var item in JsonValueReader.EnumerateObjects(root))
         {
             if (!JsonValueReader.TryGetProperty(item, out var rateLimits, "rate_limits", "rateLimits") || rateLimits.ValueKind != JsonValueKind.Object) continue;
+            result ??= new Dictionary<string, QuotaSnapshot>(StringComparer.OrdinalIgnoreCase);
             foreach (var windowName in new[] { "primary", "secondary" })
             {
                 if (!JsonValueReader.TryGetProperty(rateLimits, out var window, windowName) || window.ValueKind != JsonValueKind.Object) continue;
@@ -178,9 +189,10 @@ public sealed class CodexJsonlParser
                 var kind = ClassifyWindow(windowName, minutes);
                 var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, $"codex-{kind}", $"Codex {kind}",
                     1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), kind, "codex-session-rate-limits", planTier);
-                if (!quotaByWindow.TryGetValue(kind, out var previous) || snapshot.CapturedAt >= previous.CapturedAt) quotaByWindow[kind] = snapshot;
+                result[kind] = snapshot;
             }
         }
+        return result;
     }
 
     private static string ClassifyWindow(string windowName, long? minutes) => minutes switch

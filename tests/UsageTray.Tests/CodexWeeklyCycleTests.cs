@@ -161,6 +161,39 @@ public sealed class CodexWeeklyCycleTests
     }
 
     [Fact]
+    public void GetLatestQuotas_ExcludesOldFiveHourSnapshot_WhenLatestOnlyHasWeekly()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repository) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var oldFiveHourCaptured = now.AddDays(-30);
+            var oldFiveHourReset = now.AddDays(-29);
+            var latestWeeklyCaptured = now;
+            var latestWeeklyReset = now.AddDays(7);
+
+            // Add historical 5h snapshot from 30 days ago
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, oldFiveHourCaptured, "codex-5h", "Codex 5h", 0.5, oldFiveHourReset, "5h", "rate_limits", "Plus")
+            ]);
+
+            // Add latest snapshot containing ONLY weekly
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, latestWeeklyCaptured, "codex-weekly", "Codex weekly", 0.90, latestWeeklyReset, "weekly", "rate_limits", "Plus")
+            ]);
+
+            var latest = repository.GetLatestQuotas(ProviderKind.Codex);
+
+            Assert.Single(latest);
+            Assert.Equal("weekly", latest[0].WindowKind);
+            Assert.Equal(0.90, latest[0].RemainingFraction);
+            Assert.Equal(latestWeeklyReset, latest[0].ResetAt);
+            Assert.DoesNotContain(latest, q => q.WindowKind == "5h");
+        }
+    }
+
+    [Fact]
     public void BuildSnapshotWithWeeklyCycleMode_AggregatesWithinExactCycleWindow()
     {
         using var workspace = new TempWorkspace();
