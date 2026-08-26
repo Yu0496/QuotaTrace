@@ -53,7 +53,7 @@ public sealed class QuotaSummaryControl : UserControl
     {
         if (_titleFont is null || IsDisposed) return;
         using var g = CreateGraphics();
-        var width = Math.Max(ClientSize.Width, (int)Math.Round(500f * DeviceDpi / 96f));
+        var width = Math.Max(ClientSize.Width, (int)Math.Round(560f * DeviceDpi / 96f));
         var height = MeasureContentHeight(g, width);
         AutoScrollMinSize = new Size(width - 20, height);
     }
@@ -303,7 +303,7 @@ public sealed class QuotaSummaryControl : UserControl
                 var usedText = est.ConsumedFraction.HasValue ? $"{est.ConsumedFraction.Value:P0}" : (est.RemainingFraction.HasValue ? $"{1.0 - est.RemainingFraction.Value:P0}" : "0%");
                 var cycleCostText = est.ObservedCostUsd.HasValue ? "$" + est.ObservedCostUsd.Value.ToString("0.00") : "$0.00";
                 var estCostText = est.EstimatedFullQuotaUsd.HasValue ? $"约 ${est.EstimatedFullQuotaUsd.Value:0.00}" : "待产生消耗后推算";
-                var resetNote = est.ResetAt.HasValue ? $"（重置 {est.ResetAt.Value.ToLocalTime():MM-dd}）" : string.Empty;
+                var resetNote = est.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(est.ResetAt.Value)}）" : string.Empty;
 
                 DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 本轮消耗", cycleCostText, $"（已消耗 {usedText}）{resetNote}", Color.FromArgb(37, 99, 235));
                 DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 满额预估", estCostText, $"（置信度：{est.Confidence}）", Color.FromArgb(5, 150, 105));
@@ -348,8 +348,9 @@ public sealed class QuotaSummaryControl : UserControl
             var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : "未知";
             var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
             var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : "待产生消耗后推算";
+            var codexResetNote = cycle.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(cycle.ResetAt.Value)}）" : string.Empty;
 
-            DrawKeyValueHighlight(g, padX + 16, ref y, "本轮周消耗", cycleCostText, $"（已消耗 {usedText}）", Color.FromArgb(37, 99, 235));
+            DrawKeyValueHighlight(g, padX + 16, ref y, "本轮周消耗", cycleCostText, $"（已消耗 {usedText}）{codexResetNote}", Color.FromArgb(37, 99, 235));
             DrawKeyValueHighlight(g, padX + 16, ref y, "周满额预估", estCostText, "（按当前用量推算满额价值）", Color.FromArgb(5, 150, 105));
         }
 
@@ -522,9 +523,7 @@ public sealed class QuotaSummaryControl : UserControl
         return (text, color);
     }
 
-    private static string FormatReset(QuotaSnapshot snapshot) => snapshot.ResetAt.HasValue
-        ? snapshot.ResetAt.Value.ToLocalTime().ToString("MM-dd HH:mm")
-        : "未知";
+    private static string FormatReset(QuotaSnapshot snapshot) => TimeFormatter.FormatResetWithRelative(snapshot.ResetAt);
 
     private static string ShortLabel(QuotaSnapshot snapshot) => string.IsNullOrWhiteSpace(snapshot.DisplayLabel) ||
         string.Equals(snapshot.DisplayLabel, snapshot.ModelOrPoolId, StringComparison.OrdinalIgnoreCase)

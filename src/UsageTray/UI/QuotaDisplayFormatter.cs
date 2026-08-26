@@ -225,9 +225,8 @@ internal static class QuotaDisplayFormatter
         ? $"{snapshot.RemainingFraction.Value:P0} 剩余"
         : "剩余未知";
 
-    private static string FormatReset(QuotaSnapshot snapshot) => snapshot.ResetAt.HasValue
-        ? snapshot.ResetAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-        : "未知";
+    private static string FormatReset(QuotaSnapshot snapshot) =>
+        TimeFormatter.FormatResetWithRelative(snapshot.ResetAt, "yyyy-MM-dd HH:mm");
 
     private static string ShortLabel(QuotaSnapshot snapshot) => string.IsNullOrWhiteSpace(snapshot.DisplayLabel) ||
         string.Equals(snapshot.DisplayLabel, snapshot.ModelOrPoolId, StringComparison.OrdinalIgnoreCase)

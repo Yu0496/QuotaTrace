@@ -25,12 +25,24 @@ internal static class JsonValueReader
     {
         if (element.ValueKind == JsonValueKind.Object)
         {
-            foreach (var property in element.EnumerateObject())
+            foreach (var name in names)
             {
-                if (names.Any(name => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)))
+                if (element.TryGetProperty(name, out var property))
                 {
-                    value = property.Value;
+                    value = property;
                     return true;
+                }
+            }
+
+            foreach (var name in names)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = property.Value;
+                        return true;
+                    }
                 }
             }
         }
@@ -108,7 +120,7 @@ internal static class JsonValueReader
         return null;
     }
 
-    public static string? FindConversationId(JsonElement root) => FindString(root, "conversation_id", "conversationId", "session_id", "sessionId");
+    public static string? FindConversationId(JsonElement root) => FindString(root, "conversation_id", "conversationId", "id", "session_id", "sessionId");
 
     public static string? FindProjectPath(JsonElement root) => FindString(root, "project_dir", "projectDir", "current_dir", "currentDir", "cwd", "working_directory", "workingDirectory", "project_path", "projectPath");
 }

@@ -327,9 +327,9 @@ public sealed class MainForm : Form
             // Codex 周期
             if (snapshot.CodexWeeklyCycle is { } cwc && cwc.CycleStart != default && cwc.ResetAt.HasValue)
             {
-                _codexCycleNote.Text = $"周期：{cwc.CycleStart.ToLocalTime():yyyy-MM-dd HH:mm} ~ {cwc.ResetAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+                var rel = TimeFormatter.FormatRelativeFuture(cwc.ResetAt.Value);
+                _codexCycleNote.Text = $"周期：{cwc.CycleStart.ToLocalTime():yyyy-MM-dd HH:mm} ~ {cwc.ResetAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}（{rel}）";
             }
-
             else
             {
                 var codexQuota = snapshot.Quotas.FirstOrDefault(q => q.Snapshot.Provider == ProviderKind.Codex && q.Snapshot.WindowKind.Contains("week", StringComparison.OrdinalIgnoreCase));
@@ -337,7 +337,8 @@ public sealed class MainForm : Form
                 {
                     var reset = codexQuota.Snapshot.ResetAt.Value;
                     var start = reset.AddDays(-7);
-                    _codexCycleNote.Text = $"周期：{start.ToLocalTime():yyyy-MM-dd HH:mm} ~ {reset.ToLocalTime():yyyy-MM-dd HH:mm}";
+                    var rel = TimeFormatter.FormatRelativeFuture(reset);
+                    _codexCycleNote.Text = $"周期：{start.ToLocalTime():yyyy-MM-dd HH:mm} ~ {reset.ToLocalTime():yyyy-MM-dd HH:mm}（{rel}）";
                 }
                 else
                 {
@@ -350,11 +351,11 @@ public sealed class MainForm : Form
             var claudeEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && (e.DisplayName.Contains("Claude", StringComparison.OrdinalIgnoreCase) || e.DisplayName.Contains("3p", StringComparison.OrdinalIgnoreCase)));
 
             string geminiCycle = geminiEst?.ResetAt.HasValue == true
-                ? $"Gemini: {geminiEst.ResetAt.Value.AddDays(-7).ToLocalTime():MM-dd HH:mm}~{geminiEst.ResetAt.Value.ToLocalTime():MM-dd HH:mm}"
+                ? $"Gemini: {geminiEst.ResetAt.Value.AddDays(-7).ToLocalTime():MM-dd HH:mm}~{geminiEst.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{TimeFormatter.FormatRelativeFuture(geminiEst.ResetAt.Value)}）"
                 : "Gemini: 暂无配额";
 
             string claudeCycle = claudeEst?.ResetAt.HasValue == true
-                ? $"Claude: {claudeEst.ResetAt.Value.AddDays(-7).ToLocalTime():MM-dd HH:mm}~{claudeEst.ResetAt.Value.ToLocalTime():MM-dd HH:mm}"
+                ? $"Claude: {claudeEst.ResetAt.Value.AddDays(-7).ToLocalTime():MM-dd HH:mm}~{claudeEst.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{TimeFormatter.FormatRelativeFuture(claudeEst.ResetAt.Value)}）"
                 : "Claude: 暂无配额";
 
             _antigravityCycleNote.Text = $"周期：{geminiCycle} | {claudeCycle}";

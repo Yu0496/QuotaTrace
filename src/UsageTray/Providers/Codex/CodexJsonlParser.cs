@@ -6,7 +6,7 @@ namespace UsageTray.Providers.Codex;
 
 public sealed class CodexJsonlParser
 {
-    public const int ParserVersion = 3;
+    public const int ParserVersion = 4;
 
     private static readonly string[] InputNames = ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "input", "total_input_tokens", "totalInputTokens"];
     private static readonly string[] CachedNames = ["cached_input_tokens", "cachedInputTokens", "cache_read_input_tokens", "cacheReadInputTokens", "cached", "cache_read"];
@@ -95,17 +95,16 @@ public sealed class CodexJsonlParser
 
     private static string? FindSessionId(JsonElement root)
     {
-        var direct = JsonValueReader.FindConversationId(root);
-        if (!string.IsNullOrWhiteSpace(direct)) return direct;
         foreach (var item in JsonValueReader.EnumerateObjects(root))
         {
             if (!JsonValueReader.TryGetString(item, out var type, "type") ||
                 !string.Equals(type, "session_meta", StringComparison.OrdinalIgnoreCase)) continue;
-            if (JsonValueReader.TryGetString(item, out var id, "id", "session_id", "sessionId", "conversation_id", "conversationId")) return id;
             if (JsonValueReader.TryGetProperty(item, out var payload, "payload") &&
-                JsonValueReader.TryGetString(payload, out id, "id", "session_id", "sessionId", "conversation_id", "conversationId")) return id;
+                JsonValueReader.TryGetString(payload, out var id, "id", "session_id", "sessionId", "conversation_id", "conversationId")) return id;
+            if (JsonValueReader.TryGetString(item, out id, "id", "session_id", "sessionId", "conversation_id", "conversationId")) return id;
         }
-        return null;
+
+        return JsonValueReader.FindConversationId(root);
     }
 
     private static bool TryReadTokenEvent(JsonElement root, out ParsedTokenEvent result)
