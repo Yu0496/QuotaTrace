@@ -109,7 +109,7 @@ graph TD
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`CodexProvider`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexProvider.cs) | `src/UsageTray/Providers/Codex/CodexProvider.cs` | 管理 Codex 会话文件扫描、0 变更短路检查、增量/全量解析及快照归一化。 |
-| [`CodexJsonlParser`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexJsonlParser.cs) | `src/UsageTray/Providers/Codex/CodexJsonlParser.cs` | 逐行容错解析 session JSONL，精准区分主会话与子任务 ID，提取 rate_limits 与 Token。 |
+| [`CodexJsonlParser`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexJsonlParser.cs) | `src/UsageTray/Providers/Codex/CodexJsonlParser.cs` | 逐行容错解析 session JSONL，精准区分主会话与子任务 ID，提取标准与 Reserve 独立 rate_limits 与 Token。 |
 | [`CodexUsageNormalizer`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexUsageNormalizer.cs) | `src/UsageTray/Providers/Codex/CodexUsageNormalizer.cs` | 跨文件多分支会话归一化引擎，处理全局累计计数器差分、时间倒序重排与回退 Epoch。 |
 | [`CodexSessionLocator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexSessionLocator.cs) | `src/UsageTray/Providers/Codex/CodexSessionLocator.cs` | 发现 `CODEX_HOME` 及默认 `~/.codex/sessions` 下的活动与归档会话文件。 |
 
@@ -118,8 +118,8 @@ graph TD
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`RefreshCoordinator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/RefreshCoordinator.cs) | `src/UsageTray/Services/RefreshCoordinator.cs` | 刷新主调度器，协调并发锁、增量/全量扫描、价格更新与快照广播。 |
-| [`UsageAggregator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageAggregator.cs) | `src/UsageTray/Services/UsageAggregator.cs` | 聚合引擎，按日期区间/周额度周期汇总 Token、计算 API 等值及缓存命中率。 |
-| [`UsageViews`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageViews.cs) | `src/UsageTray/Services/UsageViews.cs` | 视图数据模型，包含 `DashboardSnapshot`、`ModelUsageView`、`ProjectUsageView` 等。 |
+| [`UsageAggregator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageAggregator.cs) | `src/UsageTray/Services/UsageAggregator.cs` | 聚合引擎，按日期区间/双额度周周期汇总 Token、计算 API 等值及缓存命中率。 |
+| [`UsageViews`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageViews.cs) | `src/UsageTray/Services/UsageViews.cs` | 视图数据模型，包含 `DashboardSnapshot`（支持双池 API 等值与双周周期）、`ModelUsageView`、`ProjectUsageView` 等。 |
 | [`MemoryOptimizer`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/MemoryOptimizer.cs) | `src/UsageTray/Services/MemoryOptimizer.cs` | 执行 LOH 压缩、GC 及 Windows 原生 `SetProcessWorkingSetSize` 深度回收常驻内存。 |
 | [`DiagnosticsService`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/DiagnosticsService.cs) | `src/UsageTray/Services/DiagnosticsService.cs` | 输出提供商状态、数据库统计与解析诊断报告。 |
 | [`ProjectService`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/ProjectService.cs) | `src/UsageTray/Services/ProjectService.cs` | 项目名称别名与路径美化服务。 |

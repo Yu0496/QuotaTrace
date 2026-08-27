@@ -180,7 +180,7 @@ public sealed class PricingService
         {
             "gpt-5.6" or "gpt-5.6-sol*" => new TokenPriceSet(10m, 1m, 12.5m, 45m),
             "gpt-5.6-terra*" => new TokenPriceSet(4m, 0.4m, 5m, 18m),
-            "gpt-5.6-luna*" => new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m),
+            "gpt-5.6-luna*" or "gpt-reserve*" => new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m),
             "gemini-3.1-pro*" or "gemini-pro-default*" or "gemini-pro*" => new TokenPriceSet(4m, 1m, null, 18m),
             "gemini-2.5-pro*" => new TokenPriceSet(2.5m, 0.625m, null, 15m),
             _ => null
@@ -190,7 +190,7 @@ public sealed class PricingService
     }
 
     public static PricingDocument BuiltInDefaults() => new(
-        2, new DateOnly(2026, 8, 20),
+        2, new DateOnly(2026, 8, 27),
         [
             new PricingRule("Codex", "gpt-5.6", MatchMode.Exact, 5m, 0.5m, 6.25m, 30m,
                 "https://developers.openai.com/api/docs/models/gpt-5.6-sol", new DateOnly(2026, 8, 20), true,
@@ -203,6 +203,9 @@ public sealed class PricingService
                 new TokenPriceSet(4m, 0.4m, 5m, 18m)),
             new PricingRule("Codex", "gpt-5.6-luna*", MatchMode.Wildcard, 0.2m, 0.02m, 0.25m, 1.2m,
                 "https://developers.openai.com/api/docs/models/gpt-5.6-luna", new DateOnly(2026, 8, 20), true,
+                new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m)),
+            new PricingRule("Codex", "gpt-reserve*", MatchMode.Wildcard, 0.2m, 0.02m, 0.25m, 1.2m,
+                "https://developers.openai.com/api/docs/models/gpt-5.6-luna", new DateOnly(2026, 8, 27), true,
                 new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m)),
             new PricingRule("Codex", "gpt-5.5*", MatchMode.Wildcard, 5m, 0.5m, null, 30m,
                 "https://developers.openai.com/api/docs/models/gpt-5.5", new DateOnly(2026, 8, 20)),

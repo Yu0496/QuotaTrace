@@ -189,7 +189,11 @@ CREATE TABLE IF NOT EXISTS app_metadata (
         if (!string.Equals(version, DatabaseMigrations.CurrentVersion.ToString(), StringComparison.Ordinal))
         {
             using var mark = connection.CreateCommand();
-            mark.CommandText = "INSERT INTO app_metadata(key,value) VALUES('codex_rebuild_required','1') ON CONFLICT(key) DO UPDATE SET value='1'; INSERT INTO app_metadata(key,value) VALUES('codex_schema_version',$version) ON CONFLICT(key) DO UPDATE SET value=excluded.value;";
+            mark.CommandText = @"
+                DELETE FROM quota_snapshots WHERE provider='Codex' AND source='codex-session-rate-limits';
+                UPDATE source_files SET parser_version = 0 WHERE provider='Codex';
+                INSERT INTO app_metadata(key,value) VALUES('codex_rebuild_required','1') ON CONFLICT(key) DO UPDATE SET value='1';
+                INSERT INTO app_metadata(key,value) VALUES('codex_schema_version',$version) ON CONFLICT(key) DO UPDATE SET value=excluded.value;";
             mark.Parameters.AddWithValue("$version", DatabaseMigrations.CurrentVersion.ToString());
             mark.ExecuteNonQuery();
         }

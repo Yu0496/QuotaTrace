@@ -159,12 +159,21 @@ public sealed class QuotaSummaryControl : UserControl
         }
 
         // Codex Weekly Cycle & Projection
-        if (_snapshot.CodexWeeklyCycle is { } cycle)
+        var codexCycles = _snapshot.CodexWeeklyCycles.Count > 0
+            ? _snapshot.CodexWeeklyCycles
+            : _snapshot.CodexWeeklyCycle != null
+                ? [_snapshot.CodexWeeklyCycle]
+                : [];
+
+        if (codexCycles.Count > 0)
         {
             y += 2;
             y += _boldFont.Height + 3; // "周订阅统计与预估 (本轮 7 天窗口)"
-            y += _regularFont.Height + 3; // 本轮周消耗
-            y += _regularFont.Height + 4; // 周满额预估
+            foreach (var _ in codexCycles)
+            {
+                y += _regularFont.Height + 3; // 本轮周消耗
+                y += _regularFont.Height + 4; // 周满额预估
+            }
         }
 
         y += 6;
@@ -338,20 +347,30 @@ public sealed class QuotaSummaryControl : UserControl
         }
 
         // Codex Weekly Cycle & Projection
-        if (_snapshot.CodexWeeklyCycle is { } cycle)
+        var codexCycles = _snapshot.CodexWeeklyCycles.Count > 0
+            ? _snapshot.CodexWeeklyCycles
+            : _snapshot.CodexWeeklyCycle != null
+                ? [_snapshot.CodexWeeklyCycle]
+                : [];
+
+        if (codexCycles.Count > 0)
         {
             y += 2;
             using var subHeaderBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
             g.DrawString("周订阅统计与预估 (本轮 7 天窗口)", _boldFont, subHeaderBrush, padX + 8, y);
             y += _boldFont.Height + 3;
 
-            var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : "未知";
-            var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
-            var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : "待产生消耗后推算";
-            var codexResetNote = cycle.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(cycle.ResetAt.Value)}）" : string.Empty;
+            foreach (var cycle in codexCycles)
+            {
+                var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : "未知";
+                var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
+                var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : "待产生消耗后推算";
+                var codexResetNote = cycle.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(cycle.ResetAt.Value)}）" : string.Empty;
+                var poolPrefix = codexCycles.Count > 1 ? $"{cycle.PoolName} " : string.Empty;
 
-            DrawKeyValueHighlight(g, padX + 16, ref y, "本轮周消耗", cycleCostText, $"（已消耗 {usedText}）{codexResetNote}", Color.FromArgb(37, 99, 235));
-            DrawKeyValueHighlight(g, padX + 16, ref y, "周满额预估", estCostText, "（按当前用量推算满额价值）", Color.FromArgb(5, 150, 105));
+                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}本轮周消耗", cycleCostText, $"（已消耗 {usedText}）{codexResetNote}", Color.FromArgb(37, 99, 235));
+                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}周满额预估", estCostText, "（按当前用量推算满额价值）", Color.FromArgb(5, 150, 105));
+            }
         }
 
         y += 6;
@@ -372,7 +391,7 @@ public sealed class QuotaSummaryControl : UserControl
             using var noteBrush = new SolidBrush(Color.FromArgb(160, 174, 192));
             g.DrawString("• Antigravity 额度通过本地官方 Language Server API 实时获取，不参与 API 等值折算。", _smallFont, noteBrush, padX, y);
             y += _smallFont.Height + 3;
-            g.DrawString("• Codex 额度通过 Session 产生的 rate_limits 事件记录提取；周满额预估根据本轮实际消耗推算。", _smallFont, noteBrush, padX, y);
+            g.DrawString("• Codex 额度通过 Session 产生的 rate_limits 事件记录提取；支持标准周额度与 Reserve 备用额度的双池统计。", _smallFont, noteBrush, padX, y);
         }
     }
 

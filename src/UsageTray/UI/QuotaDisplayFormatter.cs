@@ -36,8 +36,9 @@ internal static class QuotaDisplayFormatter
         var codexQuota = snapshot.Quotas
             .Where(item => item.Snapshot.Provider == ProviderKind.Codex)
             .Select(item => item.Snapshot).ToList();
-        var codexWeekly = codexQuota.Where(IsWeekly).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
+        var codexWeekly = codexQuota.Where(s => IsWeekly(s) && !IsReserve(s)).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
         var codex5h = codexQuota.Where(IsFiveHour).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
+        var codexReserve = codexQuota.Where(IsReserve).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
 
         string codexText;
         if (codexWeekly != null)
@@ -57,6 +58,15 @@ internal static class QuotaDisplayFormatter
             {
                 codexText = FormatCompact(codexWeekly);
             }
+
+            if (codexReserve != null && codexReserve.RemainingFraction.HasValue)
+            {
+                codexText += $" (备用 {FormatCompact(codexReserve)})";
+            }
+        }
+        else if (codexReserve != null)
+        {
+            codexText = $"备用 {FormatCompactWithResetOnZero(codexReserve)}";
         }
         else if (codex5h != null)
         {
@@ -182,13 +192,20 @@ internal static class QuotaDisplayFormatter
             lines.Add("暂无可用 quota 快照（当前 session 未写入 rate_limits）");
         }
 
-        if (snapshot.CodexWeeklyCycle is { } cycle)
+        var codexCycles = snapshot.CodexWeeklyCycles.Count > 0
+            ? snapshot.CodexWeeklyCycles
+            : snapshot.CodexWeeklyCycle != null
+                ? [snapshot.CodexWeeklyCycle]
+                : [];
+
+        foreach (var cycle in codexCycles)
         {
             var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : "未知";
             var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
             var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : "待产生消耗后推算";
-            lines.Add($"本轮周消耗：{cycleCostText}（已消耗 {usedText}）");
-            lines.Add($"周满额预估：{estCostText}");
+            var prefix = codexCycles.Count > 1 ? $"{cycle.PoolName} " : string.Empty;
+            lines.Add($"{prefix}本轮周消耗：{cycleCostText}（已消耗 {usedText}）");
+            lines.Add($"{prefix}周满额预估：{estCostText}");
         }
 
         if (models.Count > 0)
@@ -232,6 +249,10 @@ internal static class QuotaDisplayFormatter
         string.Equals(snapshot.DisplayLabel, snapshot.ModelOrPoolId, StringComparison.OrdinalIgnoreCase)
         ? snapshot.ModelOrPoolId
         : snapshot.DisplayLabel;
+
+    private static bool IsReserve(QuotaSnapshot snapshot) =>
+        snapshot.ModelOrPoolId.Contains("reserve", StringComparison.OrdinalIgnoreCase) ||
+        snapshot.DisplayLabel.Contains("reserve", StringComparison.OrdinalIgnoreCase);
 
     private static decimal? GetKnownCost(IReadOnlyList<ModelUsageView> models) =>
         models.Count > 0 && models.All(item => item.ApiEquivalentUsd.HasValue)

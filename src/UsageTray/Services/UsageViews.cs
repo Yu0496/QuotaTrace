@@ -38,7 +38,9 @@ public sealed record CodexCycleUsageView(
     long CycleCachedTokens,
     long CycleCacheCreationTokens,
     long CycleOutputTokens,
-    CostQuality CostQuality)
+    CostQuality CostQuality,
+    string PoolName = "标准额度",
+    string PoolCategory = "standard")
 {
     public long NonCachedInputTokens => Math.Max(0, CycleInputTokens - CycleCachedTokens - CycleCacheCreationTokens);
     public long TotalTokens => NonCachedInputTokens + CycleCachedTokens + CycleCacheCreationTokens + CycleOutputTokens;
@@ -55,6 +57,8 @@ public sealed record DashboardSnapshot
     public DateTimeOffset? WindowEndUtc { get; init; }
     public decimal? ApiEquivalentUsd { get; init; }
     public decimal? CodexApiEquivalentUsd { get; init; }
+    public decimal? CodexStandardApiEquivalentUsd { get; init; }
+    public decimal? CodexReserveApiEquivalentUsd { get; init; }
     public decimal? AntigravityApiEquivalentUsd { get; init; }
     public decimal? AntigravityGeminiApiEquivalentUsd { get; init; }
     public decimal? AntigravityClaudeApiEquivalentUsd { get; init; }
@@ -72,6 +76,8 @@ public sealed record DashboardSnapshot
     public CostQuality CostQuality { get; init; } = CostQuality.Unavailable;
     public DateTimeOffset? CoverageStart { get; init; }
     public CodexCycleUsageView? CodexWeeklyCycle { get; init; }
+    public CodexCycleUsageView? CodexReserveWeeklyCycle { get; init; }
+    public IReadOnlyList<CodexCycleUsageView> CodexWeeklyCycles { get; init; } = [];
     public IReadOnlyList<AntigravityQuotaEstimate> AntigravityEstimates { get; init; } = [];
     public IReadOnlyList<DailyUsageView> Daily { get; init; } = [];
     public IReadOnlyList<ModelUsageView> Models { get; init; } = [];

@@ -60,6 +60,20 @@
     },
     {
       "provider": "Codex",
+      "modelPattern": "gpt-reserve*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-08-27",
+      "cacheSplitValidated": true,
+      "longContextPrice": { "inputPerMillionUsd": 0.4, "cacheReadPerMillionUsd": 0.04, "cacheWritePerMillionUsd": 0.5, "outputPerMillionUsd": 1.8 },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
       "modelPattern": "gpt-5.5*",
       "matchMode": "Wildcard",
       "inputPerMillionUsd": 5.0,

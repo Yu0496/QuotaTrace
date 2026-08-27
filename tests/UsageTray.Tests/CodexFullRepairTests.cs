@@ -263,7 +263,7 @@ INSERT INTO file_usage(provider,source_path,local_date,project_key,model_id,inpu
         using var database = new UsageDatabase(path);
         var repository = new UsageRepository(database);
         Assert.Equal("1", repository.GetFlag("codex_rebuild_required"));
-        Assert.Equal("3", repository.GetFlag("codex_schema_version"));
+        Assert.Equal(DatabaseMigrations.CurrentVersion.ToString(), repository.GetFlag("codex_schema_version"));
         Assert.Equal(999, repository.GetUsage(new DateRange(new DateOnly(2026, 8, 20), new DateOnly(2026, 8, 20)), ProviderKind.Codex).Sum(item => item.InputTokens));
     }
 

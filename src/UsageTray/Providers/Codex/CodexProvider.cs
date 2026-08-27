@@ -46,8 +46,14 @@ public sealed class CodexProvider : IUsageProvider
         var warnings = new List<string>(discovery.Warnings);
         var quotas = new List<QuotaSnapshot>();
         var forceRebuild = context.ForceFullScan || string.Equals(context.Repository.GetFlag("codex_rebuild_required"), "1", StringComparison.Ordinal);
+        var sourcePaths = context.Repository.GetSourcePaths(ProviderKind.Codex);
+        if (!forceRebuild)
+        {
+            forceRebuild = sourcePaths.Any(path => context.Repository.GetSourceFile(ProviderKind.Codex, path)?.ParserVersion != CodexJsonlParser.ParserVersion);
+        }
         if (forceRebuild)
         {
+            context.Repository.DeleteCodexSessionQuotas();
             var before = context.Repository.GetUsage(new DateRange(DateOnly.MinValue, DateOnly.MaxValue), ProviderKind.Codex);
             context.Repository.SetFlag("codex_rebuild_before_json", JsonSerializer.Serialize(new
             {
@@ -57,11 +63,6 @@ public sealed class CodexProvider : IUsageProvider
                 outputTokens = before.Sum(item => item.OutputTokens),
                 costQuality = before.Count == 0 ? null : before.Max(item => item.CostQuality).ToString()
             }));
-        }
-        var sourcePaths = context.Repository.GetSourcePaths(ProviderKind.Codex);
-        if (!forceRebuild)
-        {
-            forceRebuild = sourcePaths.Any(path => context.Repository.GetSourceFile(ProviderKind.Codex, path)?.ParserVersion != CodexJsonlParser.ParserVersion);
         }
 
         var modifiedFilesCount = 0;
@@ -110,7 +111,7 @@ public sealed class CodexProvider : IUsageProvider
                 quotas.AddRange(context.Repository.GetLatestQuotas(ProviderKind.Codex));
                 return Task.FromResult(new ProviderRefreshResult(
                     existingUsage,
-                    quotas.DistinctBy(item => $"{item.WindowKind}|{item.CapturedAt:O}").ToList(),
+                    quotas.DistinctBy(item => $"{item.ModelOrPoolId}_{item.WindowKind}|{item.CapturedAt:O}").ToList(),
                     warnings,
                     DateTimeOffset.UtcNow));
             }
@@ -160,7 +161,7 @@ public sealed class CodexProvider : IUsageProvider
             context.Repository.SetFlag("codex_rebuild_required", "0");
 
         quotas.AddRange(context.Repository.GetLatestQuotas(ProviderKind.Codex));
-        return Task.FromResult(new ProviderRefreshResult(normalized.Buckets, quotas.DistinctBy(item => $"{item.WindowKind}|{item.CapturedAt:O}").ToList(),
+        return Task.FromResult(new ProviderRefreshResult(normalized.Buckets, quotas.DistinctBy(item => $"{item.ModelOrPoolId}_{item.WindowKind}|{item.CapturedAt:O}").ToList(),
             warnings.Concat(normalized.Warnings).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), DateTimeOffset.UtcNow));
     }
 }

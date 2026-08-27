@@ -6,7 +6,7 @@ namespace UsageTray.Providers.Codex;
 
 public sealed class CodexJsonlParser
 {
-    public const int ParserVersion = 4;
+    public const int ParserVersion = 5;
 
     private static readonly string[] InputNames = ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "input", "total_input_tokens", "totalInputTokens"];
     private static readonly string[] CachedNames = ["cached_input_tokens", "cachedInputTokens", "cache_read_input_tokens", "cacheReadInputTokens", "cached", "cache_read"];
@@ -21,8 +21,7 @@ public sealed class CodexJsonlParser
     public CodexParseResult ParseFile(string path)
     {
         var snapshots = new List<CodexTokenSnapshot>();
-        Dictionary<string, QuotaSnapshot>? latestQuotas = null;
-        DateTimeOffset? latestQuotaTime = null;
+        var latestQuotas = new Dictionary<string, (DateTimeOffset Time, QuotaSnapshot Snapshot)>(StringComparer.OrdinalIgnoreCase);
         var warnings = new List<string>();
         string? sessionId = null;
         string? projectPath = null;
@@ -54,13 +53,16 @@ public sealed class CodexJsonlParser
                     var timestamp = JsonValueReader.FindTimestamp(root) ?? File.GetLastWriteTimeUtc(path);
                     coverageStart = coverageStart is null || timestamp < coverageStart ? timestamp : coverageStart;
                     planTier ??= JsonValueReader.FindString(root, "plan_type", "planType", "plan_tier", "planTier");
-                    var extractedQuotas = ExtractRateLimits(root, timestamp, planTier);
+                    var extractedQuotas = ExtractRateLimits(root, timestamp, planTier, model ?? lastModel);
                     if (extractedQuotas is { Count: > 0 })
                     {
-                        if (latestQuotaTime is null || timestamp >= latestQuotaTime)
+                        foreach (var kvp in extractedQuotas)
                         {
-                            latestQuotas = extractedQuotas;
-                            latestQuotaTime = timestamp;
+                            var quotaKey = $"{kvp.Value.ModelOrPoolId}_{kvp.Value.WindowKind}";
+                            if (!latestQuotas.TryGetValue(quotaKey, out var existing) || timestamp >= existing.Time)
+                            {
+                                latestQuotas[quotaKey] = (timestamp, kvp.Value);
+                            }
                         }
                     }
 
@@ -87,7 +89,7 @@ public sealed class CodexJsonlParser
         var normalized = _normalizer.Normalize(snapshots);
         warnings.AddRange(normalized.Warnings);
         warningCount += normalized.Warnings.Count;
-        var quotaList = latestQuotas?.Values.OrderBy(item => item.WindowKind).ToList() ?? [];
+        var quotaList = latestQuotas.Values.Select(v => v.Snapshot).OrderBy(item => item.ModelOrPoolId).ThenBy(item => item.WindowKind).ToList();
         return new CodexParseResult(normalized.Buckets, sessionId, ProjectResolver.Normalize(projectPath), lastModel,
             warningCount, snapshots.Count > 0, coverageStart, warnings,
             quotaList, snapshots, normalized);
@@ -172,23 +174,56 @@ public sealed class CodexJsonlParser
     private static CodexRequestUsage ToRequestUsage(CodexCumulativeUsage usage) =>
         new(usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, usage.CacheWriteInputTokens, usage.ReasoningOutputTokens);
 
-    private static Dictionary<string, QuotaSnapshot>? ExtractRateLimits(JsonElement root, DateTimeOffset capturedAt, string? planTier)
+    private static Dictionary<string, QuotaSnapshot>? ExtractRateLimits(JsonElement root, DateTimeOffset capturedAt, string? planTier, string? currentModel)
     {
         Dictionary<string, QuotaSnapshot>? result = null;
+        var isReserveModel = currentModel?.Contains("reserve", StringComparison.OrdinalIgnoreCase) == true;
+
         foreach (var item in JsonValueReader.EnumerateObjects(root))
         {
             if (!JsonValueReader.TryGetProperty(item, out var rateLimits, "rate_limits", "rateLimits") || rateLimits.ValueKind != JsonValueKind.Object) continue;
             result ??= new Dictionary<string, QuotaSnapshot>(StringComparer.OrdinalIgnoreCase);
-            foreach (var windowName in new[] { "primary", "secondary" })
+
+            var isReserve = isReserveModel;
+            if (!isReserve)
             {
-                if (!JsonValueReader.TryGetProperty(rateLimits, out var window, windowName) || window.ValueKind != JsonValueKind.Object) continue;
-                var usedPercent = JsonValueReader.GetDouble(window, "used_percent", "usedPercent");
-                if (!usedPercent.HasValue || usedPercent.Value is < 0 or > 100) continue;
-                var minutes = JsonValueReader.GetLong(window, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
-                var kind = ClassifyWindow(windowName, minutes);
-                var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, $"codex-{kind}", $"Codex {kind}",
-                    1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), kind, "codex-session-rate-limits", planTier);
-                result[kind] = snapshot;
+                var hasSecondary = JsonValueReader.TryGetProperty(rateLimits, out var sec, "secondary") && sec.ValueKind == JsonValueKind.Object && sec.EnumerateObject().Any();
+                if (!hasSecondary && JsonValueReader.TryGetProperty(rateLimits, out var prim, "primary") && prim.ValueKind == JsonValueKind.Object)
+                {
+                    var primMins = JsonValueReader.GetLong(prim, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
+                    if (primMins >= 10000)
+                    {
+                        isReserve = true;
+                    }
+                }
+            }
+
+            if (isReserve)
+            {
+                if (JsonValueReader.TryGetProperty(rateLimits, out var window, "primary") && window.ValueKind == JsonValueKind.Object)
+                {
+                    var usedPercent = JsonValueReader.GetDouble(window, "used_percent", "usedPercent");
+                    if (usedPercent.HasValue && usedPercent.Value is >= 0 and <= 100)
+                    {
+                        var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, "codex-reserve", "Codex Reserve",
+                            1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), "weekly", "codex-session-rate-limits", planTier);
+                        result["codex-reserve"] = snapshot;
+                    }
+                }
+            }
+            else
+            {
+                foreach (var windowName in new[] { "primary", "secondary" })
+                {
+                    if (!JsonValueReader.TryGetProperty(rateLimits, out var window, windowName) || window.ValueKind != JsonValueKind.Object) continue;
+                    var usedPercent = JsonValueReader.GetDouble(window, "used_percent", "usedPercent");
+                    if (!usedPercent.HasValue || usedPercent.Value is < 0 or > 100) continue;
+                    var minutes = JsonValueReader.GetLong(window, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
+                    var kind = ClassifyWindow(windowName, minutes);
+                    var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, $"codex-{kind}", $"Codex {kind}",
+                        1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), kind, "codex-session-rate-limits", planTier);
+                    result[kind] = snapshot;
+                }
             }
         }
         return result;

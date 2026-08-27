@@ -35,8 +35,14 @@ public sealed class UsageAggregator
 
         if (isWeeklyCycle)
         {
-            var codexWeekly = quotas
-                .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsWeekly(q.Snapshot))
+            var codexStandardWeekly = quotas
+                .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsWeekly(q.Snapshot) && !IsReserveSnapshot(q.Snapshot))
+                .Select(q => q.Snapshot)
+                .OrderByDescending(q => q.CapturedAt)
+                .FirstOrDefault();
+
+            var codexReserveWeekly = quotas
+                .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsReserveSnapshot(q.Snapshot))
                 .Select(q => q.Snapshot)
                 .OrderByDescending(q => q.CapturedAt)
                 .FirstOrDefault();
@@ -71,16 +77,31 @@ public sealed class UsageAggregator
 
             if (provider == ProviderKind.Codex)
             {
-                if (codexWeekly?.ResetAt.HasValue == true)
+                DateTimeOffset? codexStart = null;
+                DateTimeOffset? codexEnd = null;
+                var weeklyCandidate = codexStandardWeekly ?? codexReserveWeekly;
+                if (weeklyCandidate?.ResetAt.HasValue == true)
                 {
-                    var resetAt = codexWeekly.ResetAt.Value;
+                    var resetAt = weeklyCandidate.ResetAt.Value;
                     var cycleStart = resetAt.AddDays(-7);
-                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = codexWeekly.CapturedAt.AddDays(-7);
-                    cycleBuckets.AddRange(_repository.GetCodexUsageInUtcWindow(cycleStart, resetAt));
-                    windowStartUtc = cycleStart;
-                    windowEndUtc = resetAt;
-                    rangeDisplayOverride = $"Codex 本次周额度（{cycleStart.ToLocalTime():yyyy-MM-dd HH:mm} 至 {resetAt.ToLocalTime():yyyy-MM-dd HH:mm}）";
-                    range = new DateRange(DateOnly.FromDateTime(cycleStart.ToLocalTime().DateTime), DateOnly.FromDateTime(DateTime.Now));
+                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = weeklyCandidate.CapturedAt.AddDays(-7);
+                    codexStart = cycleStart;
+                    codexEnd = resetAt;
+
+                    if (codexReserveWeekly?.ResetAt.HasValue == true)
+                    {
+                        var resReset = codexReserveWeekly.ResetAt.Value;
+                        var resStart = resReset.AddDays(-7);
+                        if (resStart > DateTimeOffset.UtcNow) resStart = codexReserveWeekly.CapturedAt.AddDays(-7);
+                        codexStart = codexStart.HasValue ? (resStart < codexStart.Value ? resStart : codexStart.Value) : resStart;
+                        codexEnd = codexEnd.HasValue ? (resReset > codexEnd.Value ? resReset : codexEnd.Value) : resReset;
+                    }
+
+                    cycleBuckets.AddRange(_repository.GetCodexUsageInUtcWindow(codexStart.Value, codexEnd.Value));
+                    windowStartUtc = codexStart;
+                    windowEndUtc = codexEnd;
+                    rangeDisplayOverride = $"Codex 本次周额度（{codexStart.Value.ToLocalTime():yyyy-MM-dd HH:mm} 至 {codexEnd.Value.ToLocalTime():yyyy-MM-dd HH:mm}）";
+                    range = new DateRange(DateOnly.FromDateTime(codexStart.Value.ToLocalTime().DateTime), DateOnly.FromDateTime(DateTime.Now));
                 }
                 else
                 {
@@ -118,11 +139,12 @@ public sealed class UsageAggregator
                 DateTimeOffset? earliestStart = null;
                 DateTimeOffset? latestEnd = null;
 
-                if (codexWeekly?.ResetAt.HasValue == true)
+                var weeklyCandidate = codexStandardWeekly ?? codexReserveWeekly;
+                if (weeklyCandidate?.ResetAt.HasValue == true)
                 {
-                    var resetAt = codexWeekly.ResetAt.Value;
+                    var resetAt = weeklyCandidate.ResetAt.Value;
                     var cycleStart = resetAt.AddDays(-7);
-                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = codexWeekly.CapturedAt.AddDays(-7);
+                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = weeklyCandidate.CapturedAt.AddDays(-7);
                     cycleBuckets.AddRange(_repository.GetCodexUsageInUtcWindow(cycleStart, resetAt));
                     earliestStart = cycleStart;
                     latestEnd = resetAt;
@@ -181,6 +203,10 @@ public sealed class UsageAggregator
                 .Where(value => value.HasValue).Select(value => value!.Value).OrderBy(value => value).FirstOrDefault();
         var codexBuckets = buckets.Where(b => b.Provider == ProviderKind.Codex).ToList();
         var codexCost = codexBuckets.Count > 0 ? _pricing.CalculateAggregate(codexBuckets).PricedCostUsd : 0m;
+        var codexStandardBuckets = codexBuckets.Where(b => !IsCodexReserveModel(b.ModelId)).ToList();
+        var codexStandardCost = codexStandardBuckets.Count > 0 ? _pricing.CalculateAggregate(codexStandardBuckets).PricedCostUsd : 0m;
+        var codexReserveBuckets = codexBuckets.Where(b => IsCodexReserveModel(b.ModelId)).ToList();
+        var codexReserveCost = codexReserveBuckets.Count > 0 ? _pricing.CalculateAggregate(codexReserveBuckets).PricedCostUsd : 0m;
 
         var agBuckets = buckets.Where(b => b.Provider == ProviderKind.Antigravity).ToList();
         var agCost = agBuckets.Count > 0 ? _pricing.CalculateAggregate(agBuckets).PricedCostUsd : 0m;
@@ -189,7 +215,10 @@ public sealed class UsageAggregator
         var agClaudeBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) != "gemini").ToList();
         var agClaudeCost = agClaudeBuckets.Count > 0 ? _pricing.CalculateAggregate(agClaudeBuckets).PricedCostUsd : 0m;
 
-        var codexWeeklyCycle = BuildCodexWeeklyCycle(quotas, warnings);
+        var (codexWeeklyCycle, codexReserveCycle) = BuildCodexWeeklyCycles(quotas, warnings);
+        var codexWeeklyCycles = new List<CodexCycleUsageView>();
+        if (codexWeeklyCycle != null) codexWeeklyCycles.Add(codexWeeklyCycle);
+        if (codexReserveCycle != null) codexWeeklyCycles.Add(codexReserveCycle);
         var antigravityEstimates = BuildAntigravityEstimates(quotas);
 
 
@@ -203,6 +232,8 @@ public sealed class UsageAggregator
             WindowEndUtc = windowEndUtc,
             ApiEquivalentUsd = aggregate.PricedCostUsd,
             CodexApiEquivalentUsd = codexCost,
+            CodexStandardApiEquivalentUsd = codexStandardCost,
+            CodexReserveApiEquivalentUsd = codexReserveCost,
             AntigravityApiEquivalentUsd = agCost,
             AntigravityGeminiApiEquivalentUsd = agGeminiCost,
             AntigravityClaudeApiEquivalentUsd = agClaudeCost,
@@ -214,6 +245,8 @@ public sealed class UsageAggregator
             CostQuality = aggregate.Quality,
             CoverageStart = coverage == default ? null : coverage,
             CodexWeeklyCycle = codexWeeklyCycle,
+            CodexReserveWeeklyCycle = codexReserveCycle,
+            CodexWeeklyCycles = codexWeeklyCycles,
             AntigravityEstimates = antigravityEstimates,
             Daily = daily,
             Models = models,
@@ -246,16 +279,29 @@ public sealed class UsageAggregator
         }
     }
 
-
-    private CodexCycleUsageView? BuildCodexWeeklyCycle(IReadOnlyList<QuotaView> quotas, HashSet<string> warnings)
+    private (CodexCycleUsageView? Standard, CodexCycleUsageView? Reserve) BuildCodexWeeklyCycles(IReadOnlyList<QuotaView> quotas, HashSet<string> warnings)
     {
-        var weeklyQuota = quotas
-            .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsWeekly(q.Snapshot))
+        var standardQuota = quotas
+            .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsWeekly(q.Snapshot) && !IsReserveSnapshot(q.Snapshot))
             .Select(q => q.Snapshot)
             .OrderByDescending(q => q.CapturedAt)
             .FirstOrDefault();
 
-        if (weeklyQuota == null || !weeklyQuota.ResetAt.HasValue) return null;
+        var reserveQuota = quotas
+            .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsReserveSnapshot(q.Snapshot))
+            .Select(q => q.Snapshot)
+            .OrderByDescending(q => q.CapturedAt)
+            .FirstOrDefault();
+
+        var standardCycle = standardQuota != null ? BuildSingleCodexCycle(standardQuota, false, warnings) : null;
+        var reserveCycle = reserveQuota != null ? BuildSingleCodexCycle(reserveQuota, true, warnings) : null;
+
+        return (standardCycle, reserveCycle);
+    }
+
+    private CodexCycleUsageView? BuildSingleCodexCycle(QuotaSnapshot weeklyQuota, bool isReserve, HashSet<string> warnings)
+    {
+        if (!weeklyQuota.ResetAt.HasValue) return null;
 
         var resetAt = weeklyQuota.ResetAt.Value;
         var cycleStart = resetAt.AddDays(-7);
@@ -264,7 +310,8 @@ public sealed class UsageAggregator
             cycleStart = weeklyQuota.CapturedAt.AddDays(-7);
         }
 
-        var buckets = _repository.GetCodexUsageInUtcWindow(cycleStart, resetAt);
+        var allBuckets = _repository.GetCodexUsageInUtcWindow(cycleStart, resetAt);
+        var buckets = allBuckets.Where(b => isReserve ? IsCodexReserveModel(b.ModelId) : !IsCodexReserveModel(b.ModelId)).ToList();
         var cost = _pricing.CalculateAggregate(buckets);
         foreach (var warning in cost.Warnings) warnings.Add(warning);
 
@@ -288,8 +335,17 @@ public sealed class UsageAggregator
             buckets.Sum(b => b.CachedInputTokens),
             buckets.Sum(b => b.CacheWriteInputTokens),
             buckets.Sum(b => b.OutputTokens),
-            cost.Quality);
+            cost.Quality,
+            isReserve ? "Codex Reserve" : "Codex 标准额度",
+            isReserve ? "reserve" : "standard");
     }
+
+    public static bool IsCodexReserveModel(string? modelId) =>
+        modelId?.Contains("reserve", StringComparison.OrdinalIgnoreCase) == true;
+
+    public static bool IsReserveSnapshot(QuotaSnapshot snapshot) =>
+        snapshot.ModelOrPoolId.Contains("reserve", StringComparison.OrdinalIgnoreCase) ||
+        snapshot.DisplayLabel.Contains("reserve", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsWeekly(QuotaSnapshot snapshot)
     {

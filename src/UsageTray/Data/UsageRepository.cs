@@ -600,14 +600,38 @@ public sealed class UsageRepository
         transaction.Commit();
     }
 
+    public void DeleteCodexSessionQuotas()
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM quota_snapshots WHERE provider=$provider AND source='codex-session-rate-limits'";
+        command.Parameters.AddWithValue("$provider", ProviderKind.Codex.ToStorageString());
+        command.ExecuteNonQuery();
+    }
+
     public IReadOnlyList<QuotaSnapshot> GetLatestQuotas(ProviderKind provider)
     {
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
-        command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
-            q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
-            WHERE q.provider=$provider AND q.captured_at_utc=(SELECT MAX(captured_at_utc) FROM quota_snapshots WHERE provider=$provider)
-            ORDER BY q.model_or_pool_id,q.window_kind";
+        if (provider == ProviderKind.Codex)
+        {
+            command.CommandText = @"
+                SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
+                    q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
+                WHERE q.provider=$provider AND (
+                    (q.model_or_pool_id != 'codex-reserve' AND q.captured_at_utc=(SELECT MAX(captured_at_utc) FROM quota_snapshots WHERE provider=$provider AND model_or_pool_id != 'codex-reserve'))
+                    OR
+                    (q.model_or_pool_id = 'codex-reserve' AND q.captured_at_utc=(SELECT MAX(captured_at_utc) FROM quota_snapshots WHERE provider=$provider AND model_or_pool_id = 'codex-reserve'))
+                )
+                ORDER BY q.model_or_pool_id,q.window_kind";
+        }
+        else
+        {
+            command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
+                q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
+                WHERE q.provider=$provider AND q.captured_at_utc=(SELECT MAX(captured_at_utc) FROM quota_snapshots WHERE provider=$provider)
+                ORDER BY q.model_or_pool_id,q.window_kind";
+        }
         command.Parameters.AddWithValue("$provider", provider.ToStorageString());
         using var reader = command.ExecuteReader();
         var list = new List<QuotaSnapshot>();
@@ -618,7 +642,7 @@ public sealed class UsageRepository
                 reader.GetString(6), reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8)));
         }
         return list
-            .GroupBy(item => provider == ProviderKind.Codex ? item.WindowKind : $"{item.ModelOrPoolId}_{item.WindowKind}")
+            .GroupBy(item => provider == ProviderKind.Codex ? (item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase) ? "reserve" : item.WindowKind) : $"{item.ModelOrPoolId}_{item.WindowKind}")
             .Select(group => group.OrderByDescending(item => item.CapturedAt).First())
             .ToList();
     }

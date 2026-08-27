@@ -317,7 +317,12 @@ public sealed class MainForm : Form
         if (IsDisposed) return;
         if (InvokeRequired) { BeginInvoke(() => ApplySnapshot(snapshot)); return; }
         
-        _codexApiValue.Text = snapshot.CodexApiEquivalentUsd.HasValue ? $"Codex: ${snapshot.CodexApiEquivalentUsd.Value:0.00}" : "Codex: $0.00";
+        var codexStdCost = snapshot.CodexStandardApiEquivalentUsd ?? snapshot.CodexApiEquivalentUsd ?? 0m;
+        var codexResCost = snapshot.CodexReserveApiEquivalentUsd ?? 0m;
+        var hasReserveActivity = codexResCost > 0 || snapshot.CodexReserveWeeklyCycle != null || snapshot.Quotas.Any(q => q.Snapshot.Provider == ProviderKind.Codex && UsageAggregator.IsReserveSnapshot(q.Snapshot));
+        _codexApiValue.Text = hasReserveActivity
+            ? $"Codex: ${codexStdCost:0.00} | ${codexResCost:0.00}"
+            : $"Codex: ${codexStdCost:0.00}";
         var geminiCost = snapshot.AntigravityGeminiApiEquivalentUsd ?? 0m;
         var claudeCost = snapshot.AntigravityClaudeApiEquivalentUsd ?? 0m;
         _antigravityApiValue.Text = $"Antigravity: ${geminiCost:0.00} | ${claudeCost:0.00}";
@@ -325,10 +330,23 @@ public sealed class MainForm : Form
         if (snapshot.IsWeeklyCycleWindow)
         {
             // Codex 周期
-            if (snapshot.CodexWeeklyCycle is { } cwc && cwc.CycleStart != default && cwc.ResetAt.HasValue)
+            var stdCycle = snapshot.CodexWeeklyCycle;
+            var resCycle = snapshot.CodexReserveWeeklyCycle;
+            if (stdCycle is { ResetAt: not null } && resCycle is { ResetAt: not null })
             {
-                var rel = TimeFormatter.FormatRelativeFuture(cwc.ResetAt.Value);
-                _codexCycleNote.Text = $"周期：{cwc.CycleStart.ToLocalTime():yyyy-MM-dd HH:mm} ~ {cwc.ResetAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}（{rel}）";
+                var stdRel = TimeFormatter.FormatRelativeFuture(stdCycle.ResetAt.Value);
+                var resRel = TimeFormatter.FormatRelativeFuture(resCycle.ResetAt.Value);
+                _codexCycleNote.Text = $"标准: {stdCycle.CycleStart.ToLocalTime():MM-dd HH:mm}~{stdCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{stdRel}） | Reserve: {resCycle.CycleStart.ToLocalTime():MM-dd HH:mm}~{resCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{resRel}）";
+            }
+            else if (stdCycle is { ResetAt: not null })
+            {
+                var rel = TimeFormatter.FormatRelativeFuture(stdCycle.ResetAt.Value);
+                _codexCycleNote.Text = $"周期：{stdCycle.CycleStart.ToLocalTime():yyyy-MM-dd HH:mm} ~ {stdCycle.ResetAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}（{rel}）";
+            }
+            else if (resCycle is { ResetAt: not null })
+            {
+                var rel = TimeFormatter.FormatRelativeFuture(resCycle.ResetAt.Value);
+                _codexCycleNote.Text = $"Reserve周期：{resCycle.CycleStart.ToLocalTime():yyyy-MM-dd HH:mm} ~ {resCycle.ResetAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}（{rel}）";
             }
             else
             {
