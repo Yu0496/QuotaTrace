@@ -60,7 +60,8 @@ graph TD
 | [`ProviderKind`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/ProviderKind.cs) | `src/UsageTray/Core/ProviderKind.cs` | 提供商枚举（`Codex`、`Antigravity`）及其存储转换。 |
 | [`TokenUsage`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/TokenUsage.cs) | `src/UsageTray/Core/TokenUsage.cs` | 记录 Input、CacheRead、CacheWrite、Output、ThinkingOutput、长上下文等 Token 明细。 |
 | [`UsageBucket`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/UsageBucket.cs) | `src/UsageTray/Core/UsageBucket.cs` | 聚合维度的核心用量桶（Provider/Model/Project/Date），承载 Token 统计与 API 等值计算。 |
-| [`QuotaSnapshot`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/QuotaSnapshot.cs) | `src/UsageTray/Core/QuotaSnapshot.cs` | 配额快照模型，记录 5 小时与周配额比例、重置时间戳及配额组名称。 |
+| [`QuotaSnapshot`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/QuotaSnapshot.cs) | `src/UsageTray/Core/QuotaSnapshot.cs` | 配额快照模型，记录 5 小时与周配额比例、重置时间戳、过期状态（`IsResetPassed`）及乐观满额推断（`EffectiveRemainingFraction`）。 |
+
 | [`PricingRule`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/PricingRule.cs) | `src/UsageTray/Core/PricingRule.cs` | 单个模型的定价规则定义（输入、缓存读、缓存写、输出单价、长上下文阶梯及核验日期）。 |
 | [`DateRange`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/DateRange.cs) | `src/UsageTray/Core/DateRange.cs` | 时间范围区间（今天、7天、30天、本月、全部、本次周额度、自定义区间）。 |
 | [`DataQuality`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/DataQuality.cs) | `src/UsageTray/Core/DataQuality.cs` | 数据质量与可信度标志（`Exact`、`PricingMissing`、`CacheWriteUnavailable` 等）。 |

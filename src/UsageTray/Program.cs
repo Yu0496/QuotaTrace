@@ -15,12 +15,13 @@ internal static class Program
         if (args.Any(arg => string.Equals(arg, "--rebuild-codex", StringComparison.OrdinalIgnoreCase)))
             return CodexMaintenanceCli.Rebuild();
 
-        if (!SingleInstance.TryAcquire("Global\\UsageTray.SingleInstance", out var singleInstance)) return 0;
+        if (!SingleInstance.TryAcquire("UsageTray.SingleInstance", out var singleInstance)) return 0;
         using (singleInstance)
         {
             ApplicationConfiguration.Initialize();
             Application.Run(new TrayApplicationContext());
         }
         return 0;
+
     }
 }

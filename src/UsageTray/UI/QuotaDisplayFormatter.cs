@@ -43,8 +43,8 @@ internal static class QuotaDisplayFormatter
         string codexText;
         if (codexWeekly != null)
         {
-            var isWeeklyZero = codexWeekly.RemainingFraction.HasValue && codexWeekly.RemainingFraction.Value <= 0.0001;
-            var is5hZero = codex5h is { RemainingFraction: not null } && codex5h.RemainingFraction.Value <= 0.0001;
+            var isWeeklyZero = codexWeekly.RemainingFraction.HasValue && codexWeekly.RemainingFraction.Value <= 0.0001 && !codexWeekly.IsResetPassed();
+            var is5hZero = codex5h is { RemainingFraction: not null } && codex5h.RemainingFraction.Value <= 0.0001 && !codex5h.IsResetPassed();
 
             if (isWeeklyZero)
             {
@@ -90,10 +90,13 @@ internal static class QuotaDisplayFormatter
         var frac = snapshot.RemainingFraction.Value;
         if (frac <= 0.0001)
         {
+            if (snapshot.IsResetPassed()) return "100%";
             return $"0%({FormatCompactReset(snapshot)})";
         }
         return $"{frac:P0}";
     }
+
+
 
     private static string FormatCompactReset(QuotaSnapshot snapshot)
     {
@@ -234,13 +237,22 @@ internal static class QuotaDisplayFormatter
         return $"{label}：{string.Join("；", values)}";
     }
 
-    private static string FormatCompact(QuotaSnapshot? snapshot) => snapshot is null
-        ? "—"
-        : snapshot.RemainingFraction.HasValue ? $"{snapshot.RemainingFraction.Value:P0}" : "未知";
+    private static string FormatCompact(QuotaSnapshot? snapshot)
+    {
+        if (snapshot is null) return "—";
+        var eff = snapshot.EffectiveRemainingFraction();
+        return eff.HasValue ? $"{eff.Value:P0}" : "未知";
+    }
 
-    private static string FormatRemaining(QuotaSnapshot snapshot) => snapshot.RemainingFraction.HasValue
-        ? $"{snapshot.RemainingFraction.Value:P0} 剩余"
-        : "剩余未知";
+    private static string FormatRemaining(QuotaSnapshot snapshot)
+    {
+        if (!snapshot.RemainingFraction.HasValue) return "剩余未知";
+        if (snapshot.IsResetPassed() && snapshot.RemainingFraction.Value <= 0.0001)
+            return "100% 剩余 (推断已重置)";
+        return $"{snapshot.RemainingFraction.Value:P0} 剩余";
+    }
+
+
 
     private static string FormatReset(QuotaSnapshot snapshot) =>
         TimeFormatter.FormatResetWithRelative(snapshot.ResetAt, "yyyy-MM-dd HH:mm");

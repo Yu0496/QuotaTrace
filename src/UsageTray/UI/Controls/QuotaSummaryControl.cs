@@ -152,11 +152,13 @@ public sealed class QuotaSummaryControl : UserControl
             if (weekly.Count > 0) y += MeasureQuotaWindowHeight(weekly);
             var others = codexSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
             if (others.Count > 0) y += MeasureQuotaWindowHeight(others);
+            if (codexSnapshots.Any(s => s.IsResetPassed())) y += _smallFont.Height + 4;
         }
         else
         {
             y += _regularFont.Height + 4;
         }
+
 
         // Codex Weekly Cycle & Projection
         var codexCycles = _snapshot.CodexWeeklyCycles.Count > 0
@@ -338,6 +340,13 @@ public sealed class QuotaSummaryControl : UserControl
             if (weekly.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "周窗口", weekly);
             var others = codexSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
             if (others.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "其他窗口", others);
+
+            if (codexSnapshots.Any(s => s.IsResetPassed()))
+            {
+                using var tipBrush = new SolidBrush(Color.FromArgb(100, 116, 139));
+                g.DrawString("💡 部分窗口已过重置时间，在 Codex 中发送任意消息即可同步最新官方快照。", _smallFont, tipBrush, padX + 8, y);
+                y += _smallFont.Height + 4;
+            }
         }
         else
         {
@@ -391,8 +400,10 @@ public sealed class QuotaSummaryControl : UserControl
             using var noteBrush = new SolidBrush(Color.FromArgb(160, 174, 192));
             g.DrawString("• Antigravity 额度通过本地官方 Language Server API 实时获取，不参与 API 等值折算。", _smallFont, noteBrush, padX, y);
             y += _smallFont.Height + 3;
-            g.DrawString("• Codex 额度通过 Session 产生的 rate_limits 事件记录提取；支持标准周额度与 Reserve 备用额度的双池统计。", _smallFont, noteBrush, padX, y);
+            g.DrawString("• Codex 额度通过 Session 对话记录提取；若额度已过重置时间，系统自动按周期推断为满额，在 Codex 中发送一次常规模型消息即可校准云端精确快照。", _smallFont, noteBrush, padX, y);
         }
+
+
     }
 
     private void DrawSectionHeader(Graphics g, int x, ref int y, string title, string? badge, string? statusBadge, Color dotColor)
@@ -532,6 +543,10 @@ public sealed class QuotaSummaryControl : UserControl
     {
         if (!snapshot.RemainingFraction.HasValue) return ("剩余未知", Color.FromArgb(100, 116, 139));
         var frac = snapshot.RemainingFraction.Value;
+        if (frac <= 0.0001 && snapshot.IsResetPassed())
+        {
+            return ("100% (推断已重置)", Color.FromArgb(22, 163, 74));
+        }
         var text = $"{frac:P0} 剩余";
         var color = frac switch
         {
@@ -541,6 +556,8 @@ public sealed class QuotaSummaryControl : UserControl
         };
         return (text, color);
     }
+
+
 
     private static string FormatReset(QuotaSnapshot snapshot) => TimeFormatter.FormatResetWithRelative(snapshot.ResetAt);
 

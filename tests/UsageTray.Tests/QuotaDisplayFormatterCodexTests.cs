@@ -65,4 +65,27 @@ public sealed class QuotaDisplayFormatterCodexTests
 
         Assert.Contains("Codex $2.50", text, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void CompactTextAndPopup_HandlePassedResetTime_WithoutShowingDepletedZero()
+    {
+        var past = DateTimeOffset.Now.AddHours(-10);
+        var snapshot = new DashboardSnapshot
+        {
+            Quotas =
+            [
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, past, "codex-5h", "Codex 5h", 0.0, past.AddHours(5), "5h", "rate_limits", "Plus"), false),
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, past, "codex-weekly", "Codex weekly", 0.62, DateTimeOffset.Now.AddDays(4), "weekly", "rate_limits", "Plus"), false)
+            ]
+        };
+
+        var compact = QuotaDisplayFormatter.BuildCompactText(snapshot);
+        var popup = QuotaDisplayFormatter.BuildPopupText(snapshot);
+
+        Assert.Contains("Codex 62%", compact, StringComparison.Ordinal);
+        Assert.DoesNotContain("5h 0%", compact, StringComparison.Ordinal);
+        Assert.Contains("100% 剩余 (推断已重置)", popup, StringComparison.Ordinal);
+    }
 }
+
+

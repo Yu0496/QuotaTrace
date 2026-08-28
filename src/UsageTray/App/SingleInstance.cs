@@ -13,10 +13,32 @@ public sealed class SingleInstance : IDisposable
 
     public static bool TryAcquire(string name, out SingleInstance? instance)
     {
-        var mutex = new Mutex(true, name, out var createdNew);
-        instance = new SingleInstance(mutex, createdNew);
-        if (createdNew) return true;
-        instance.Dispose();
+        try
+        {
+            var mutex = new Mutex(false, name);
+            bool hasHandle = false;
+            try
+            {
+                hasHandle = mutex.WaitOne(0, false);
+            }
+            catch (AbandonedMutexException)
+            {
+                hasHandle = true;
+            }
+
+            if (hasHandle)
+            {
+                instance = new SingleInstance(mutex, true);
+                return true;
+            }
+
+            mutex.Dispose();
+        }
+        catch
+        {
+            // ignored
+        }
+
         instance = null;
         return false;
     }
@@ -29,3 +51,4 @@ public sealed class SingleInstance : IDisposable
         _mutex.Dispose();
     }
 }
+

@@ -1,4 +1,4 @@
-﻿using UsageTray.UI;
+using UsageTray.UI;
 
 namespace UsageTray.Tests;
 
@@ -122,3 +122,4 @@ public sealed class TimeFormatterTests
         Assert.Equal("未知", result);
     }
 }
+
