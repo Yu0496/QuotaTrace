@@ -17,6 +17,8 @@ public sealed class AppSettings
     public int? SettingsWindowWidth { get; set; }
     public int? SettingsWindowHeight { get; set; }
     public DateTimeOffset? LastFullScanUtc { get; set; }
+    public Dictionary<string, int> ModelColumnWidths { get; set; } = new();
+    public Dictionary<string, int> ProjectColumnWidths { get; set; } = new();
 
     public void Normalize()
     {
@@ -31,8 +33,23 @@ public sealed class AppSettings
         MainWindowHeight = NormalizeWindowDimension(MainWindowHeight, 500, 3000);
         SettingsWindowWidth = NormalizeWindowDimension(SettingsWindowWidth, 560, 4000);
         SettingsWindowHeight = NormalizeWindowDimension(SettingsWindowHeight, 460, 3000);
+        ModelColumnWidths = NormalizeColumnWidths(ModelColumnWidths);
+        ProjectColumnWidths = NormalizeColumnWidths(ProjectColumnWidths);
     }
 
+    private static Dictionary<string, int> NormalizeColumnWidths(Dictionary<string, int>? widths)
+    {
+        if (widths == null || widths.Count == 0) return new Dictionary<string, int>();
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, val) in widths)
+        {
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                result[key.Trim()] = Math.Clamp(val, 30, 2000);
+            }
+        }
+        return result;
+    }
 
     private static int? NormalizeWindowDimension(int? value, int minimum, int maximum) =>
         value.HasValue ? Math.Clamp(value.Value, minimum, maximum) : null;

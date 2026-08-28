@@ -22,7 +22,9 @@ public sealed class MainForm : Form
     private readonly Label _uncachedInputValue;
     private readonly Label _cacheCreationValue;
     private readonly Label _cacheHitRateValue;
+    private readonly Label _speedEstimateValue;
     private readonly Label _status;
+    private readonly ToolTip _toolTip;
     private readonly DataGridView _models;
     private readonly DataGridView _projects;
     private readonly DailyBarChartControl _chart;
@@ -95,9 +97,9 @@ public sealed class MainForm : Form
             using var form = new SettingsForm(_settingsStore, _coordinator);
             form.ShowDialog(this);
         };
-        var toolTip = new ToolTip();
-        toolTip.SetToolTip(refresh, "增量刷新：仅重新解析新增或发生变化的本地记录。程序启动时会自动全量读取一次；全量重读请到设置中执行。");
-        toolTip.SetToolTip(_rangeCombo, "选择自定义…后填写开始日期和结束日期，按本地日历统计。");
+        _toolTip = new ToolTip();
+        _toolTip.SetToolTip(refresh, "增量刷新：仅重新解析新增或发生变化的本地记录。程序启动时会自动全量读取一次；全量重读请到设置中执行。");
+        _toolTip.SetToolTip(_rangeCombo, "选择自定义…后填写开始日期和结束日期，按本地日历统计。");
         _providerCombo.SelectedIndexChanged += (_, _) => ApplyCurrentSelection();
         _rangeCombo.SelectedIndexChanged += (_, _) => HandleRangeSelectionChanged();
 
@@ -180,6 +182,8 @@ public sealed class MainForm : Form
         _outputValue = MetricLabel();
         _cacheCreationValue = InlineMetricLabel();
         _cacheHitRateValue = InlineMetricLabel();
+        _speedEstimateValue = InlineMetricLabel();
+        _speedEstimateValue.AutoEllipsis = true;
 
         var cardTitleFont = new Font(Font, FontStyle.Regular);
         var cardTitleHeight = TextRenderer.MeasureText("API 等值", cardTitleFont).Height + 6;
@@ -208,22 +212,24 @@ public sealed class MainForm : Form
         var cacheMissLine = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 6,
+            ColumnCount = 8,
             RowCount = 1,
             Padding = new Padding(12, 2, 12, 2)
         };
         cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18f));
         cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18f));
         cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34f));
+        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 14f));
+        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
 
         cacheMissLine.Controls.Add(new Label
         {
             Text = "未命中：",
-            Dock = DockStyle.Fill,
-            AutoSize = false,
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.DimGray
         }, 0, 0);
@@ -233,8 +239,8 @@ public sealed class MainForm : Form
         cacheMissLine.Controls.Add(new Label
         {
             Text = "缓存创建：",
-            Dock = DockStyle.Fill,
-            AutoSize = false,
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.DimGray,
             Padding = new Padding(6, 0, 0, 0)
@@ -245,15 +251,26 @@ public sealed class MainForm : Form
         cacheMissLine.Controls.Add(new Label
         {
             Text = "命中率：",
-            Dock = DockStyle.Fill,
-            AutoSize = false,
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.DimGray,
             Padding = new Padding(6, 0, 0, 0)
         }, 4, 0);
         cacheMissLine.Controls.Add(_cacheHitRateValue, 5, 0);
 
-        toolTip.SetToolTip(cacheMissLine, "Sub2API token 口径：Input=总输入-Cache Read-Cache Creation；Cache Read=缓存读取；Cache Creation=缓存创建；命中率=Cache Read / 总 Input。");
+        cacheMissLine.Controls.Add(new Label
+        {
+            Text = "预估速率：",
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.DimGray,
+            Padding = new Padding(8, 0, 0, 0)
+        }, 6, 0);
+        cacheMissLine.Controls.Add(_speedEstimateValue, 7, 0);
+
+        _toolTip.SetToolTip(cacheMissLine, "Sub2API token 口径：Input=总输入-Cache Read-Cache Creation；Cache Read=缓存读取；Cache Creation=缓存创建；命中率=Cache Read / 总 Input；预估速率基于会话时间戳反推。");
 
 
         var chartTitleHeight = TextRenderer.MeasureText("每日 API 等值", Font).Height + 10;
@@ -277,8 +294,8 @@ public sealed class MainForm : Form
         chartPanel.Controls.Add(_chart);
         chartPanel.Controls.Add(chartTitle);
 
-        _models = CreateGrid(["模型", "Provider", "Input（未命中）", "Cache Read", "缓存命中率", "Output", "API 等值"]);
-        _projects = CreateGrid(["项目", "Provider", "Tokens", "Input（未命中）", "Cache Read", "缓存命中率", "Output", "API 等值"]);
+        _models = CreateGrid(["模型", "Provider", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "API 等值"], DefaultModelColumnWidths);
+        _projects = CreateGrid(["项目", "Provider", "Tokens", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "API 等值"], DefaultProjectColumnWidths);
         _quotaControl = new QuotaSummaryControl { Dock = DockStyle.Fill, ShowHeader = false, ShowDismissHint = false, ShowFooterNote = true, BackColor = Color.White };
         var tabs = new TabControl { Dock = DockStyle.Fill, Margin = new Padding(12, 0, 12, 0) };
         var modelPage = new TabPage("按模型"); modelPage.Controls.Add(_models);
@@ -393,22 +410,37 @@ public sealed class MainForm : Form
         _cacheCreationValue.Text = FormatTokens(snapshot.CacheCreationTokens);
         _cacheHitRateValue.Text = snapshot.InputTokens > 0 ? $"{snapshot.CacheHitRate:F2}%" : "0.00%";
         _outputValue.Text = FormatTokens(snapshot.OutputTokens);
+
+        var speed = snapshot.SpeedEstimate;
+        if (speed is not null && speed.HasData)
+        {
+            _speedEstimateValue.Text = speed.ToShortDisplayString();
+            _toolTip.SetToolTip(_speedEstimateValue, speed.ToDetailedTooltip());
+        }
+        else
+        {
+            _speedEstimateValue.Text = "-";
+            _toolTip.SetToolTip(_speedEstimateValue, "预估速率：暂无足够的时间戳样本进行反推。\r\n\r\n说明：仅当本地会话存在连续 Turn 时间戳记录时计算。详情见“设置”。");
+        }
+
         _chart.SetData(snapshot.Daily);
 
         _models.Rows.Clear();
         foreach (var row in snapshot.Models)
         {
             var hitRate = row.InputTokens > 0 ? $"{row.CacheHitRate:F2}%" : "0.00%";
+            var speedText = row.SpeedEstimate?.HasData == true ? row.SpeedEstimate.ToShortDisplayString() : "-";
             _models.Rows.Add(row.ModelId, row.Provider.ToStorageString(), FormatTokens(row.NonCachedInputTokens),
-                FormatTokens(row.CachedTokens), hitRate, FormatTokens(row.OutputTokens), FormatCost(row.ApiEquivalentUsd));
+                FormatTokens(row.CachedTokens), hitRate, speedText, FormatTokens(row.OutputTokens), FormatCost(row.ApiEquivalentUsd));
         }
 
         _projects.Rows.Clear();
         foreach (var row in snapshot.Projects)
         {
             var hitRate = row.InputTokens > 0 ? $"{row.CacheHitRate:F2}%" : "0.00%";
+            var speedText = row.SpeedEstimate?.HasData == true ? row.SpeedEstimate.ToShortDisplayString() : "-";
             _projects.Rows.Add(row.DisplayName, row.Provider.ToStorageString(), FormatTokens(row.Tokens),
-                FormatTokens(row.NonCachedInputTokens), FormatTokens(row.CachedTokens), hitRate, FormatTokens(row.OutputTokens), FormatCost(row.ApiEquivalentUsd));
+                FormatTokens(row.NonCachedInputTokens), FormatTokens(row.CachedTokens), hitRate, speedText, FormatTokens(row.OutputTokens), FormatCost(row.ApiEquivalentUsd));
         }
 
         _quotaControl.SetSnapshot(snapshot);
@@ -556,7 +588,63 @@ public sealed class MainForm : Form
         return panel;
     }
 
-    private DataGridView CreateGrid(string[] columns)
+    private static readonly Dictionary<string, int> DefaultModelColumnWidths = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["模型"] = 180,
+        ["Provider"] = 95,
+        ["Input（未命中）"] = 115,
+        ["Cache Read"] = 100,
+        ["缓存命中率"] = 95,
+        ["预估速率"] = 210,
+        ["Output"] = 90,
+        ["API 等值"] = 85
+    };
+
+    private static readonly Dictionary<string, int> DefaultProjectColumnWidths = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["项目"] = 200,
+        ["Provider"] = 95,
+        ["Tokens"] = 100,
+        ["Input（未命中）"] = 115,
+        ["Cache Read"] = 100,
+        ["缓存命中率"] = 95,
+        ["预估速率"] = 210,
+        ["Output"] = 90,
+        ["API 等值"] = 85
+    };
+
+    public Dictionary<string, int> GetModelColumnWidths() => GetColumnWidths(_models);
+    public Dictionary<string, int> GetProjectColumnWidths() => GetColumnWidths(_projects);
+
+    public void RestoreColumnWidths(Dictionary<string, int>? modelWidths, Dictionary<string, int>? projectWidths)
+    {
+        ApplyColumnWidths(_models, modelWidths);
+        ApplyColumnWidths(_projects, projectWidths);
+    }
+
+    private static Dictionary<string, int> GetColumnWidths(DataGridView grid)
+    {
+        var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (DataGridViewColumn col in grid.Columns)
+        {
+            if (col.Width > 0) dict[col.Name] = col.Width;
+        }
+        return dict;
+    }
+
+    private static void ApplyColumnWidths(DataGridView grid, Dictionary<string, int>? widths)
+    {
+        if (widths == null || widths.Count == 0) return;
+        foreach (DataGridViewColumn col in grid.Columns)
+        {
+            if (widths.TryGetValue(col.Name, out var w) && w >= 30)
+            {
+                col.Width = w;
+            }
+        }
+    }
+
+    private DataGridView CreateGrid(string[] columns, Dictionary<string, int>? defaultWidths = null)
     {
         var cellFont = new Font(Font, FontStyle.Regular);
         var headerFont = new Font(Font, FontStyle.Bold);
@@ -569,7 +657,8 @@ public sealed class MainForm : Form
             ReadOnly = true,
             AllowUserToAddRows = false,
             AllowUserToResizeRows = false,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            AllowUserToResizeColumns = true,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
             AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
             BackgroundColor = Color.White,
             RowHeadersVisible = false,
@@ -599,7 +688,21 @@ public sealed class MainForm : Form
             SelectionBackColor = Color.FromArgb(218, 232, 247),
             SelectionForeColor = Color.FromArgb(25, 25, 25)
         };
-        foreach (var column in columns) grid.Columns.Add(column, column);
+        foreach (var column in columns)
+        {
+            var colIndex = grid.Columns.Add(column, column);
+            var col = grid.Columns[colIndex];
+            col.MinimumWidth = 40;
+            col.Resizable = DataGridViewTriState.True;
+            if (defaultWidths != null && defaultWidths.TryGetValue(column, out var defW) && defW >= 30)
+            {
+                col.Width = defW;
+            }
+            else
+            {
+                col.Width = 100;
+            }
+        }
         return grid;
     }
 

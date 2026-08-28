@@ -53,4 +53,38 @@ public sealed class AppSettingsTests
 
         Assert.Equal(expectedDue, isDue);
     }
+
+    [Fact]
+    public void ColumnWidthsAreClampedAndPreservedAcrossSerialization()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"settings_col_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new AppSettingsStore(tempFile);
+            var original = new AppSettings
+            {
+                ModelColumnWidths = new Dictionary<string, int>
+                {
+                    ["模型"] = 250,
+                    ["Provider"] = 10,  // will be clamped to 30
+                    ["Input（未命中）"] = 5000 // will be clamped to 2000
+                },
+                ProjectColumnWidths = new Dictionary<string, int>
+                {
+                    ["项目"] = 300
+                }
+            };
+            store.Save(original);
+
+            var loaded = store.Load();
+            Assert.Equal(250, loaded.ModelColumnWidths["模型"]);
+            Assert.Equal(30, loaded.ModelColumnWidths["Provider"]);
+            Assert.Equal(2000, loaded.ModelColumnWidths["Input（未命中）"]);
+            Assert.Equal(300, loaded.ProjectColumnWidths["项目"]);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
 }

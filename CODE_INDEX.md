@@ -61,6 +61,7 @@ graph TD
 | [`TokenUsage`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/TokenUsage.cs) | `src/UsageTray/Core/TokenUsage.cs` | 记录 Input、CacheRead、CacheWrite、Output、ThinkingOutput、长上下文等 Token 明细。 |
 | [`UsageBucket`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/UsageBucket.cs) | `src/UsageTray/Core/UsageBucket.cs` | 聚合维度的核心用量桶（Provider/Model/Project/Date），承载 Token 统计与 API 等值计算。 |
 | [`QuotaSnapshot`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/QuotaSnapshot.cs) | `src/UsageTray/Core/QuotaSnapshot.cs` | 配额快照模型，记录 5 小时与周配额比例、重置时间戳、过期状态（`IsResetPassed`）及乐观满额推断（`EffectiveRemainingFraction`）。 |
+| [`TokenSpeedEstimate`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/TokenSpeedEstimate.cs) | `src/UsageTray/Core/TokenSpeedEstimate.cs` | 速率预估模型，记录未命中 Prefill、缓存读取与输出解码速度及样本数与格式化。 |
 
 | [`PricingRule`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/PricingRule.cs) | `src/UsageTray/Core/PricingRule.cs` | 单个模型的定价规则定义（输入、缓存读、缓存写、输出单价、长上下文阶梯及核验日期）。 |
 | [`DateRange`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/DateRange.cs) | `src/UsageTray/Core/DateRange.cs` | 时间范围区间（今天、7天、30天、本月、全部、本次周额度、自定义区间）。 |
@@ -142,7 +143,7 @@ graph TD
 | [`QuotaDisplayFormatter`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/QuotaDisplayFormatter.cs) | `src/UsageTray/UI/QuotaDisplayFormatter.cs` | 托盘紧凑单行 Tooltip 格式化工具。 |
 | [`TimeFormatter`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/TimeFormatter.cs) | `src/UsageTray/UI/TimeFormatter.cs` | 时间与重置倒计时格式化工具，生成“X天X小时X分后”相对时间。 |
 | [`AppIcon`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/AppIcon.cs) | `src/UsageTray/UI/AppIcon.cs` | 内嵌资源高清图标加载器及几何矢量兜底绘制。 |
-| [`WindowGeometryPersistence`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/WindowGeometryPersistence.cs) | `src/UsageTray/UI/WindowGeometryPersistence.cs` | 窗口尺寸与位置自动持久化与恢复。 |
+| [`WindowGeometryPersistence`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/WindowGeometryPersistence.cs) | `src/UsageTray/UI/WindowGeometryPersistence.cs` | 窗口尺寸与主页各表格栏位宽度自动持久化与恢复。 |
 
 ---
 

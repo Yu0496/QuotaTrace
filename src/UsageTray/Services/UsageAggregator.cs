@@ -187,16 +187,24 @@ public sealed class UsageAggregator
             buckets = _repository.GetUsage(range, provider);
         }
 
+        var (speedEstimate, modelSpeeds, projectSpeeds) = _repository.GetDetailedSpeedEstimates(range, provider, windowStartUtc, windowEndUtc);
+
         var aggregate = _pricing.CalculateAggregate(buckets);
         foreach (var warning in aggregate.Warnings) warnings.Add(warning);
         var daily = buckets.GroupBy(bucket => bucket.LocalDate).OrderBy(group => group.Key)
             .Select(group => BuildDaily(group.Key, group, warnings)).ToList();
         var models = buckets.GroupBy(bucket => new { bucket.Provider, Model = bucket.ModelId ?? "Unknown" })
             .OrderByDescending(group => group.Sum(item => item.DisplayedTotalTokens))
-            .Select(group => BuildModel(group.Key.Provider, group.Key.Model, group, warnings)).ToList();
+            .Select(group => {
+                modelSpeeds.TryGetValue((group.Key.Provider, group.Key.Model), out var mSpeed);
+                return BuildModel(group.Key.Provider, group.Key.Model, group, warnings, mSpeed);
+            }).ToList();
         var projects = buckets.GroupBy(bucket => new { bucket.Provider, Key = ProjectResolver.KeyOrUnclassified(bucket.ProjectKey) })
             .OrderByDescending(group => group.Sum(item => item.DisplayedTotalTokens))
-            .Select(group => BuildProject(group.Key.Provider, group.Key.Key, group, warnings)).ToList();
+            .Select(group => {
+                projectSpeeds.TryGetValue((group.Key.Provider, group.Key.Key), out var pSpeed);
+                return BuildProject(group.Key.Provider, group.Key.Key, group, warnings, pSpeed);
+            }).ToList();
 
         var coverage = provider.HasValue ? _repository.GetCoverageStart(provider.Value) :
             new[] { _repository.GetCoverageStart(ProviderKind.Codex), _repository.GetCoverageStart(ProviderKind.Antigravity) }
@@ -220,7 +228,6 @@ public sealed class UsageAggregator
         if (codexWeeklyCycle != null) codexWeeklyCycles.Add(codexWeeklyCycle);
         if (codexReserveCycle != null) codexWeeklyCycles.Add(codexReserveCycle);
         var antigravityEstimates = BuildAntigravityEstimates(quotas);
-
 
         return new DashboardSnapshot
         {
@@ -248,6 +255,7 @@ public sealed class UsageAggregator
             CodexReserveWeeklyCycle = codexReserveCycle,
             CodexWeeklyCycles = codexWeeklyCycles,
             AntigravityEstimates = antigravityEstimates,
+            SpeedEstimate = speedEstimate,
             Daily = daily,
             Models = models,
             Projects = projects,
@@ -365,17 +373,17 @@ public sealed class UsageAggregator
             cost.UnpricedTokens, cost.Quality);
     }
 
-    private ModelUsageView BuildModel(ProviderKind provider, string model, IEnumerable<UsageBucket> buckets, HashSet<string> warnings)
+    private ModelUsageView BuildModel(ProviderKind provider, string model, IEnumerable<UsageBucket> buckets, HashSet<string> warnings, TokenSpeedEstimate? speedEstimate = null)
     {
         var list = buckets.ToList();
         var cost = _pricing.CalculateAggregate(list);
         foreach (var warning in cost.Warnings) warnings.Add(warning);
         return new ModelUsageView(model, provider, list.Sum(item => item.InputTokens), list.Sum(item => item.CachedInputTokens),
             list.Sum(item => item.CacheWriteInputTokens), list.Sum(item => item.OutputTokens), cost.PricedCostUsd,
-            cost.UnpricedTokens, cost.Quality);
+            cost.UnpricedTokens, cost.Quality, speedEstimate);
     }
 
-    private ProjectUsageView BuildProject(ProviderKind provider, string projectKey, IEnumerable<UsageBucket> buckets, HashSet<string> warnings)
+    private ProjectUsageView BuildProject(ProviderKind provider, string projectKey, IEnumerable<UsageBucket> buckets, HashSet<string> warnings, TokenSpeedEstimate? speedEstimate = null)
     {
         var list = buckets.ToList();
         var cost = _pricing.CalculateAggregate(list);
@@ -386,7 +394,7 @@ public sealed class UsageAggregator
         return new ProjectUsageView(projectKey, display, provider, list.Sum(item => item.DisplayedTotalTokens),
             list.Sum(item => item.InputTokens), list.Sum(item => item.CachedInputTokens),
             list.Sum(item => item.CacheWriteInputTokens), list.Sum(item => item.OutputTokens),
-            cost.PricedCostUsd, cost.UnpricedTokens, cost.Quality);
+            cost.PricedCostUsd, cost.UnpricedTokens, cost.Quality, speedEstimate);
     }
 
     private static bool IsRecent(DateTimeOffset capturedAt) => DateTimeOffset.UtcNow - capturedAt.ToUniversalTime() < TimeSpan.FromMinutes(15);

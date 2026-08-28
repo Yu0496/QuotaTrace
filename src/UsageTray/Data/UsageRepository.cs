@@ -776,6 +776,228 @@ public sealed class UsageRepository
         insert.ExecuteNonQuery();
     }
 
+    public TokenSpeedEstimate GetTokenSpeedEstimate(DateRange range, ProviderKind? provider = null, DateTimeOffset? windowStartUtc = null, DateTimeOffset? windowEndUtc = null)
+        => GetDetailedSpeedEstimates(range, provider, windowStartUtc, windowEndUtc).Overall;
+
+    public (TokenSpeedEstimate Overall, Dictionary<(ProviderKind Provider, string ModelId), TokenSpeedEstimate> Models, Dictionary<(ProviderKind Provider, string ProjectKey), TokenSpeedEstimate> Projects)
+        GetDetailedSpeedEstimates(DateRange range, ProviderKind? provider = null, DateTimeOffset? windowStartUtc = null, DateTimeOffset? windowEndUtc = null)
+    {
+        var overall = new SpeedSampleAccumulator();
+        var models = new Dictionary<(ProviderKind Provider, string ModelId), SpeedSampleAccumulator>();
+        var projects = new Dictionary<(ProviderKind Provider, string ProjectKey), SpeedSampleAccumulator>();
+
+        using var connection = _database.OpenConnection();
+
+        if (!provider.HasValue || provider.Value == ProviderKind.Codex)
+        {
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT session_id, captured_at_utc, input_tokens, cached_input_tokens, cache_write_input_tokens,
+                output_tokens, last_input_tokens, last_cached_input_tokens, last_cache_write_input_tokens, last_output_tokens,
+                model_id, project_key
+                FROM codex_snapshots WHERE provider=$provider ORDER BY session_id, captured_at_utc, source_line";
+            cmd.Parameters.AddWithValue("$provider", ProviderKind.Codex.ToStorageString());
+            using var reader = cmd.ExecuteReader();
+
+            string? currentSession = null;
+            DateTimeOffset prevTime = default;
+            long prevTotalIn = 0;
+            long prevTotalOut = 0;
+            bool hasPrev = false;
+
+            while (reader.Read())
+            {
+                var sessionId = reader.GetString(0);
+                if (!DateTimeOffset.TryParse(reader.GetString(1), out var time)) continue;
+
+                if (windowStartUtc.HasValue && time < windowStartUtc.Value) continue;
+                if (windowEndUtc.HasValue && time > windowEndUtc.Value) continue;
+                if (!windowStartUtc.HasValue && !windowEndUtc.HasValue)
+                {
+                    var date = DateOnly.FromDateTime(time.ToLocalTime().DateTime);
+                    if (!range.Contains(date)) continue;
+                }
+
+                var totalIn = reader.GetInt64(2);
+                var totalCached = reader.GetInt64(3);
+                var totalOut = reader.GetInt64(5);
+
+                long lastIn = reader.IsDBNull(6) ? Math.Max(0, totalIn - (hasPrev ? prevTotalIn : 0)) : reader.GetInt64(6);
+                long lastCached = reader.IsDBNull(7) ? totalCached : reader.GetInt64(7);
+                long lastCacheWrite = reader.IsDBNull(8) ? 0 : reader.GetInt64(8);
+                long lastOut = reader.IsDBNull(9) ? Math.Max(0, totalOut - (hasPrev ? prevTotalOut : 0)) : reader.GetInt64(9);
+                long lastUncached = Math.Max(0, lastIn - lastCached - lastCacheWrite);
+
+                var modelId = reader.IsDBNull(10) || string.IsNullOrWhiteSpace(reader.GetString(10)) ? "Unknown" : reader.GetString(10);
+                var projectKey = reader.IsDBNull(11) || string.IsNullOrWhiteSpace(reader.GetString(11)) ? ProjectResolver.UnclassifiedKey : reader.GetString(11);
+
+                if (string.Equals(currentSession, sessionId, StringComparison.OrdinalIgnoreCase) && hasPrev)
+                {
+                    var deltaSeconds = (time - prevTime).TotalSeconds;
+                    if (deltaSeconds >= 0.5 && deltaSeconds <= 300.0)
+                    {
+                        overall.Add(deltaSeconds, lastUncached, lastCached, lastOut);
+
+                        var modelKey = (ProviderKind.Codex, modelId);
+                        if (!models.TryGetValue(modelKey, out var modelAcc))
+                            models[modelKey] = modelAcc = new SpeedSampleAccumulator();
+                        modelAcc.Add(deltaSeconds, lastUncached, lastCached, lastOut);
+
+                        var projectK = (ProviderKind.Codex, projectKey);
+                        if (!projects.TryGetValue(projectK, out var projAcc))
+                            projects[projectK] = projAcc = new SpeedSampleAccumulator();
+                        projAcc.Add(deltaSeconds, lastUncached, lastCached, lastOut);
+                    }
+                }
+
+                currentSession = sessionId;
+                prevTime = time;
+                prevTotalIn = totalIn;
+                prevTotalOut = totalOut;
+                hasPrev = true;
+            }
+        }
+
+        if (!provider.HasValue || provider.Value == ProviderKind.Antigravity)
+        {
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT conversation_id, event_utc, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens,
+                model_id, project_key
+                FROM antigravity_generations WHERE provider=$provider ORDER BY conversation_id, source_idx, event_utc";
+            cmd.Parameters.AddWithValue("$provider", ProviderKind.Antigravity.ToStorageString());
+            using var reader = cmd.ExecuteReader();
+
+            string? currentConv = null;
+            DateTimeOffset prevTime = default;
+            bool hasPrev = false;
+
+            while (reader.Read())
+            {
+                var convId = reader.GetString(0);
+                if (!DateTimeOffset.TryParse(reader.GetString(1), out var time)) continue;
+
+                if (windowStartUtc.HasValue && time < windowStartUtc.Value) continue;
+                if (windowEndUtc.HasValue && time > windowEndUtc.Value) continue;
+                if (!windowStartUtc.HasValue && !windowEndUtc.HasValue)
+                {
+                    var date = DateOnly.FromDateTime(time.ToLocalTime().DateTime);
+                    if (!range.Contains(date)) continue;
+                }
+
+                var inTokens = reader.GetInt64(2);
+                var cachedTokens = reader.GetInt64(3);
+                var cacheWriteTokens = reader.GetInt64(4);
+                var outTokens = reader.GetInt64(5);
+                var uncachedTokens = Math.Max(0, inTokens - cachedTokens - cacheWriteTokens);
+
+                var modelId = reader.IsDBNull(6) || string.IsNullOrWhiteSpace(reader.GetString(6)) ? "Unknown" : reader.GetString(6);
+                var projectKey = reader.IsDBNull(7) || string.IsNullOrWhiteSpace(reader.GetString(7)) ? ProjectResolver.UnclassifiedKey : reader.GetString(7);
+
+                if (string.Equals(currentConv, convId, StringComparison.OrdinalIgnoreCase) && hasPrev)
+                {
+                    var deltaSeconds = (time - prevTime).TotalSeconds;
+                    if (deltaSeconds >= 0.5 && deltaSeconds <= 300.0)
+                    {
+                        overall.Add(deltaSeconds, uncachedTokens, cachedTokens, outTokens);
+
+                        var modelKey = (ProviderKind.Antigravity, modelId);
+                        if (!models.TryGetValue(modelKey, out var modelAcc))
+                            models[modelKey] = modelAcc = new SpeedSampleAccumulator();
+                        modelAcc.Add(deltaSeconds, uncachedTokens, cachedTokens, outTokens);
+
+                        var projectK = (ProviderKind.Antigravity, projectKey);
+                        if (!projects.TryGetValue(projectK, out var projAcc))
+                            projects[projectK] = projAcc = new SpeedSampleAccumulator();
+                        projAcc.Add(deltaSeconds, uncachedTokens, cachedTokens, outTokens);
+                    }
+                }
+
+                currentConv = convId;
+                prevTime = time;
+                hasPrev = true;
+            }
+        }
+
+        var modelEstimates = models.ToDictionary(k => k.Key, v => v.Value.BuildEstimate());
+        var projectEstimates = projects.ToDictionary(k => k.Key, v => v.Value.BuildEstimate());
+
+        return (overall.BuildEstimate(), modelEstimates, projectEstimates);
+    }
+
+    private sealed class SpeedSampleAccumulator
+    {
+        public List<double> UncachedPrefillRates { get; } = new();
+        public List<double> CacheReadRates { get; } = new();
+        public List<double> OutputRates { get; } = new();
+        public int ValidPairs { get; set; }
+
+        public void Add(double deltaSeconds, long uncached, long cached, long output)
+        {
+            ValidPairs++;
+            AddSpeedSamples(deltaSeconds, uncached, cached, output, UncachedPrefillRates, CacheReadRates, OutputRates);
+        }
+
+        public TokenSpeedEstimate BuildEstimate()
+        {
+            double? uncachedSpeed = CalculateTrimmedMean(UncachedPrefillRates);
+            double? cacheReadSpeed = CalculateTrimmedMean(CacheReadRates);
+            double? outputSpeed = CalculateTrimmedMean(OutputRates);
+
+            return new TokenSpeedEstimate(
+                uncachedSpeed,
+                cacheReadSpeed,
+                outputSpeed,
+                ValidPairs,
+                UncachedPrefillRates.Count,
+                CacheReadRates.Count,
+                OutputRates.Count
+            );
+        }
+    }
+
+    private static void AddSpeedSamples(double deltaSeconds, long uncachedTokens, long cachedTokens, long outTokens,
+        List<double> uncachedPrefillRates, List<double> cacheReadRates, List<double> outputRates)
+    {
+        long totalIn = uncachedTokens + cachedTokens;
+
+        if (outTokens >= 15 && deltaSeconds >= 0.2)
+        {
+            var rate = outTokens / deltaSeconds;
+            if (rate is >= 1.0 and <= 2000.0)
+            {
+                outputRates.Add(rate);
+            }
+        }
+
+        if (uncachedTokens >= 200 && (totalIn == 0 || (double)uncachedTokens / totalIn >= 0.6) && deltaSeconds >= 0.2)
+        {
+            var rate = uncachedTokens / deltaSeconds;
+            if (rate is >= 10.0 and <= 2_000_000.0)
+            {
+                uncachedPrefillRates.Add(rate);
+            }
+        }
+
+        if (cachedTokens >= 1000 && (totalIn == 0 || (double)cachedTokens / totalIn >= 0.6) && deltaSeconds >= 0.1)
+        {
+            var rate = cachedTokens / deltaSeconds;
+            if (rate is >= 100.0 and <= 50_000_000.0)
+            {
+                cacheReadRates.Add(rate);
+            }
+        }
+    }
+
+    private static double? CalculateTrimmedMean(List<double> values)
+    {
+        if (values.Count == 0) return null;
+        if (values.Count <= 2) return values.Average();
+
+        values.Sort();
+        int trimCount = Math.Max(1, (int)(values.Count * 0.1));
+        var validRange = values.Skip(trimCount).Take(values.Count - 2 * trimCount).ToList();
+        return validRange.Count > 0 ? validRange.Average() : values.Average();
+    }
+
     private static void Execute(SqliteTransaction transaction, SqliteConnection connection, string sql,
         params (string Name, object Value)[] parameters)
     {

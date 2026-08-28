@@ -153,6 +153,22 @@ public sealed class SettingsForm : Form
             Margin = new Padding(0, 4, 0, 10)
         };
 
+        var speedNoteTitle = new Label
+        {
+            Text = "速率反推原理说明",
+            AutoSize = true,
+            Font = new Font(Font, FontStyle.Bold),
+            Margin = new Padding(0, 10, 0, 4)
+        };
+
+        var speedNote = new Label
+        {
+            Text = "• 统计机制：基于本地会话记录中每个 Turn 的时间戳差分与 Token 增量反推。\r\n• 未命中 Prefill 速度：针对未命中输入占主导的请求，计算冷启动 Prompt 矩阵计算吞吐。\r\n• 缓存读取速度：针对高缓存命中率的请求，计算 KV Cache 检索与加载吞吐。\r\n• 输出速度：计算模型自回归逐字生成（含思考过程与正文）的平均速率。\r\n• 局限性说明：该指标为客户端视角端到端估算，包含了网络 RTT、TLS 握手、云端排队调度及客户端写入缓冲等非模型计算耗时，因此数值不一定绝对准确且通常低于服务端的纯硬件物理速度，仅供性能参考与趋势对比。",
+            AutoSize = true,
+            ForeColor = Color.FromArgb(71, 85, 105),
+            Margin = new Padding(0, 4, 0, 10)
+        };
+
         var lastScanText = settings.LastFullScanUtc.HasValue
             ? settings.LastFullScanUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
             : "尚未执行（将自动调度）";
@@ -272,7 +288,7 @@ public sealed class SettingsForm : Form
         {
             Dock = DockStyle.Top,
             ColumnCount = 1,
-            RowCount = 9,
+            RowCount = 11,
             AutoSize = true,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
@@ -286,6 +302,8 @@ public sealed class SettingsForm : Form
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // pricingTitle
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // pricingButtonsPanel
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // pricingNote
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // speedNoteTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // speedNote
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // note
 
         mainPanel.Controls.Add(title, 0, 0);
@@ -296,7 +314,9 @@ public sealed class SettingsForm : Form
         mainPanel.Controls.Add(pricingTitle, 0, 5);
         mainPanel.Controls.Add(pricingButtonsPanel, 0, 6);
         mainPanel.Controls.Add(pricingNote, 0, 7);
-        mainPanel.Controls.Add(note, 0, 8);
+        mainPanel.Controls.Add(speedNoteTitle, 0, 8);
+        mainPanel.Controls.Add(speedNote, 0, 9);
+        mainPanel.Controls.Add(note, 0, 10);
 
         contentPanel.Controls.Add(mainPanel);
 

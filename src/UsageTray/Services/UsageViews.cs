@@ -11,7 +11,7 @@ public sealed record DailyUsageView(DateOnly Date, long InputTokens, long Cached
 }
 
 public sealed record ModelUsageView(string ModelId, ProviderKind Provider, long InputTokens, long CachedTokens, long CacheCreationTokens,
-    long OutputTokens, decimal? ApiEquivalentUsd, long UnpricedTokens, CostQuality CostQuality)
+    long OutputTokens, decimal? ApiEquivalentUsd, long UnpricedTokens, CostQuality CostQuality, TokenSpeedEstimate? SpeedEstimate = null)
 {
     public long NonCachedInputTokens => Math.Max(0, InputTokens - CachedTokens - CacheCreationTokens);
     public double CacheHitRate => InputTokens > 0 ? (double)CachedTokens / InputTokens * 100.0 : 0.0;
@@ -19,7 +19,7 @@ public sealed record ModelUsageView(string ModelId, ProviderKind Provider, long 
 
 public sealed record ProjectUsageView(string ProjectKey, string DisplayName, ProviderKind Provider, long Tokens,
     long InputTokens, long CachedTokens, long CacheCreationTokens, long OutputTokens, decimal? ApiEquivalentUsd,
-    long UnpricedTokens, CostQuality CostQuality)
+    long UnpricedTokens, CostQuality CostQuality, TokenSpeedEstimate? SpeedEstimate = null)
 {
     public long NonCachedInputTokens => Math.Max(0, InputTokens - CachedTokens - CacheCreationTokens);
     public double CacheHitRate => InputTokens > 0 ? (double)CachedTokens / InputTokens * 100.0 : 0.0;
@@ -79,6 +79,7 @@ public sealed record DashboardSnapshot
     public CodexCycleUsageView? CodexReserveWeeklyCycle { get; init; }
     public IReadOnlyList<CodexCycleUsageView> CodexWeeklyCycles { get; init; } = [];
     public IReadOnlyList<AntigravityQuotaEstimate> AntigravityEstimates { get; init; } = [];
+    public TokenSpeedEstimate? SpeedEstimate { get; init; }
     public IReadOnlyList<DailyUsageView> Daily { get; init; } = [];
     public IReadOnlyList<ModelUsageView> Models { get; init; } = [];
     public IReadOnlyList<ProjectUsageView> Projects { get; init; } = [];

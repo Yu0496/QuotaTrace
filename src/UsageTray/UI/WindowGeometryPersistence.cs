@@ -10,11 +10,14 @@ internal static class WindowGeometryPersistence
         if (settings.MainWindowWidth is int width && settings.MainWindowHeight is int height)
             form.ClientSize = new Size(width, height);
 
+        form.RestoreColumnWidths(settings.ModelColumnWidths, settings.ProjectColumnWidths);
+
         form.ResizeEnd += (_, _) => Save(form, settingsStore);
         form.FormClosing += (_, _) => Save(form, settingsStore);
+        form.VisibleChanged += (_, _) => { if (!form.Visible) Save(form, settingsStore); };
     }
 
-    private static void Save(Form form, AppSettingsStore settingsStore)
+    public static void Save(MainForm form, AppSettingsStore settingsStore)
     {
         if (form.WindowState != FormWindowState.Normal || form.ClientSize.Width <= 0 || form.ClientSize.Height <= 0)
             return;
@@ -22,6 +25,8 @@ internal static class WindowGeometryPersistence
         var settings = settingsStore.Load();
         settings.MainWindowWidth = form.ClientSize.Width;
         settings.MainWindowHeight = form.ClientSize.Height;
+        settings.ModelColumnWidths = form.GetModelColumnWidths();
+        settings.ProjectColumnWidths = form.GetProjectColumnWidths();
         settingsStore.Save(settings);
     }
 }
