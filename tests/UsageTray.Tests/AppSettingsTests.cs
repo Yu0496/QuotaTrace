@@ -87,4 +87,38 @@ public sealed class AppSettingsTests
             if (File.Exists(tempFile)) File.Delete(tempFile);
         }
     }
+
+    [Fact]
+    public void UpdateMethodAtomicallyMutatesAndPreservesOtherFields()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"settings_update_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new AppSettingsStore(tempFile);
+            var initial = new AppSettings
+            {
+                MainWindowWidth = 1200,
+                MainWindowHeight = 800,
+                ModelColumnWidths = new Dictionary<string, int> { ["模型"] = 400, ["Provider"] = 200 },
+                ProjectColumnWidths = new Dictionary<string, int> { ["项目"] = 300 }
+            };
+            store.Save(initial);
+
+            // 模拟全量扫描触发只更新 LastFullScanUtc
+            var scanTime = DateTimeOffset.UtcNow;
+            store.Update(s => s.LastFullScanUtc = scanTime);
+
+            var updated = store.Load();
+            Assert.Equal(scanTime, updated.LastFullScanUtc);
+            Assert.Equal(1200, updated.MainWindowWidth);
+            Assert.Equal(800, updated.MainWindowHeight);
+            Assert.Equal(400, updated.ModelColumnWidths["模型"]);
+            Assert.Equal(200, updated.ModelColumnWidths["Provider"]);
+            Assert.Equal(300, updated.ProjectColumnWidths["项目"]);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
 }

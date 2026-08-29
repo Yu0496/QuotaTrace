@@ -224,7 +224,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         _applicationIcon.Dispose();
         _coordinator.Dispose();
         _database.Dispose();
-        _mainForm?.Dispose();
+        if (_mainForm is { IsDisposed: false })
+        {
+            WindowGeometryPersistence.Save(_mainForm, _settingsStore);
+            _mainForm.Dispose();
+        }
     }
 
     protected override void Dispose(bool disposing)

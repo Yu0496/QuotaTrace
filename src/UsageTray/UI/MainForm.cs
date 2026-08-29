@@ -296,6 +296,8 @@ public sealed class MainForm : Form
 
         _models = CreateGrid(["模型", "Provider", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "API 等值"], DefaultModelColumnWidths);
         _projects = CreateGrid(["项目", "Provider", "Tokens", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "API 等值"], DefaultProjectColumnWidths);
+        _models.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
+        _projects.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _quotaControl = new QuotaSummaryControl { Dock = DockStyle.Fill, ShowHeader = false, ShowDismissHint = false, ShowFooterNote = true, BackColor = Color.White };
         var tabs = new TabControl { Dock = DockStyle.Fill, Margin = new Padding(12, 0, 12, 0) };
         var modelPage = new TabPage("按模型"); modelPage.Controls.Add(_models);
@@ -588,29 +590,32 @@ public sealed class MainForm : Form
         return panel;
     }
 
+    private bool _isRestoringColumns;
+    public event EventHandler? ColumnWidthsChanged;
+
     private static readonly Dictionary<string, int> DefaultModelColumnWidths = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["模型"] = 180,
-        ["Provider"] = 95,
-        ["Input（未命中）"] = 115,
-        ["Cache Read"] = 100,
-        ["缓存命中率"] = 95,
-        ["预估速率"] = 210,
-        ["Output"] = 90,
-        ["API 等值"] = 85
+        ["模型"] = 402,
+        ["Provider"] = 215,
+        ["Input（未命中）"] = 293,
+        ["Cache Read"] = 195,
+        ["缓存命中率"] = 212,
+        ["预估速率"] = 680,
+        ["Output"] = 260,
+        ["API 等值"] = 155
     };
 
     private static readonly Dictionary<string, int> DefaultProjectColumnWidths = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["项目"] = 200,
-        ["Provider"] = 95,
-        ["Tokens"] = 100,
-        ["Input（未命中）"] = 115,
-        ["Cache Read"] = 100,
-        ["缓存命中率"] = 95,
-        ["预估速率"] = 210,
-        ["Output"] = 90,
-        ["API 等值"] = 85
+        ["项目"] = 307,
+        ["Provider"] = 207,
+        ["Tokens"] = 175,
+        ["Input（未命中）"] = 287,
+        ["Cache Read"] = 220,
+        ["缓存命中率"] = 216,
+        ["预估速率"] = 565,
+        ["Output"] = 185,
+        ["API 等值"] = 178
     };
 
     public Dictionary<string, int> GetModelColumnWidths() => GetColumnWidths(_models);
@@ -618,8 +623,16 @@ public sealed class MainForm : Form
 
     public void RestoreColumnWidths(Dictionary<string, int>? modelWidths, Dictionary<string, int>? projectWidths)
     {
-        ApplyColumnWidths(_models, modelWidths);
-        ApplyColumnWidths(_projects, projectWidths);
+        _isRestoringColumns = true;
+        try
+        {
+            ApplyColumnWidths(_models, modelWidths ?? DefaultModelColumnWidths);
+            ApplyColumnWidths(_projects, projectWidths ?? DefaultProjectColumnWidths);
+        }
+        finally
+        {
+            _isRestoringColumns = false;
+        }
     }
 
     private static Dictionary<string, int> GetColumnWidths(DataGridView grid)

@@ -63,6 +63,8 @@ public sealed class AppSettingsStore
         Converters = { new JsonStringEnumConverter() }
     };
 
+    private readonly object _fileLock = new();
+
     public string FilePath { get; }
 
     public AppSettingsStore(string filePath)
@@ -72,30 +74,47 @@ public sealed class AppSettingsStore
 
     public AppSettings Load()
     {
-        try
+        lock (_fileLock)
         {
-            if (File.Exists(FilePath))
+            try
             {
-                var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), JsonOptions)
-                               ?? new AppSettings();
-                settings.Normalize();
-                return settings;
+                if (File.Exists(FilePath))
+                {
+                    var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), JsonOptions)
+                                   ?? new AppSettings();
+                    settings.Normalize();
+                    return settings;
+                }
             }
-        }
-        catch
-        {
-            // 保留损坏文件，使用安全默认值启动；设置页保存时才替换。
-        }
+            catch
+            {
+                // 保留损坏文件，使用安全默认值启动；设置页保存时才替换。
+            }
 
-        return new AppSettings();
+            return new AppSettings();
+        }
     }
 
     public void Save(AppSettings settings)
     {
-        settings.Normalize();
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(FilePath)!);
-        var temporary = FilePath + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(settings, JsonOptions));
-        File.Move(temporary, FilePath, true);
+        lock (_fileLock)
+        {
+            settings.Normalize();
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(FilePath)!);
+            var temporary = FilePath + ".tmp";
+            File.WriteAllText(temporary, JsonSerializer.Serialize(settings, JsonOptions));
+            File.Move(temporary, FilePath, true);
+        }
+    }
+
+    public AppSettings Update(Action<AppSettings> mutator)
+    {
+        lock (_fileLock)
+        {
+            var settings = Load();
+            mutator(settings);
+            Save(settings);
+            return settings;
+        }
     }
 }

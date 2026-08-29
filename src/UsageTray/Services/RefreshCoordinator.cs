@@ -58,8 +58,8 @@ public sealed class RefreshCoordinator : IDisposable
             }
             if (forceFullScan)
             {
-                _settings.LastFullScanUtc = DateTimeOffset.UtcNow;
-                _settingsStore.Save(_settings);
+                var now = DateTimeOffset.UtcNow;
+                _settings = _settingsStore.Update(s => s.LastFullScanUtc = now);
             }
             CurrentSnapshot = _aggregator.BuildSnapshot(DateRange.Today());
             if (warnings.Count > 0) CurrentSnapshot = CopyWithWarnings(CurrentSnapshot, warnings);
@@ -97,8 +97,22 @@ public sealed class RefreshCoordinator : IDisposable
     public void UpdateSettings(AppSettings settings)
     {
         settings.Normalize();
-        _settings = settings;
-        _settingsStore.Save(settings);
+        _settings = _settingsStore.Update(current =>
+        {
+            current.StartWithWindows = settings.StartWithWindows;
+            current.StartHidden = settings.StartHidden;
+            current.RefreshSeconds = settings.RefreshSeconds;
+            current.DataRetentionDays = settings.DataRetentionDays;
+            current.ExtraCodexRoots = settings.ExtraCodexRoots;
+            current.StatusLineCacheSemanticsValidated = settings.StatusLineCacheSemanticsValidated;
+            current.StatusLineRecorderEnabled = settings.StatusLineRecorderEnabled;
+            if (settings.MainWindowWidth.HasValue) current.MainWindowWidth = settings.MainWindowWidth;
+            if (settings.MainWindowHeight.HasValue) current.MainWindowHeight = settings.MainWindowHeight;
+            if (settings.SettingsWindowWidth.HasValue) current.SettingsWindowWidth = settings.SettingsWindowWidth;
+            if (settings.SettingsWindowHeight.HasValue) current.SettingsWindowHeight = settings.SettingsWindowHeight;
+            if (settings.ModelColumnWidths.Count > 0) current.ModelColumnWidths = settings.ModelColumnWidths;
+            if (settings.ProjectColumnWidths.Count > 0) current.ProjectColumnWidths = settings.ProjectColumnWidths;
+        });
     }
 
     private static DashboardSnapshot CopyWithWarnings(DashboardSnapshot snapshot, IEnumerable<string> warnings) =>

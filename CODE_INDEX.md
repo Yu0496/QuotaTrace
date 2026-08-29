@@ -31,7 +31,7 @@ graph TD
 | 项目 / 目录 | 输出类型 | 核心职责 |
 | :--- | :--- | :--- |
 | [`src/UsageTray/`](file:///F:/Project/QuotaStatistics/src/UsageTray) | WinExe (WinForms) | 主应用程序，包含托盘交互、高 DPI 界面、数据解析、SQLite 存储、计价引擎与调度。 |
-| [`tests/UsageTray.Tests/`](file:///F:/Project/QuotaStatistics/tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码、会话归一化、额度周期预估等 78+ 项测试。 |
+| [`tests/UsageTray.Tests/`](file:///F:/Project/QuotaStatistics/tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码、会话归一化、额度周期预估、列宽防覆盖等 103+ 项测试。 |
 | [`tools/AntigravityStatusRecorder/`](file:///F:/Project/QuotaStatistics/tools/AntigravityStatusRecorder) | Exe (Console) | 独立控制台工具，读取官方 status-line stdin JSON 并记录到本地存储。 |
 | [`tools/CodexAudit/`](file:///F:/Project/QuotaStatistics/tools/CodexAudit) | Exe (Console) | 离线 Codex 审计与 CSV 导出工具。 |
 

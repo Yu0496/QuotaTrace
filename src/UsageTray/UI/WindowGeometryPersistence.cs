@@ -12,21 +12,65 @@ internal static class WindowGeometryPersistence
 
         form.RestoreColumnWidths(settings.ModelColumnWidths, settings.ProjectColumnWidths);
 
-        form.ResizeEnd += (_, _) => Save(form, settingsStore);
-        form.FormClosing += (_, _) => Save(form, settingsStore);
-        form.VisibleChanged += (_, _) => { if (!form.Visible) Save(form, settingsStore); };
+        var debounceTimer = new System.Windows.Forms.Timer { Interval = 500 };
+        debounceTimer.Tick += (_, _) =>
+        {
+            debounceTimer.Stop();
+            if (!form.IsDisposed)
+            {
+                Save(form, settingsStore);
+            }
+        };
+
+        form.ColumnWidthsChanged += (_, _) =>
+        {
+            if (form.IsDisposed) return;
+            debounceTimer.Stop();
+            debounceTimer.Start();
+        };
+
+        form.ResizeEnd += (_, _) =>
+        {
+            debounceTimer.Stop();
+            Save(form, settingsStore);
+        };
+        form.FormClosing += (_, _) =>
+        {
+            debounceTimer.Stop();
+            Save(form, settingsStore);
+        };
+        form.VisibleChanged += (_, _) =>
+        {
+            if (!form.Visible)
+            {
+                debounceTimer.Stop();
+                Save(form, settingsStore);
+            }
+        };
+        form.Disposed += (_, _) =>
+        {
+            debounceTimer.Stop();
+            debounceTimer.Dispose();
+        };
     }
 
-    public static void Save(MainForm form, AppSettingsStore settingsStore)
+    public static void Save(MainForm? form, AppSettingsStore settingsStore)
     {
-        if (form.WindowState != FormWindowState.Normal || form.ClientSize.Width <= 0 || form.ClientSize.Height <= 0)
+        if (form == null || form.IsDisposed)
             return;
 
-        var settings = settingsStore.Load();
-        settings.MainWindowWidth = form.ClientSize.Width;
-        settings.MainWindowHeight = form.ClientSize.Height;
-        settings.ModelColumnWidths = form.GetModelColumnWidths();
-        settings.ProjectColumnWidths = form.GetProjectColumnWidths();
-        settingsStore.Save(settings);
+        var modelWidths = form.GetModelColumnWidths();
+        var projectWidths = form.GetProjectColumnWidths();
+        var isNormal = form.WindowState == FormWindowState.Normal;
+        var clientWidth = isNormal && form.ClientSize.Width > 0 ? (int?)form.ClientSize.Width : null;
+        var clientHeight = isNormal && form.ClientSize.Height > 0 ? (int?)form.ClientSize.Height : null;
+
+        settingsStore.Update(settings =>
+        {
+            if (clientWidth.HasValue) settings.MainWindowWidth = clientWidth.Value;
+            if (clientHeight.HasValue) settings.MainWindowHeight = clientHeight.Value;
+            if (modelWidths.Count > 0) settings.ModelColumnWidths = modelWidths;
+            if (projectWidths.Count > 0) settings.ProjectColumnWidths = projectWidths;
+        });
     }
 }
