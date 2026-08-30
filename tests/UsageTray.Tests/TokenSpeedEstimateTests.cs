@@ -37,12 +37,13 @@ public sealed class TokenSpeedEstimateTests
 
         Assert.True(estimate.HasData);
         var shortText = estimate.ToShortDisplayString();
-        Assert.Contains("Prefill(未命中) ~3.8k/s", shortText);
+        Assert.Contains("未命中 ~3.8k/s", shortText);
+        Assert.Contains("命中 ~125.0k/s", shortText);
         Assert.Contains("输出 ~56.4/s", shortText);
 
         var tooltip = estimate.ToDetailedTooltip();
         Assert.Contains("未命中 Prefill 速度：约 3.8k tokens/s", tooltip);
-        Assert.Contains("缓存读取速度：约 125.0k tokens/s", tooltip);
+        Assert.Contains("命中 Prefill 速度：约 125.0k tokens/s", tooltip);
         Assert.Contains("输出生成速度：约 56.4 tokens/s", tooltip);
         Assert.Contains("15 次请求", tooltip);
     }

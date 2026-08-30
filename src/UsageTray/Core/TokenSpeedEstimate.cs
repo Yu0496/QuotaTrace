@@ -28,11 +28,12 @@ public sealed record TokenSpeedEstimate(
 
         if (UncachedPrefillTokensPerSecond.HasValue && UncachedPrefillTokensPerSecond.Value > 0)
         {
-            parts.Add($"Prefill(未命中) ~{FormatRate(UncachedPrefillTokensPerSecond.Value)}/s");
+            parts.Add($"未命中 ~{FormatRate(UncachedPrefillTokensPerSecond.Value)}/s");
         }
-        else if (CacheReadTokensPerSecond.HasValue && CacheReadTokensPerSecond.Value > 0)
+
+        if (CacheReadTokensPerSecond.HasValue && CacheReadTokensPerSecond.Value > 0)
         {
-            parts.Add($"Prefill(缓存) ~{FormatRate(CacheReadTokensPerSecond.Value)}/s");
+            parts.Add($"命中 ~{FormatRate(CacheReadTokensPerSecond.Value)}/s");
         }
 
         if (OutputTokensPerSecond.HasValue && OutputTokensPerSecond.Value > 0)
@@ -64,11 +65,11 @@ public sealed record TokenSpeedEstimate(
 
         if (CacheReadTokensPerSecond.HasValue && CacheReadTokensPerSecond.Value > 0)
         {
-            sb.AppendLine($"• 缓存读取速度：约 {FormatRate(CacheReadTokensPerSecond.Value)} tokens/s（KV 命中检索，样本: {CacheReadSampleCount}次）");
+            sb.AppendLine($"• 命中 Prefill 速度：约 {FormatRate(CacheReadTokensPerSecond.Value)} tokens/s（KV 命中检索，样本: {CacheReadSampleCount}次）");
         }
         else
         {
-            sb.AppendLine("• 缓存读取速度：样本不足");
+            sb.AppendLine("• 命中 Prefill 速度：样本不足");
         }
 
         if (OutputTokensPerSecond.HasValue && OutputTokensPerSecond.Value > 0)

@@ -968,7 +968,7 @@ public sealed class UsageRepository
             }
         }
 
-        if (uncachedTokens >= 200 && (totalIn == 0 || (double)uncachedTokens / totalIn >= 0.6) && deltaSeconds >= 0.2)
+        if (uncachedTokens >= 100 && (totalIn == 0 || (double)uncachedTokens / totalIn >= 0.25) && deltaSeconds >= 0.15)
         {
             var rate = uncachedTokens / deltaSeconds;
             if (rate is >= 10.0 and <= 2_000_000.0)
@@ -977,10 +977,10 @@ public sealed class UsageRepository
             }
         }
 
-        if (cachedTokens >= 1000 && (totalIn == 0 || (double)cachedTokens / totalIn >= 0.6) && deltaSeconds >= 0.1)
+        if (cachedTokens >= 300 && (totalIn == 0 || (double)cachedTokens / totalIn >= 0.35) && deltaSeconds >= 0.1)
         {
             var rate = cachedTokens / deltaSeconds;
-            if (rate is >= 100.0 and <= 50_000_000.0)
+            if (rate is >= 50.0 and <= 50_000_000.0)
             {
                 cacheReadRates.Add(rate);
             }
