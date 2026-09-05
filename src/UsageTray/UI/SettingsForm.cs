@@ -153,6 +153,22 @@ public sealed class SettingsForm : Form
             Margin = new Padding(0, 4, 0, 10)
         };
 
+        var reviewNoteTitle = new Label
+        {
+            Text = "Codex Auto-Review 审查模型计量说明",
+            AutoSize = true,
+            Font = new Font(Font, FontStyle.Bold),
+            Margin = new Padding(0, 10, 0, 4)
+        };
+
+        var reviewNote = new Label
+        {
+            Text = "• 模型与消耗不确定性说明：Codex 会话在自动审批审查（approvals_reviewer）时会调用 codex-auto-review。官方未公布其独立 API 定价，且不同任务下的额度折算规则存在不确定性。\r\n• 当前计量依据：系统当前将其按 GPT-5.6 Luna 轻量级价格体系（输入 $0.2 / 缓存 $0.02 / 写入 $0.25 / 输出 $1.2）进行 API 等值估算。该判定基于官方轻量评估模型架构文档，并经过本地全量历史重置窗口及纯净 Reserve 隔离会话数据的残差逆推验证（已定量排除 GPT-5.4 旗舰定价）。计算结果仅供等值参考，实际以 ChatGPT Codex 官方配额扣减为准。",
+            AutoSize = true,
+            ForeColor = Color.FromArgb(71, 85, 105),
+            Margin = new Padding(0, 4, 0, 10)
+        };
+
         var speedNoteTitle = new Label
         {
             Text = "速率反推原理说明",
@@ -288,7 +304,7 @@ public sealed class SettingsForm : Form
         {
             Dock = DockStyle.Top,
             ColumnCount = 1,
-            RowCount = 11,
+            RowCount = 13,
             AutoSize = true,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
@@ -302,6 +318,8 @@ public sealed class SettingsForm : Form
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // pricingTitle
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // pricingButtonsPanel
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // pricingNote
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // reviewNoteTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // reviewNote
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // speedNoteTitle
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // speedNote
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // note
@@ -314,9 +332,11 @@ public sealed class SettingsForm : Form
         mainPanel.Controls.Add(pricingTitle, 0, 5);
         mainPanel.Controls.Add(pricingButtonsPanel, 0, 6);
         mainPanel.Controls.Add(pricingNote, 0, 7);
-        mainPanel.Controls.Add(speedNoteTitle, 0, 8);
-        mainPanel.Controls.Add(speedNote, 0, 9);
-        mainPanel.Controls.Add(note, 0, 10);
+        mainPanel.Controls.Add(reviewNoteTitle, 0, 8);
+        mainPanel.Controls.Add(reviewNote, 0, 9);
+        mainPanel.Controls.Add(speedNoteTitle, 0, 10);
+        mainPanel.Controls.Add(speedNote, 0, 11);
+        mainPanel.Controls.Add(note, 0, 12);
 
         contentPanel.Controls.Add(mainPanel);
 

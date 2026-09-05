@@ -6,7 +6,7 @@ namespace UsageTray.Providers.Codex;
 
 public sealed class CodexJsonlParser
 {
-    public const int ParserVersion = 5;
+    public const int ParserVersion = 6;
 
     private static readonly string[] InputNames = ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "input", "total_input_tokens", "totalInputTokens"];
     private static readonly string[] CachedNames = ["cached_input_tokens", "cachedInputTokens", "cache_read_input_tokens", "cacheReadInputTokens", "cached", "cache_read"];
@@ -111,6 +111,20 @@ public sealed class CodexJsonlParser
 
     private static bool TryReadTokenEvent(JsonElement root, out ParsedTokenEvent result)
     {
+        // 显式忽略 Codex CLI v0.153.3+ 为每个 Turn 输出的内部执行跟踪记录 token_usage_record。
+        // 该记录仅包含单次请求用量而非全局累计账本，且缺少 last_token_usage。
+        // 随后紧随包含完整总账与单次用量的权威 token_count 事件。
+        // 若不跳过，会触发旧日志兼容 fallback 导致形状不确定性（HasRequestShapeUncertainty=true），进而导致定价计算返回空值（前端显示破折号）。
+        foreach (var item in JsonValueReader.EnumerateObjects(root))
+        {
+            if (JsonValueReader.TryGetString(item, out var recordType, "type") &&
+                string.Equals(recordType, "token_usage_record", StringComparison.OrdinalIgnoreCase))
+            {
+                result = default!;
+                return false;
+            }
+        }
+
         foreach (var item in JsonValueReader.EnumerateObjects(root))
         {
             if (!JsonValueReader.TryGetString(item, out var type, "type") ||

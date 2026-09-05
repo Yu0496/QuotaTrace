@@ -465,7 +465,81 @@ public sealed class UsageRepository
                 val.CacheWrite, costQuality, pair.Key.Tier, val.LongRequests, val.Uncertain,
                 val.LongInput, val.LongCached, val.LongWrite, val.LongOutput, val.CacheAvailable);
         }).ToList();
+    }
 
+    public IReadOnlyList<UsageBucket> GetCodexUsageInPoolWindows(
+        DateTimeOffset? standardStartUtc, DateTimeOffset? standardEndUtc,
+        DateTimeOffset? reserveStartUtc, DateTimeOffset? reserveEndUtc)
+    {
+        var snapshots = GetCodexSnapshots();
+        if (snapshots.Count == 0) return [];
+
+        var normalized = new CodexUsageNormalizer().Normalize(snapshots);
+        var filteredAudits = normalized.Events
+            .Where(a =>
+            {
+                var isReserve = !string.IsNullOrWhiteSpace(a.ModelId) &&
+                    (a.ModelId.StartsWith("gpt-reserve", StringComparison.OrdinalIgnoreCase) ||
+                     a.ModelId.Contains("reserve", StringComparison.OrdinalIgnoreCase));
+                if (isReserve)
+                {
+                    if (reserveStartUtc.HasValue && a.CapturedAt < reserveStartUtc.Value) return false;
+                    if (reserveEndUtc.HasValue && a.CapturedAt > reserveEndUtc.Value) return false;
+                    return true;
+                }
+                else
+                {
+                    if (standardStartUtc.HasValue && a.CapturedAt < standardStartUtc.Value) return false;
+                    if (standardEndUtc.HasValue && a.CapturedAt > standardEndUtc.Value) return false;
+                    return true;
+                }
+            })
+            .ToList();
+
+        if (filteredAudits.Count == 0) return [];
+
+        var aggregate = new Dictionary<(DateOnly Date, string ProjectKey, string Model, string Tier), (long Input, long Cached, long CacheWrite, long Output, int Requests, bool CacheAvailable, int LongRequests, long LongInput, long LongCached, long LongWrite, long LongOutput, int Uncertain)>();
+
+        foreach (var audit in filteredAudits)
+        {
+            var date = DateOnly.FromDateTime(audit.CapturedAt.ToLocalTime().DateTime);
+            var projectKey = audit.ProjectKey ?? string.Empty;
+            var model = string.IsNullOrWhiteSpace(audit.ModelId) ? "Unknown" : audit.ModelId.Trim();
+
+            var tier = string.Empty;
+            (DateOnly Date, string ProjectKey, string Model, string Tier) key = (date, projectKey, model, tier);
+            if (!aggregate.TryGetValue(key, out var acc))
+                acc = (0, 0, 0, 0, 0, true, 0, 0, 0, 0, 0, 0);
+
+            acc.Input += audit.Delta.InputTokens;
+            acc.Cached += Math.Min(Math.Max(0, audit.Delta.CachedInputTokens), Math.Max(0, audit.Delta.InputTokens));
+            acc.CacheWrite += Math.Min(Math.Max(0, audit.Delta.CacheWriteInputTokens), Math.Max(0, audit.Delta.InputTokens - Math.Min(Math.Max(0, audit.Delta.CachedInputTokens), Math.Max(0, audit.Delta.InputTokens))));
+            acc.Output += audit.Delta.OutputTokens;
+            acc.Requests++;
+            acc.CacheAvailable &= audit.Delta.CacheWriteAvailable;
+            if (audit.RequestUsageQuality == CodexRequestUsageQuality.Unknown) acc.Uncertain++;
+            if (audit.IsLongContext)
+            {
+                acc.LongRequests++;
+                acc.LongInput += audit.Delta.InputTokens;
+                acc.LongCached += Math.Min(Math.Max(0, audit.Delta.CachedInputTokens), Math.Max(0, audit.Delta.InputTokens));
+                acc.LongWrite += Math.Min(Math.Max(0, audit.Delta.CacheWriteInputTokens), Math.Max(0, audit.Delta.InputTokens - Math.Min(Math.Max(0, audit.Delta.CachedInputTokens), Math.Max(0, audit.Delta.InputTokens))));
+                acc.LongOutput += audit.Delta.OutputTokens;
+            }
+            aggregate[key] = acc;
+        }
+
+        return aggregate.Select(pair =>
+        {
+            var val = pair.Value;
+            var costQuality = !val.CacheAvailable ? CostQuality.CacheWriteUnavailable :
+                val.Uncertain > 0 ? CostQuality.RequestShapeUnavailable :
+                val.Cached > 0 || val.CacheWrite > 0 ? CostQuality.ExactTokenSplit : CostQuality.ExactTokensNoCache;
+            return new UsageBucket(ProviderKind.Codex, pair.Key.Date, pair.Key.ProjectKey, pair.Key.Model,
+                val.Input, val.Cached, val.Output, val.Requests, DataQuality.Derived, "codex://weekly-cycle", null,
+                val.CacheWrite, costQuality, pair.Key.Tier, val.LongRequests, val.Uncertain,
+                val.LongInput, val.LongCached, val.LongWrite, val.LongOutput, val.CacheAvailable);
+        }).ToList();
     }
 
     public IReadOnlyList<AntigravityGenerationUsage> GetAntigravityGenerations(DateTimeOffset? startUtc = null, DateTimeOffset? endUtc = null)

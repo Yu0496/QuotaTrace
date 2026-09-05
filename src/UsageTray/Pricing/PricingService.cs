@@ -178,9 +178,11 @@ public sealed class PricingService
         var pattern = rule.ModelPattern.ToLowerInvariant();
         TokenPriceSet? longPrice = pattern switch
         {
+            "gpt-6" or "gpt-6*" or "gpt-6-astra*" => new TokenPriceSet(20m, 2m, 25m, 75m),
+            "gpt-6-fast*" or "gpt-6-astra-fast*" => new TokenPriceSet(40m, 4m, 50m, 150m),
             "gpt-5.6" or "gpt-5.6-sol*" => new TokenPriceSet(10m, 1m, 12.5m, 45m),
             "gpt-5.6-terra*" => new TokenPriceSet(4m, 0.4m, 5m, 18m),
-            "gpt-5.6-luna*" or "gpt-reserve*" => new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m),
+            "gpt-5.6-luna*" or "gpt-reserve*" or "codex-auto-review*" => new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m),
             "gemini-3.1-pro*" or "gemini-pro-default*" or "gemini-pro*" => new TokenPriceSet(4m, 1m, null, 18m),
             "gemini-2.5-pro*" => new TokenPriceSet(2.5m, 0.625m, null, 15m),
             _ => null
@@ -190,8 +192,25 @@ public sealed class PricingService
     }
 
     public static PricingDocument BuiltInDefaults() => new(
-        2, new DateOnly(2026, 8, 27),
+        2, new DateOnly(2026, 9, 5),
         [
+            new PricingRule("Codex", "gpt-6", MatchMode.Exact, 10m, 1m, 12.5m, 50m,
+                "https://developers.openai.com/api/docs/models/gpt-6-astra", new DateOnly(2026, 9, 5), true,
+                new TokenPriceSet(20m, 2m, 25m, 75m), 272000,
+                new Dictionary<string, TokenPriceSet> { ["fast"] = new(20m, 2m, 25m, 100m) }),
+            new PricingRule("Codex", "gpt-6-astra*", MatchMode.Wildcard, 10m, 1m, 12.5m, 50m,
+                "https://developers.openai.com/api/docs/models/gpt-6-astra", new DateOnly(2026, 9, 5), true,
+                new TokenPriceSet(20m, 2m, 25m, 75m), 272000,
+                new Dictionary<string, TokenPriceSet> { ["fast"] = new(20m, 2m, 25m, 100m) }),
+            new PricingRule("Codex", "gpt-6-astra-fast*", MatchMode.Wildcard, 20m, 2m, 25m, 100m,
+                "https://developers.openai.com/api/docs/models/gpt-6-astra", new DateOnly(2026, 9, 5), true,
+                new TokenPriceSet(40m, 4m, 50m, 150m)),
+            new PricingRule("Codex", "gpt-6-fast*", MatchMode.Wildcard, 20m, 2m, 25m, 100m,
+                "https://developers.openai.com/api/docs/models/gpt-6-astra", new DateOnly(2026, 9, 5), true,
+                new TokenPriceSet(40m, 4m, 50m, 150m)),
+            new PricingRule("Codex", "gpt-6*", MatchMode.Wildcard, 10m, 1m, 12.5m, 50m,
+                "https://developers.openai.com/api/docs/models/gpt-6-astra", new DateOnly(2026, 9, 5), true,
+                new TokenPriceSet(20m, 2m, 25m, 75m)),
             new PricingRule("Codex", "gpt-5.6", MatchMode.Exact, 5m, 0.5m, 6.25m, 30m,
                 "https://developers.openai.com/api/docs/models/gpt-5.6-sol", new DateOnly(2026, 8, 20), true,
                 new TokenPriceSet(10m, 1m, 12.5m, 45m)),
@@ -206,6 +225,9 @@ public sealed class PricingService
                 new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m)),
             new PricingRule("Codex", "gpt-reserve*", MatchMode.Wildcard, 0.2m, 0.02m, 0.25m, 1.2m,
                 "https://developers.openai.com/api/docs/models/gpt-5.6-luna", new DateOnly(2026, 8, 27), true,
+                new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m)),
+            new PricingRule("Codex", "codex-auto-review*", MatchMode.Wildcard, 0.2m, 0.02m, 0.25m, 1.2m,
+                "https://developers.openai.com/api/docs/models/gpt-5.6-luna", new DateOnly(2026, 8, 31), true,
                 new TokenPriceSet(0.4m, 0.04m, 0.5m, 1.8m)),
             new PricingRule("Codex", "gpt-5.5*", MatchMode.Wildcard, 5m, 0.5m, null, 30m,
                 "https://developers.openai.com/api/docs/models/gpt-5.5", new DateOnly(2026, 8, 20)),
@@ -243,6 +265,8 @@ public sealed class PricingService
                 "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "claude-haiku*", MatchMode.Wildcard, 0.8m, 0.08m, 1.0m, 4m,
                 "https://docs.anthropic.com/en/docs/about-claude/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "gemini-3.8-flash*", MatchMode.Wildcard, 0.75m, 0.075m, null, 3.75m,
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 9, 5), true),
             new PricingRule("Antigravity", "gemini-3.7-flash*", MatchMode.Wildcard, 0.75m, 0.075m, null, 3.75m,
                 "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gemini-3.6-flash*", MatchMode.Wildcard, 0.75m, 0.075m, null, 3.75m,
@@ -276,7 +300,13 @@ public sealed class PricingService
             new PricingRule("Antigravity", "gpt-oss-120b*", MatchMode.Wildcard, 0.6m, 0.15m, null, 2.4m,
                 "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
             new PricingRule("Antigravity", "gpt-oss*", MatchMode.Wildcard, 0.6m, 0.15m, null, 2.4m,
-                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true)
+                "https://ai.google.dev/gemini-api/docs/pricing", new DateOnly(2026, 8, 20), true),
+            new PricingRule("Antigravity", "gpt-6-astra*", MatchMode.Wildcard, 10m, 1m, 12.5m, 50m,
+                "https://developers.openai.com/api/docs/models/gpt-6-astra", new DateOnly(2026, 9, 5), true,
+                new TokenPriceSet(20m, 2m, 25m, 75m)),
+            new PricingRule("Antigravity", "gpt-6*", MatchMode.Wildcard, 10m, 1m, 12.5m, 50m,
+                "https://developers.openai.com/api/docs/models/gpt-6-astra", new DateOnly(2026, 9, 5), true,
+                new TokenPriceSet(20m, 2m, 25m, 75m))
         ]);
 }
 

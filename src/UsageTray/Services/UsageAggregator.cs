@@ -77,31 +77,44 @@ public sealed class UsageAggregator
 
             if (provider == ProviderKind.Codex)
             {
-                DateTimeOffset? codexStart = null;
-                DateTimeOffset? codexEnd = null;
-                var weeklyCandidate = codexStandardWeekly ?? codexReserveWeekly;
-                if (weeklyCandidate?.ResetAt.HasValue == true)
+                DateTimeOffset? stdStart = null;
+                DateTimeOffset? stdEnd = null;
+                if (codexStandardWeekly?.ResetAt.HasValue == true)
                 {
-                    var resetAt = weeklyCandidate.ResetAt.Value;
+                    var resetAt = codexStandardWeekly.ResetAt.Value;
                     var cycleStart = resetAt.AddDays(-7);
-                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = weeklyCandidate.CapturedAt.AddDays(-7);
-                    codexStart = cycleStart;
-                    codexEnd = resetAt;
+                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = codexStandardWeekly.CapturedAt.AddDays(-7);
+                    stdStart = cycleStart;
+                    stdEnd = resetAt;
+                }
 
-                    if (codexReserveWeekly?.ResetAt.HasValue == true)
+                DateTimeOffset? resStart = null;
+                DateTimeOffset? resEnd = null;
+                if (codexReserveWeekly?.ResetAt.HasValue == true)
+                {
+                    var resReset = codexReserveWeekly.ResetAt.Value;
+                    var start = resReset.AddDays(-7);
+                    if (start > DateTimeOffset.UtcNow) start = codexReserveWeekly.CapturedAt.AddDays(-7);
+                    resStart = start;
+                    resEnd = resReset;
+                }
+
+                if (stdStart.HasValue || resStart.HasValue)
+                {
+                    cycleBuckets.AddRange(_repository.GetCodexUsageInPoolWindows(stdStart, stdEnd, resStart, resEnd));
+                    var earliest = stdStart.HasValue && resStart.HasValue ? (stdStart < resStart ? stdStart : resStart) : (stdStart ?? resStart);
+                    var latest = stdEnd.HasValue && resEnd.HasValue ? (stdEnd > resEnd ? stdEnd : resEnd) : (stdEnd ?? resEnd);
+                    windowStartUtc = earliest;
+                    windowEndUtc = latest;
+                    if (stdStart.HasValue && resStart.HasValue && stdStart != resStart)
                     {
-                        var resReset = codexReserveWeekly.ResetAt.Value;
-                        var resStart = resReset.AddDays(-7);
-                        if (resStart > DateTimeOffset.UtcNow) resStart = codexReserveWeekly.CapturedAt.AddDays(-7);
-                        codexStart = codexStart.HasValue ? (resStart < codexStart.Value ? resStart : codexStart.Value) : resStart;
-                        codexEnd = codexEnd.HasValue ? (resReset > codexEnd.Value ? resReset : codexEnd.Value) : resReset;
+                        rangeDisplayOverride = $"Codex 本次周额度（标准: {stdStart.Value.ToLocalTime():MM-dd HH:mm}起 | Reserve: {resStart.Value.ToLocalTime():MM-dd HH:mm}起）";
                     }
-
-                    cycleBuckets.AddRange(_repository.GetCodexUsageInUtcWindow(codexStart.Value, codexEnd.Value));
-                    windowStartUtc = codexStart;
-                    windowEndUtc = codexEnd;
-                    rangeDisplayOverride = $"Codex 本次周额度（{codexStart.Value.ToLocalTime():yyyy-MM-dd HH:mm} 至 {codexEnd.Value.ToLocalTime():yyyy-MM-dd HH:mm}）";
-                    range = new DateRange(DateOnly.FromDateTime(codexStart.Value.ToLocalTime().DateTime), DateOnly.FromDateTime(DateTime.Now));
+                    else
+                    {
+                        rangeDisplayOverride = $"Codex 本次周额度（{earliest!.Value.ToLocalTime():yyyy-MM-dd HH:mm} 至 {latest!.Value.ToLocalTime():yyyy-MM-dd HH:mm}）";
+                    }
+                    range = new DateRange(DateOnly.FromDateTime(earliest!.Value.ToLocalTime().DateTime), DateOnly.FromDateTime(DateTime.Now));
                 }
                 else
                 {
@@ -139,15 +152,35 @@ public sealed class UsageAggregator
                 DateTimeOffset? earliestStart = null;
                 DateTimeOffset? latestEnd = null;
 
-                var weeklyCandidate = codexStandardWeekly ?? codexReserveWeekly;
-                if (weeklyCandidate?.ResetAt.HasValue == true)
+                DateTimeOffset? stdStart = null;
+                DateTimeOffset? stdEnd = null;
+                if (codexStandardWeekly?.ResetAt.HasValue == true)
                 {
-                    var resetAt = weeklyCandidate.ResetAt.Value;
+                    var resetAt = codexStandardWeekly.ResetAt.Value;
                     var cycleStart = resetAt.AddDays(-7);
-                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = weeklyCandidate.CapturedAt.AddDays(-7);
-                    cycleBuckets.AddRange(_repository.GetCodexUsageInUtcWindow(cycleStart, resetAt));
-                    earliestStart = cycleStart;
-                    latestEnd = resetAt;
+                    if (cycleStart > DateTimeOffset.UtcNow) cycleStart = codexStandardWeekly.CapturedAt.AddDays(-7);
+                    stdStart = cycleStart;
+                    stdEnd = resetAt;
+                }
+
+                DateTimeOffset? resStart = null;
+                DateTimeOffset? resEnd = null;
+                if (codexReserveWeekly?.ResetAt.HasValue == true)
+                {
+                    var resReset = codexReserveWeekly.ResetAt.Value;
+                    var start = resReset.AddDays(-7);
+                    if (start > DateTimeOffset.UtcNow) start = codexReserveWeekly.CapturedAt.AddDays(-7);
+                    resStart = start;
+                    resEnd = resReset;
+                }
+
+                if (stdStart.HasValue || resStart.HasValue)
+                {
+                    cycleBuckets.AddRange(_repository.GetCodexUsageInPoolWindows(stdStart, stdEnd, resStart, resEnd));
+                    var codexEarliest = stdStart.HasValue && resStart.HasValue ? (stdStart < resStart ? stdStart : resStart) : (stdStart ?? resStart);
+                    var codexLatest = stdEnd.HasValue && resEnd.HasValue ? (stdEnd > resEnd ? stdEnd : resEnd) : (stdEnd ?? resEnd);
+                    earliestStart = earliestStart.HasValue ? (codexEarliest < earliestStart.Value ? codexEarliest : earliestStart.Value) : codexEarliest;
+                    latestEnd = latestEnd.HasValue ? (codexLatest > latestEnd.Value ? codexLatest : latestEnd.Value) : codexLatest;
                 }
                 else
                 {

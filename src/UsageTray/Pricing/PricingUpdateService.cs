@@ -20,6 +20,9 @@ public sealed class PricingUpdateService
     private static readonly Uri GeminiPricingUri = new("https://ai.google.dev/gemini-api/docs/pricing");
     private static readonly IReadOnlyDictionary<string, Uri> OpenAiModelPages = new Dictionary<string, Uri>(StringComparer.OrdinalIgnoreCase)
     {
+        ["gpt-6"] = new("https://developers.openai.com/api/docs/models/gpt-6-astra"),
+        ["gpt-6*"] = new("https://developers.openai.com/api/docs/models/gpt-6-astra"),
+        ["gpt-6-astra*"] = new("https://developers.openai.com/api/docs/models/gpt-6-astra"),
         ["gpt-5.6"] = new("https://developers.openai.com/api/docs/models/gpt-5.6-sol"),
         ["gpt-5.6-sol*"] = new("https://developers.openai.com/api/docs/models/gpt-5.6-sol"),
         ["gpt-5.6-terra*"] = new("https://developers.openai.com/api/docs/models/gpt-5.6-terra"),
@@ -32,7 +35,7 @@ public sealed class PricingUpdateService
 
     private static readonly string[] GeminiModels =
     [
-        "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.6-flash-tiered", "gemini-3.5-flash-lite", "gemini-3.5-flash",
+        "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.6-flash-tiered", "gemini-3.5-flash-lite", "gemini-3.5-flash",
         "gemini-3-flash-a", "gemini-default", "gemini-3.1-flash-lite", "gemini-3.1-pro", "gemini-pro-default", "gemini-pro",
         "gemini-2.5-pro", "gemini-2.5-flash"
     ];

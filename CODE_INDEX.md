@@ -111,7 +111,7 @@ graph TD
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`CodexProvider`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexProvider.cs) | `src/UsageTray/Providers/Codex/CodexProvider.cs` | 管理 Codex 会话文件扫描、0 变更短路检查、增量/全量解析及快照归一化。 |
-| [`CodexJsonlParser`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexJsonlParser.cs) | `src/UsageTray/Providers/Codex/CodexJsonlParser.cs` | 逐行容错解析 session JSONL，精准区分主会话与子任务 ID，提取标准与 Reserve 独立 rate_limits 与 Token。 |
+| [`CodexJsonlParser`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexJsonlParser.cs) | `src/UsageTray/Providers/Codex/CodexJsonlParser.cs` | 逐行容错解析 session JSONL（ParserVersion 6），过滤新版 CLI 调试级 `token_usage_record`，绑定权威 `token_count`，提取 rate_limits 与 Token。 |
 | [`CodexUsageNormalizer`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexUsageNormalizer.cs) | `src/UsageTray/Providers/Codex/CodexUsageNormalizer.cs` | 跨文件多分支会话归一化引擎，处理全局累计计数器差分、时间倒序重排与回退 Epoch。 |
 | [`CodexSessionLocator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexSessionLocator.cs) | `src/UsageTray/Providers/Codex/CodexSessionLocator.cs` | 发现 `CODEX_HOME` 及默认 `~/.codex/sessions` 下的活动与归档会话文件。 |
 
@@ -182,7 +182,7 @@ sequenceDiagram
 - **基础计费公式**:
   $$\text{Cost} = \text{Input} \times P_{in} + \text{CacheRead} \times P_{cr} + \text{CacheWrite} \times P_{cw} + \text{Output} \times P_{out}$$
 - **长上下文阶梯判定**:
-  单次 Request 命中阈值（如 Gemini Pro > 200K Tokens，GPT-5.6 > 272K Tokens）时，按长上下文独立单价结算。
+  单次 Request 命中阈值（如 Gemini Pro > 200K Tokens，GPT-6 / GPT-5.6 > 272K Tokens）时，按长上下文独立单价结算。
 - **满额预估价值推算**:
   $$\text{EstimatedFullUsd} = \frac{\text{本轮周消耗金额}}{\text{已使用额度比例}}$$
 

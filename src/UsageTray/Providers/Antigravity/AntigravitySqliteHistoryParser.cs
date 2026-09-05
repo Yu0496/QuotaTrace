@@ -121,6 +121,7 @@ public sealed class AntigravitySqliteHistoryParser
         if (name.Contains("opus")) return "claude-opus-4-6-thinking";
         if (name.Contains("haiku")) return "claude-3-5-haiku";
 
+        if (name.Contains("3.8") && name.Contains("flash")) return "gemini-3.8-flash";
         if (name.Contains("3.7") && name.Contains("flash")) return "gemini-3.7-flash";
         if (name.Contains("3.6") && name.Contains("flash")) return "gemini-3.6-flash";
         if (name.Contains("3.5") && name.Contains("lite")) return "gemini-3.5-flash-lite";
@@ -132,6 +133,7 @@ public sealed class AntigravitySqliteHistoryParser
         if (name.Contains("gemini") && name.Contains("pro")) return "gemini-3.1-pro";
         if (name.Contains("gemini") && name.Contains("flash")) return "gemini-3.5-flash";
 
+        if (name.Contains("gpt-6") || name.Contains("astra")) return "gpt-6-astra";
         if (name.Contains("gpt-oss") || name.Contains("120b")) return "gpt-oss-120b-medium";
 
         return displayName.Trim();

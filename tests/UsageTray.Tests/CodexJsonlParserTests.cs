@@ -1,4 +1,5 @@
 using UsageTray.Core;
+using UsageTray.Pricing;
 using UsageTray.Providers.Codex;
 
 namespace UsageTray.Tests;
@@ -85,6 +86,46 @@ public sealed class CodexJsonlParserTests
         Assert.Equal(2_000_000, reviewBucket.InputTokens);
         Assert.Equal(1_800_000, reviewBucket.CachedInputTokens);
         Assert.Equal(10_000, reviewBucket.OutputTokens);
+    }
+
+    [Fact]
+    public void TokenUsageRecordIgnoredAndDoesNotCauseRequestShapeUncertainty()
+    {
+        using var workspace = new TempWorkspace();
+        var sessionId = "01a07025-1a35-7db2-ab69-a449245c9d75";
+        var path = workspace.File($"rollout-{sessionId}.jsonl");
+
+        // Simulate Codex CLI v0.153.3+ dual-line turn output:
+        // Line 1: token_usage_record (internal debug tracking)
+        // Line 2: token_count (authoritative cumulative counter + last_token_usage)
+        File.WriteAllText(path, string.Join(Environment.NewLine, [
+            $"{{\"timestamp\":\"2026-09-05T06:00:00.000Z\",\"type\":\"session_meta\",\"payload\":{{\"session_id\":\"{sessionId}\",\"id\":\"{sessionId}\"}}}}",
+            "{\"timestamp\":\"2026-09-05T06:00:08.766Z\",\"type\":\"token_usage_record\",\"payload\":{\"usage\":{\"input_tokens\":16881,\"cached_input_tokens\":4864,\"cache_write_input_tokens\":0,\"output_tokens\":143,\"reasoning_output_tokens\":64,\"total_tokens\":17024},\"thread_token_usage\":{\"input_tokens\":16881,\"cached_input_tokens\":4864,\"cache_write_input_tokens\":0,\"output_tokens\":143,\"reasoning_output_tokens\":64,\"total_tokens\":17024}}}",
+            "{\"timestamp\":\"2026-09-05T06:00:08.766Z\",\"type\":\"event_msg\",\"model\":\"gpt-6-astra\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":16881,\"cached_input_tokens\":4864,\"cache_write_input_tokens\":0,\"output_tokens\":143,\"reasoning_output_tokens\":64,\"total_tokens\":17024},\"last_token_usage\":{\"input_tokens\":16881,\"cached_input_tokens\":4864,\"cache_write_input_tokens\":0,\"output_tokens\":143,\"reasoning_output_tokens\":64,\"total_tokens\":17024},\"model_context_window\":258400}}}",
+            "{\"timestamp\":\"2026-09-05T06:01:10.100Z\",\"type\":\"token_usage_record\",\"payload\":{\"usage\":{\"input_tokens\":20000,\"cached_input_tokens\":10000,\"cache_write_input_tokens\":0,\"output_tokens\":200,\"reasoning_output_tokens\":50,\"total_tokens\":20200},\"thread_token_usage\":{\"input_tokens\":36881,\"cached_input_tokens\":14864,\"cache_write_input_tokens\":0,\"output_tokens\":343,\"reasoning_output_tokens\":114,\"total_tokens\":37224}}}",
+            "{\"timestamp\":\"2026-09-05T06:01:10.100Z\",\"type\":\"event_msg\",\"model\":\"gpt-6-astra\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":36881,\"cached_input_tokens\":14864,\"cache_write_input_tokens\":0,\"output_tokens\":343,\"reasoning_output_tokens\":114,\"total_tokens\":37224},\"last_token_usage\":{\"input_tokens\":20000,\"cached_input_tokens\":10000,\"cache_write_input_tokens\":0,\"output_tokens\":200,\"reasoning_output_tokens\":50,\"total_tokens\":20200},\"model_context_window\":258400}}}"
+        ]));
+
+        var parser = new CodexJsonlParser();
+        var result = parser.ParseFile(path);
+
+        Assert.Equal(2, result.Snapshots?.Count);
+        Assert.All(result.Snapshots!, s => Assert.Equal("token_count", s.EventType));
+
+        var bucket = Assert.Single(result.Buckets);
+        Assert.Equal("gpt-6-astra", bucket.ModelId);
+        Assert.Equal(36881, bucket.InputTokens);
+        Assert.Equal(14864, bucket.CachedInputTokens);
+        Assert.Equal(343, bucket.OutputTokens);
+        Assert.Equal(0, bucket.RequestShapeUncertainCount);
+        Assert.False(bucket.HasRequestShapeUncertainty);
+
+        // Verify pricing calculation succeeds with non-null cost
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+        var costCalc = pricing.Calculate(bucket);
+        Assert.NotNull(costCalc.CostUsd);
+        Assert.NotEqual(CostQuality.RequestShapeUnavailable, costCalc.Quality);
+        Assert.True(costCalc.CostUsd.Value > 0);
     }
 }
 

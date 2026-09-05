@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace UsageTray.Providers;
 
-internal static class JsonValueReader
+public static class JsonValueReader
 {
     public static IEnumerable<JsonElement> EnumerateObjects(JsonElement root)
     {

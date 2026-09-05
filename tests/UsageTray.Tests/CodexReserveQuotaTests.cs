@@ -147,6 +147,72 @@ public sealed class CodexReserveQuotaTests
     }
 
     [Fact]
+    public void WeeklyCycle_ProperlySegregatesStandardAndReserveWindows_PreventingOldUsageLeak()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repository) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var now = DateTimeOffset.UtcNow;
+            // Standard reset was 1 day ago -> cycle is now - 1 day to now + 6 days
+            var stdResetAt = now.AddDays(6);
+            // Reserve reset is 3 days from now -> cycle is now - 4 days to now + 3 days
+            var resResetAt = now.AddDays(3);
+
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Codex weekly", 0.92, stdResetAt, "weekly", "rate_limits", "Plus"),
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-reserve", "Codex Reserve", 0.06, resResetAt, "weekly", "rate_limits", "Plus")
+            ]);
+
+            // Old standard usage (3 days ago - in old standard cycle, but within reserve's 4-day-ago window):
+            // If windows were merged into a single union window, this $10 old standard cost would leak into current standard week!
+            var sessionPathOld = workspace.File("session_old_std.jsonl");
+            File.WriteAllText(sessionPathOld, "mock");
+            repository.ReplaceCodexSource(new FileInfo(sessionPathOld), [
+                new("session_old_std", now.AddDays(-3), "gpt-5.6-sol", null, "standard",
+                    new CodexCumulativeUsage(1_000_000, 0, 100_000, 0),
+                    new CodexRequestUsage(1_000_000, 0, 100_000, 0),
+                    null, sessionPathOld, 1)
+            ], "session_old_std", null, "gpt-5.6-sol", null);
+
+            // New standard usage (0.5 days ago - within current standard cycle):
+            // 100K in ($5/M) + 10K out ($30/M) = $0.80
+            var sessionPathNew = workspace.File("session_new_std.jsonl");
+            File.WriteAllText(sessionPathNew, "mock");
+            repository.ReplaceCodexSource(new FileInfo(sessionPathNew), [
+                new("session_new_std", now.AddHours(-12), "gpt-5.6-sol", null, "standard",
+                    new CodexCumulativeUsage(100_000, 0, 10_000, 0),
+                    new CodexRequestUsage(100_000, 0, 10_000, 0),
+                    null, sessionPathNew, 1)
+            ], "session_new_std", null, "gpt-5.6-sol", null);
+
+            // Reserve usage (2 days ago - within current reserve cycle):
+            // 200K in ($0.2/M) + 100K out ($1.2/M) = $0.16
+            var sessionPathRes = workspace.File("session_res.jsonl");
+            File.WriteAllText(sessionPathRes, "mock");
+            repository.ReplaceCodexSource(new FileInfo(sessionPathRes), [
+                new("session_res", now.AddDays(-2), "gpt-reserve", null, "standard",
+                    new CodexCumulativeUsage(200_000, 0, 100_000, 0),
+                    new CodexRequestUsage(200_000, 0, 100_000, 0),
+                    null, sessionPathRes, 1)
+            ], "session_res", null, "gpt-reserve", null);
+
+            var pricing = new PricingService(workspace.File("pricing.json"), PricingService.BuiltInDefaults());
+            var aggregator = new UsageAggregator(repository, pricing);
+            var dashboard = aggregator.BuildSnapshot(DateRange.Today(), provider: ProviderKind.Codex, isWeeklyCycle: true);
+
+            // Verify: standard cost is strictly the $0.80 from the current standard cycle, NOT $10.80
+            Assert.Equal(0.80m, dashboard.CodexStandardApiEquivalentUsd);
+            Assert.Equal(0.16m, dashboard.CodexReserveApiEquivalentUsd);
+            Assert.Equal(0.96m, dashboard.CodexApiEquivalentUsd);
+
+            // Verify cycle view matches dashboard exactly
+            Assert.Equal(dashboard.CodexStandardApiEquivalentUsd, dashboard.CodexWeeklyCycle?.CycleCostUsd);
+            Assert.Equal(dashboard.CodexReserveApiEquivalentUsd, dashboard.CodexReserveWeeklyCycle?.CycleCostUsd);
+        }
+    }
+
+    [Fact]
     public void DiagnoseRealDatabaseSnapshot()
     {
         var dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "UsageTray", "usage.db");
