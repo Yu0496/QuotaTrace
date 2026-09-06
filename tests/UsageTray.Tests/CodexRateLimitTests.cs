@@ -57,8 +57,27 @@ public sealed class CodexRateLimitTests
 
         Assert.Single(result.Quotas);
         var weekly = result.Quotas[0];
+        Assert.Equal("codex-weekly", weekly.ModelOrPoolId);
         Assert.Equal("weekly", weekly.WindowKind);
         Assert.Equal(0.85, weekly.RemainingFraction);
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1790600000), weekly.ResetAt);
+    }
+
+    [Fact]
+    public void ParsesProLiteRateLimits_AsStandardWeeklyQuota_NotReserve()
+    {
+        using var workspace = new TempWorkspace();
+        var path = workspace.File("session_prolite.jsonl");
+        File.WriteAllText(path,
+            "{\"timestamp\":\"2026-09-06T07:25:26.104Z\",\"type\":\"event_msg\",\"model\":\"gpt-5.6-luna\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":26936,\"cached_input_tokens\":17152,\"output_tokens\":5}},\"rate_limits\":{\"limit_id\":\"codex\",\"primary\":{\"used_percent\":9.0,\"window_minutes\":10080,\"resets_at\":1789274934},\"secondary\":null,\"plan_type\":\"prolite\"}}}");
+
+        var result = new CodexJsonlParser().ParseFile(path);
+
+        Assert.Single(result.Quotas);
+        var weekly = result.Quotas[0];
+        Assert.Equal("codex-weekly", weekly.ModelOrPoolId);
+        Assert.Equal("weekly", weekly.WindowKind);
+        Assert.Equal("ProLite", weekly.PlanTier);
+        Assert.Equal(0.91, weekly.RemainingFraction!.Value, 2);
     }
 }

@@ -225,7 +225,6 @@ public sealed class CodexReserveQuotaTests
 
         // Check Quotas
         var codexQuotas = snapshot.Quotas.Where(q => q.Snapshot.Provider == ProviderKind.Codex).ToList();
-        // Check Cycles
         Assert.NotNull(snapshot.CodexWeeklyCycle);
         // Print to test output
         var cycles = snapshot.CodexWeeklyCycles;
@@ -234,7 +233,9 @@ public sealed class CodexReserveQuotaTests
         {
             System.Diagnostics.Debug.WriteLine($"Cycle: {c.PoolName}, cost: {c.CycleCostUsd}, est: {c.EstimatedWeeklyCostUsd}");
         }
-        Assert.Equal(2, cycles.Count);
+        // In real db, user is currently ProLite and old reserve is filtered out, so only standard cycle exists
+        var hasReserve = codexQuotas.Any(q => q.Snapshot.ModelOrPoolId == "codex-reserve");
+        Assert.Equal(hasReserve ? 2 : 1, cycles.Count);
     }
 
     [Fact]
@@ -283,6 +284,63 @@ public sealed class CodexReserveQuotaTests
             Assert.Contains(latest, q => q.ModelOrPoolId == "codex-5h" && q.RemainingFraction == 0.90);
             Assert.Contains(latest, q => q.ModelOrPoolId == "codex-weekly" && q.RemainingFraction == 0.80);
             Assert.Contains(latest, q => q.ModelOrPoolId == "codex-reserve" && q.RemainingFraction == 0.95);
+        }
+    }
+
+    [Fact]
+    public void GetLatestQuotas_FiltersOutReserve_WhenUserUpgradedToProLite()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repository) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var oldTime = DateTimeOffset.UtcNow.AddDays(-7);
+            var nowTime = DateTimeOffset.UtcNow;
+
+            // Old Plus reserve from last week
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, oldTime, "codex-reserve", "Codex Reserve", 0.06, oldTime.AddDays(4), "weekly", "source", "Plus")
+            ]);
+
+            // Recent ProLite standard quota
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, nowTime, "codex-weekly", "Codex weekly", 0.91, nowTime.AddDays(7), "weekly", "source", "ProLite"),
+                new QuotaSnapshot(ProviderKind.Codex, nowTime, "codex-5h", "Codex 5h", 0.97, nowTime.AddHours(5), "5h", "source", "ProLite")
+            ]);
+
+            var latest = repository.GetLatestQuotas(ProviderKind.Codex);
+
+            Assert.Equal(2, latest.Count);
+            Assert.DoesNotContain(latest, q => q.ModelOrPoolId == "codex-reserve");
+            Assert.Contains(latest, q => q.ModelOrPoolId == "codex-weekly" && q.PlanTier == "ProLite");
+            Assert.Contains(latest, q => q.ModelOrPoolId == "codex-5h" && q.PlanTier == "ProLite");
+        }
+    }
+
+    [Fact]
+    public void GetLatestQuotas_FiltersOutReserve_WhenReserveSnapshotIsExpiredAndStale()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repository) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var oldTime = DateTimeOffset.UtcNow.AddDays(-5);
+            var nowTime = DateTimeOffset.UtcNow;
+
+            // Stale expired reserve from 5 days ago (expired 1 day ago)
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, oldTime, "codex-reserve", "Codex Reserve", 0.10, oldTime.AddDays(4), "weekly", "source", "Plus")
+            ]);
+
+            // Latest standard quota
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, nowTime, "codex-weekly", "Codex weekly", 0.85, nowTime.AddDays(7), "weekly", "source", "Plus")
+            ]);
+
+            var latest = repository.GetLatestQuotas(ProviderKind.Codex);
+
+            Assert.Single(latest);
+            Assert.Equal("codex-weekly", latest[0].ModelOrPoolId);
         }
     }
 }

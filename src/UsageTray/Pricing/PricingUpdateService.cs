@@ -30,7 +30,9 @@ public sealed class PricingUpdateService
         ["gpt-5.5*"] = new("https://developers.openai.com/api/docs/models/gpt-5.5"),
         ["gpt-5.4-mini*"] = new("https://developers.openai.com/api/docs/models/gpt-5.4-mini"),
         ["gpt-5.4-nano*"] = new("https://developers.openai.com/api/docs/models/gpt-5.4-nano"),
-        ["gpt-5.4*"] = new("https://developers.openai.com/api/docs/models/gpt-5.4")
+        ["gpt-5.4*"] = new("https://developers.openai.com/api/docs/models/gpt-5.4"),
+        ["gpt-5.3-codex-spark*"] = new("https://developers.openai.com/api/docs/models/gpt-5.6-luna"),
+        ["gpt-5.3*"] = new("https://developers.openai.com/api/docs/models/gpt-5.6-luna")
     };
 
     private static readonly string[] GeminiModels =

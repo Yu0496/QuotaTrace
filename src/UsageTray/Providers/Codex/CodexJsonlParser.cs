@@ -6,7 +6,7 @@ namespace UsageTray.Providers.Codex;
 
 public sealed class CodexJsonlParser
 {
-    public const int ParserVersion = 6;
+    public const int ParserVersion = 7;
 
     private static readonly string[] InputNames = ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "input", "total_input_tokens", "totalInputTokens"];
     private static readonly string[] CachedNames = ["cached_input_tokens", "cachedInputTokens", "cache_read_input_tokens", "cacheReadInputTokens", "cached", "cache_read"];
@@ -52,7 +52,8 @@ public sealed class CodexJsonlParser
                     if (!string.IsNullOrWhiteSpace(model)) lastModel = model;
                     var timestamp = JsonValueReader.FindTimestamp(root) ?? File.GetLastWriteTimeUtc(path);
                     coverageStart = coverageStart is null || timestamp < coverageStart ? timestamp : coverageStart;
-                    planTier ??= JsonValueReader.FindString(root, "plan_type", "planType", "plan_tier", "planTier");
+                    var currentPlan = NormalizePlanTier(JsonValueReader.FindString(root, "plan_type", "planType", "plan_tier", "planTier"));
+                    if (!string.IsNullOrWhiteSpace(currentPlan)) planTier = currentPlan;
                     var extractedQuotas = ExtractRateLimits(root, timestamp, planTier, model ?? lastModel);
                     if (extractedQuotas is { Count: > 0 })
                     {
@@ -111,14 +112,27 @@ public sealed class CodexJsonlParser
 
     private static bool TryReadTokenEvent(JsonElement root, out ParsedTokenEvent result)
     {
-        // 显式忽略 Codex CLI v0.153.3+ 为每个 Turn 输出的内部执行跟踪记录 token_usage_record。
-        // 该记录仅包含单次请求用量而非全局累计账本，且缺少 last_token_usage。
-        // 随后紧随包含完整总账与单次用量的权威 token_count 事件。
-        // 若不跳过，会触发旧日志兼容 fallback 导致形状不确定性（HasRequestShapeUncertainty=true），进而导致定价计算返回空值（前端显示破折号）。
+        // 显式忽略非用量事件与内部执行跟踪记录：
+        // 1. token_usage_record：Codex CLI v0.153.3+ 为每个 Turn 输出的单次内部追踪，随后紧跟权威 token_count。
+        // 2. compacted / context_compacted：上下文压缩事件，其 replacement_history 包含历史对话文本或工具结果，
+        //    若落入旧日志 fallback 会错误解析为缺失 last_token_usage 的伪用量，导致请求形状不确定性（HasRequestShapeUncertainty=true）并触发破折号熔断。
+        if (JsonValueReader.TryGetString(root, out var rootType, "type"))
+        {
+            if (string.Equals(rootType, "token_usage_record", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(rootType, "compacted", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(rootType, "context_compacted", StringComparison.OrdinalIgnoreCase))
+            {
+                result = default!;
+                return false;
+            }
+        }
+
         foreach (var item in JsonValueReader.EnumerateObjects(root))
         {
             if (JsonValueReader.TryGetString(item, out var recordType, "type") &&
-                string.Equals(recordType, "token_usage_record", StringComparison.OrdinalIgnoreCase))
+                (string.Equals(recordType, "token_usage_record", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(recordType, "compacted", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(recordType, "context_compacted", StringComparison.OrdinalIgnoreCase)))
             {
                 result = default!;
                 return false;
@@ -198,16 +212,28 @@ public sealed class CodexJsonlParser
             if (!JsonValueReader.TryGetProperty(item, out var rateLimits, "rate_limits", "rateLimits") || rateLimits.ValueKind != JsonValueKind.Object) continue;
             result ??= new Dictionary<string, QuotaSnapshot>(StringComparer.OrdinalIgnoreCase);
 
+            var rawPlan = JsonValueReader.FindString(rateLimits, "plan_type", "planType", "plan_tier", "planTier") ?? planTier;
+            var effectivePlan = NormalizePlanTier(rawPlan);
+
+            var isProOrTeam = effectivePlan != null && (
+                effectivePlan.Contains("pro", StringComparison.OrdinalIgnoreCase) ||
+                effectivePlan.Contains("team", StringComparison.OrdinalIgnoreCase) ||
+                effectivePlan.Contains("ent", StringComparison.OrdinalIgnoreCase));
+
             var isReserve = isReserveModel;
-            if (!isReserve)
+            if (!isReserve && !isProOrTeam)
             {
-                var hasSecondary = JsonValueReader.TryGetProperty(rateLimits, out var sec, "secondary") && sec.ValueKind == JsonValueKind.Object && sec.EnumerateObject().Any();
-                if (!hasSecondary && JsonValueReader.TryGetProperty(rateLimits, out var prim, "primary") && prim.ValueKind == JsonValueKind.Object)
+                var isPlus = string.Equals(effectivePlan, "plus", StringComparison.OrdinalIgnoreCase);
+                if (isPlus)
                 {
-                    var primMins = JsonValueReader.GetLong(prim, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
-                    if (primMins >= 10000)
+                    var hasSecondary = JsonValueReader.TryGetProperty(rateLimits, out var sec, "secondary") && sec.ValueKind == JsonValueKind.Object && sec.EnumerateObject().Any();
+                    if (!hasSecondary && JsonValueReader.TryGetProperty(rateLimits, out var prim, "primary") && prim.ValueKind == JsonValueKind.Object)
                     {
-                        isReserve = true;
+                        var primMins = JsonValueReader.GetLong(prim, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
+                        if (primMins >= 10000)
+                        {
+                            isReserve = true;
+                        }
                     }
                 }
             }
@@ -220,7 +246,7 @@ public sealed class CodexJsonlParser
                     if (usedPercent.HasValue && usedPercent.Value is >= 0 and <= 100)
                     {
                         var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, "codex-reserve", "Codex Reserve",
-                            1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), "weekly", "codex-session-rate-limits", planTier);
+                            1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), "weekly", "codex-session-rate-limits", effectivePlan ?? planTier);
                         result["codex-reserve"] = snapshot;
                     }
                 }
@@ -233,9 +259,9 @@ public sealed class CodexJsonlParser
                     var usedPercent = JsonValueReader.GetDouble(window, "used_percent", "usedPercent");
                     if (!usedPercent.HasValue || usedPercent.Value is < 0 or > 100) continue;
                     var minutes = JsonValueReader.GetLong(window, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
-                    var kind = ClassifyWindow(windowName, minutes);
+                    var kind = ClassifyWindow(windowName, minutes, isProOrTeam);
                     var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, $"codex-{kind}", $"Codex {kind}",
-                        1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), kind, "codex-session-rate-limits", planTier);
+                        1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), kind, "codex-session-rate-limits", effectivePlan ?? planTier);
                     result[kind] = snapshot;
                 }
             }
@@ -243,11 +269,12 @@ public sealed class CodexJsonlParser
         return result;
     }
 
-    private static string ClassifyWindow(string windowName, long? minutes) => minutes switch
+    private static string ClassifyWindow(string windowName, long? minutes, bool isProOrTeam = false) => minutes switch
     {
         <= 360 and > 0 => "5h",
         >= 10_000 => "weekly",
         > 0 => $"{minutes}m",
+        _ when isProOrTeam => "weekly",
         _ when string.Equals(windowName, "primary", StringComparison.OrdinalIgnoreCase) => "5h",
         _ when string.Equals(windowName, "secondary", StringComparison.OrdinalIgnoreCase) => "weekly",
         _ => "unknown"
@@ -267,6 +294,21 @@ public sealed class CodexJsonlParser
     }
 
     private static string? NormalizeModel(string? model) => string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+
+    private static string? NormalizePlanTier(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var trimmed = raw.Trim();
+        return trimmed.ToLowerInvariant() switch
+        {
+            "prolite" => "ProLite",
+            "plus" => "Plus",
+            "pro" => "Pro",
+            "team" => "Team",
+            "enterprise" => "Enterprise",
+            _ => trimmed
+        };
+    }
 
     private sealed record ParsedTokenEvent(CodexCumulativeUsage Total, CodexRequestUsage? Last, long? ContextWindow, string? ServiceTier, string EventType);
 }

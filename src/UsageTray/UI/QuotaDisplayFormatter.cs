@@ -112,7 +112,11 @@ internal static class QuotaDisplayFormatter
         var models = snapshot.Models.Where(item => item.Provider == ProviderKind.Antigravity).ToList();
         var snapshots = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity)
             .Select(item => item.Snapshot).ToList();
-        var plan = snapshots.Select(item => item.PlanTier).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        var plan = snapshots
+            .Where(item => !string.IsNullOrWhiteSpace(item.PlanTier))
+            .OrderByDescending(item => item.CapturedAt)
+            .Select(item => item.PlanTier)
+            .FirstOrDefault();
         var status = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity).ToList() is { Count: > 0 } views &&
             views.All(item => item.IsOffline) ? "离线，显示最后一次快照" : "当前快照";
         var lines = new List<string>
@@ -176,9 +180,19 @@ internal static class QuotaDisplayFormatter
         var models = snapshot.Models.Where(item => item.Provider == ProviderKind.Codex).ToList();
         var codexQuotaViews = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Codex).ToList();
         var codexQuotas = codexQuotaViews.Select(item => item.Snapshot).ToList();
+        var codexPlan = codexQuotas
+            .Where(s => !IsReserve(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
+            .OrderByDescending(s => s.CapturedAt)
+            .Select(s => s.PlanTier)
+            .FirstOrDefault()
+            ?? codexQuotas
+            .Where(s => !string.IsNullOrWhiteSpace(s.PlanTier))
+            .OrderByDescending(s => s.CapturedAt)
+            .Select(s => s.PlanTier)
+            .FirstOrDefault();
         var lines = new List<string>
         {
-            "Codex 额度与用量"
+            $"Codex 额度与用量{(string.IsNullOrWhiteSpace(codexPlan) ? string.Empty : $"（{codexPlan}）")}"
         };
 
         if (codexQuotas.Count > 0)

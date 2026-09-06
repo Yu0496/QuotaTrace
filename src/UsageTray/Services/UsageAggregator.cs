@@ -47,6 +47,18 @@ public sealed class UsageAggregator
                 .OrderByDescending(q => q.CapturedAt)
                 .FirstOrDefault();
 
+            if (codexStandardWeekly != null && !string.IsNullOrWhiteSpace(codexStandardWeekly.PlanTier) &&
+                !codexStandardWeekly.PlanTier.Equals("Plus", StringComparison.OrdinalIgnoreCase))
+            {
+                codexReserveWeekly = null;
+            }
+            else if (codexReserveWeekly != null && codexStandardWeekly != null &&
+                     codexReserveWeekly.CapturedAt < codexStandardWeekly.CapturedAt.AddDays(-1) &&
+                     codexReserveWeekly.ResetAt.HasValue && codexReserveWeekly.ResetAt.Value < DateTimeOffset.UtcNow)
+            {
+                codexReserveWeekly = null;
+            }
+
             var agWeeklySnapshots = quotas
                 .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity && IsWeekly(q.Snapshot))
                 .Select(q => q.Snapshot)
@@ -333,6 +345,18 @@ public sealed class UsageAggregator
             .Select(q => q.Snapshot)
             .OrderByDescending(q => q.CapturedAt)
             .FirstOrDefault();
+
+        if (standardQuota != null && !string.IsNullOrWhiteSpace(standardQuota.PlanTier) &&
+            !standardQuota.PlanTier.Equals("Plus", StringComparison.OrdinalIgnoreCase))
+        {
+            reserveQuota = null;
+        }
+        else if (reserveQuota != null && standardQuota != null &&
+                 reserveQuota.CapturedAt < standardQuota.CapturedAt.AddDays(-1) &&
+                 reserveQuota.ResetAt.HasValue && reserveQuota.ResetAt.Value < DateTimeOffset.UtcNow)
+        {
+            reserveQuota = null;
+        }
 
         var standardCycle = standardQuota != null ? BuildSingleCodexCycle(standardQuota, false, warnings) : null;
         var reserveCycle = reserveQuota != null ? BuildSingleCodexCycle(reserveQuota, true, warnings) : null;

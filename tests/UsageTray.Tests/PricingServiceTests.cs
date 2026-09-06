@@ -1,5 +1,6 @@
 using UsageTray.Core;
 using UsageTray.Pricing;
+using UsageTray.Providers.Codex;
 
 namespace UsageTray.Tests;
  
@@ -240,6 +241,23 @@ public sealed class PricingServiceTests
         var serviceTierResult = pricing.Calculate(serviceTierFastBucket);
         Assert.NotNull(serviceTierResult.CostUsd);
         Assert.Equal(122.0m, serviceTierResult.CostUsd.Value);
+    }
+
+    [Fact]
+    public void Gpt53CodexSparkPricing_CalculatesCorrectCost()
+    {
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+        var bucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 9, 6), "test", "gpt-5.3-codex-spark",
+            27992, 9856, 74, 1, DataQuality.Exact, "path", "sess1");
+        var result = pricing.Calculate(bucket);
+
+        Assert.True(result.IsPriced);
+        Assert.NotNull(result.CostUsd);
+        // nonCached = 27992 - 9856 = 18136 -> 18136 * 0.2 / 1M = 0.0036272
+        // cached = 9856 -> 9856 * 0.02 / 1M = 0.00019712
+        // output = 74 -> 74 * 1.2 / 1M = 0.0000888
+        // total = 0.00391312
+        Assert.Equal(0.00391312m, result.CostUsd.Value);
     }
 }
 

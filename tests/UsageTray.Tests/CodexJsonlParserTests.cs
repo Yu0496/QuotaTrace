@@ -127,6 +127,42 @@ public sealed class CodexJsonlParserTests
         Assert.NotEqual(CostQuality.RequestShapeUnavailable, costCalc.Quality);
         Assert.True(costCalc.CostUsd.Value > 0);
     }
+
+    [Fact]
+    public void CompactedEventIgnoredAndDoesNotCauseRequestShapeUncertainty()
+    {
+        using var workspace = new TempWorkspace();
+        var sessionId = "01a07517-6726-7671-8b1d-9337ec2420d2";
+        var path = workspace.File($"rollout-{sessionId}.jsonl");
+
+        // Simulate Codex CLI compacted event between turns:
+        // Turn 1: token_count
+        // Intermediary: compacted (containing replacement_history with nested input_tokens)
+        // Turn 2: token_count
+        File.WriteAllText(path, string.Join(Environment.NewLine, [
+            $"{{\"timestamp\":\"2026-09-06T05:40:00.000Z\",\"type\":\"session_meta\",\"payload\":{{\"session_id\":\"{sessionId}\",\"id\":\"{sessionId}\"}}}}",
+            "{\"timestamp\":\"2026-09-06T05:40:05.000Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"codex-auto-review\"}}",
+            "{\"timestamp\":\"2026-09-06T05:40:08.000Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":3737459,\"cached_input_tokens\":3482112,\"cache_write_input_tokens\":0,\"output_tokens\":4458,\"reasoning_output_tokens\":1700,\"total_tokens\":3741917},\"last_token_usage\":{\"input_tokens\":239739,\"cached_input_tokens\":226048,\"cache_write_input_tokens\":0,\"output_tokens\":204,\"reasoning_output_tokens\":123,\"total_tokens\":239943},\"model_context_window\":258400}}}",
+            "{\"timestamp\":\"2026-09-06T05:50:12.491Z\",\"type\":\"compacted\",\"payload\":{\"message\":\"\",\"replacement_history\":[{\"type\":\"message\",\"content\":[{\"type\":\"input_text\",\"text\":\"hello\"}],\"usage\":{\"input_tokens\":239770,\"cached_input_tokens\":4864,\"output_tokens\":879}}]}}",
+            "{\"timestamp\":\"2026-09-06T05:50:12.497Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":3737459,\"cached_input_tokens\":3482112,\"cache_write_input_tokens\":0,\"output_tokens\":4458,\"reasoning_output_tokens\":1700,\"total_tokens\":3741917},\"last_token_usage\":{\"input_tokens\":0,\"cached_input_tokens\":0,\"cache_write_input_tokens\":0,\"output_tokens\":0,\"reasoning_output_tokens\":0,\"total_tokens\":76369},\"model_context_window\":258400}}}"
+        ]));
+
+        var parser = new CodexJsonlParser();
+        var result = parser.ParseFile(path);
+
+        Assert.Equal(2, result.Snapshots?.Count);
+        Assert.All(result.Snapshots!, s => Assert.Equal("token_count", s.EventType));
+
+        var bucket = Assert.Single(result.Buckets);
+        Assert.Equal("codex-auto-review", bucket.ModelId);
+        Assert.Equal(0, bucket.RequestShapeUncertainCount);
+        Assert.False(bucket.HasRequestShapeUncertainty);
+
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+        var costCalc = pricing.Calculate(bucket);
+        Assert.NotNull(costCalc.CostUsd);
+        Assert.NotEqual(CostQuality.RequestShapeUnavailable, costCalc.Quality);
+    }
 }
 
 

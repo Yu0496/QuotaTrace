@@ -281,7 +281,11 @@ internal sealed class QuotaPopupForm : Form
         var agViews = _snapshot.Quotas.Where(q => q.Snapshot.Provider == ProviderKind.Antigravity).ToList();
         var rawAgSnapshots = agViews.Select(q => q.Snapshot).ToList();
         var agSnapshots = DeduplicateAntigravityQuotas(rawAgSnapshots);
-        var agPlan = agSnapshots.Select(s => s.PlanTier).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+        var agPlan = agSnapshots
+            .Where(s => !string.IsNullOrWhiteSpace(s.PlanTier))
+            .OrderByDescending(s => s.CapturedAt)
+            .Select(s => s.PlanTier)
+            .FirstOrDefault();
         var agOffline = agViews.Count > 0 && agViews.All(v => v.IsOffline);
 
         DrawSectionHeader(g, padX, ref y, "Antigravity 额度与周订阅", agPlan, agOffline ? "离线" : null, Color.FromArgb(59, 130, 246));
@@ -363,7 +367,16 @@ internal sealed class QuotaPopupForm : Form
         // Section 2: Codex
         var codexViews = _snapshot.Quotas.Where(q => q.Snapshot.Provider == ProviderKind.Codex).ToList();
         var codexSnapshots = codexViews.Select(q => q.Snapshot).ToList();
-        var codexPlan = codexSnapshots.Select(s => s.PlanTier).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+        var codexPlan = codexSnapshots
+            .Where(s => !UsageAggregator.IsReserveSnapshot(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
+            .OrderByDescending(s => s.CapturedAt)
+            .Select(s => s.PlanTier)
+            .FirstOrDefault()
+            ?? codexSnapshots
+            .Where(s => !string.IsNullOrWhiteSpace(s.PlanTier))
+            .OrderByDescending(s => s.CapturedAt)
+            .Select(s => s.PlanTier)
+            .FirstOrDefault();
 
         DrawSectionHeader(g, padX, ref y, "Codex 额度与周订阅", codexPlan, null, Color.FromArgb(16, 185, 129));
 

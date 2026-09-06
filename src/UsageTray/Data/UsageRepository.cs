@@ -715,9 +715,40 @@ public sealed class UsageRepository
                 reader.IsDBNull(4) ? null : reader.GetDouble(4), reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5)),
                 reader.GetString(6), reader.GetString(7), reader.IsDBNull(8) ? null : reader.GetString(8)));
         }
+
+        if (provider == ProviderKind.Codex)
+        {
+            var latestStd = list
+                .Where(item => !item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(item => item.CapturedAt)
+                .FirstOrDefault();
+
+            if (latestStd != null)
+            {
+                var plan = latestStd.PlanTier;
+                bool isNonPlus = !string.IsNullOrWhiteSpace(plan) && !plan.Equals("Plus", StringComparison.OrdinalIgnoreCase);
+
+                list.RemoveAll(item =>
+                {
+                    if (!item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase))
+                        return false;
+
+                    // Pro / ProLite / Team 等非 Plus 账号不享有 Reserve 配额
+                    if (isNonPlus) return true;
+
+                    // 若 Reserve 快照早于最新标准快照 24 小时以上，且已过重置时间，说明历史残留已失效
+                    if (item.CapturedAt < latestStd.CapturedAt.AddDays(-1) && item.ResetAt.HasValue && item.ResetAt.Value < DateTimeOffset.UtcNow)
+                        return true;
+
+                    return false;
+                });
+            }
+        }
+
         return list
             .GroupBy(item => provider == ProviderKind.Codex ? (item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase) ? "reserve" : item.WindowKind) : $"{item.ModelOrPoolId}_{item.WindowKind}")
             .Select(group => group.OrderByDescending(item => item.CapturedAt).First())
+            .OrderBy(item => item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
             .ToList();
     }
 
