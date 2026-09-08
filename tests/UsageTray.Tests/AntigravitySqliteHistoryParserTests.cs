@@ -111,11 +111,11 @@ public sealed class AntigravitySqliteHistoryParserTests
 
         // Calculation check:
         // Short request: Uncached = 50,000, Cached = 10,000, Output = 3,000
-        // Short Cost = 50,000 * 2.0 / 1M + 10,000 * 0.5 / 1M + 3,000 * 12.0 / 1M = 0.10 + 0.005 + 0.036 = $0.141
+        // Short Cost = 50,000 * 2.0 / 1M + 10,000 * 0.2 / 1M + 3,000 * 12.0 / 1M = 0.10 + 0.005 + 0.036 = $0.141
         // Long request: Uncached = 180,000, Cached = 50,000, Output = 6,000 (at Long rate: In $4, Read $1, Out $18)
-        // Long Cost = 180,000 * 4.0 / 1M + 50,000 * 1.0 / 1M + 6,000 * 18.0 / 1M = 0.72 + 0.05 + 0.108 = $0.878
-        // Total Cost = $0.141 + $0.878 = $1.019
-        Assert.Equal(1.019m, cost.CostUsd.Value);
+        // Long Cost = 180,000 * 4.0 / 1M + 50,000 * 0.4 / 1M + 6,000 * 18.0 / 1M = 0.72 + 0.05 + 0.108 = $0.878
+        // Total Cost = $0.141 + $0.878 = $0.986
+        Assert.Equal(0.986m, cost.CostUsd.Value);
     }
 
     [Fact]

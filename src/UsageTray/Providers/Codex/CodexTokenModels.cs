@@ -87,7 +87,8 @@ public sealed record CodexEventAudit(
     CodexRequestUsageQuality RequestUsageQuality,
     bool IsLongContext,
     bool IsDuplicate,
-    IReadOnlyList<string> DuplicateSources);
+    IReadOnlyList<string> DuplicateSources,
+    string? ServiceTier = null);
 
 
 public sealed record CodexSourceAudit(

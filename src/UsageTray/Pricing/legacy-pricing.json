@@ -1,0 +1,1845 @@
+{
+  "schemaVersion": 2,
+  "lastVerifiedAt": "2026-09-05",
+  "rules": [
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-05",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 20.0,
+          "cacheReadPerMillionUsd": 2.0,
+          "cacheWritePerMillionUsd": 25.0,
+          "outputPerMillionUsd": 100.0
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6-astra*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-05",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 20.0,
+          "cacheReadPerMillionUsd": 2.0,
+          "cacheWritePerMillionUsd": 25.0,
+          "outputPerMillionUsd": 100.0
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6-astra-fast*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 20.0,
+      "cacheReadPerMillionUsd": 2.0,
+      "cacheWritePerMillionUsd": 25.0,
+      "outputPerMillionUsd": 100.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-05",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 40.0,
+        "cacheReadPerMillionUsd": 4.0,
+        "cacheWritePerMillionUsd": 50.0,
+        "outputPerMillionUsd": 150.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6-fast*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 20.0,
+      "cacheReadPerMillionUsd": 2.0,
+      "cacheWritePerMillionUsd": 25.0,
+      "outputPerMillionUsd": 100.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-05",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 40.0,
+        "cacheReadPerMillionUsd": 4.0,
+        "cacheWritePerMillionUsd": 50.0,
+        "outputPerMillionUsd": 150.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-05",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.6",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 5.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 6.25,
+      "outputPerMillionUsd": 30.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 10.0,
+        "cacheReadPerMillionUsd": 1.0,
+        "cacheWritePerMillionUsd": 12.5,
+        "outputPerMillionUsd": 45.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.6-sol*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 5.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 6.25,
+      "outputPerMillionUsd": 30.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 10.0,
+        "cacheReadPerMillionUsd": 1.0,
+        "cacheWritePerMillionUsd": 12.5,
+        "outputPerMillionUsd": 45.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.6-terra*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 12.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": 5.0,
+        "outputPerMillionUsd": 18.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.6-luna*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-reserve*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-08-27",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "codex-auto-review*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-08-31",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.3-codex-spark*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-09-06",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.3*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-09-06",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.5*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 5.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 30.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.5",
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.4-mini*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 4.5,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4-mini",
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.4-nano*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 1.25,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4-nano",
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.4*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.5,
+      "cacheReadPerMillionUsd": 0.25,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4",
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-4.1*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 8.0,
+      "sourceUrl": "https://platform.openai.com/pricing",
+      "lastVerifiedAt": "2026-08-19",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-sonnet-4-6*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-7-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3.7-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-5-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3.5-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-opus-4-6*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 15.0,
+      "cacheReadPerMillionUsd": 1.5,
+      "cacheWritePerMillionUsd": 18.75,
+      "outputPerMillionUsd": 75.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-opus*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 15.0,
+      "cacheReadPerMillionUsd": 1.5,
+      "cacheWritePerMillionUsd": 18.75,
+      "outputPerMillionUsd": 75.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-opus*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 15.0,
+      "cacheReadPerMillionUsd": 1.5,
+      "cacheWritePerMillionUsd": 18.75,
+      "outputPerMillionUsd": 75.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3.5-opus*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 15.0,
+      "cacheReadPerMillionUsd": 1.5,
+      "cacheWritePerMillionUsd": 18.75,
+      "outputPerMillionUsd": 75.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-5-haiku*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.8,
+      "cacheReadPerMillionUsd": 0.08,
+      "cacheWritePerMillionUsd": 1.0,
+      "outputPerMillionUsd": 4.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3.5-haiku*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.8,
+      "cacheReadPerMillionUsd": 0.08,
+      "cacheWritePerMillionUsd": 1.0,
+      "outputPerMillionUsd": 4.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-haiku*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.8,
+      "cacheReadPerMillionUsd": 0.08,
+      "cacheWritePerMillionUsd": 1.0,
+      "outputPerMillionUsd": 4.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.8-flash*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 3.75,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-05",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.7-flash*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 3.75,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.6-flash*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 3.75,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.6-flash-tiered*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 3.75,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.5-flash*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 9.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3-flash-a*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 9.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-default*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 9.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.5-flash-lite*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.3,
+      "cacheReadPerMillionUsd": 0.03,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 2.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.1-flash-lite*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.25,
+      "cacheReadPerMillionUsd": 0.025,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 1.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.1-pro*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 12.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 1.0,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 18.0
+      },
+      "longContextThresholdTokens": 200000
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro-default*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 12.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 1.0,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 18.0
+      },
+      "longContextThresholdTokens": 200000
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 12.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 1.0,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 18.0
+      },
+      "longContextThresholdTokens": 200000
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-2.5-pro*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.25,
+      "cacheReadPerMillionUsd": 0.3125,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 2.5,
+        "cacheReadPerMillionUsd": 0.625,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 15.0
+      },
+      "longContextThresholdTokens": 200000
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-2.5-flash*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.3,
+      "cacheReadPerMillionUsd": 0.03,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 2.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-oss-120b*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.6,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 2.4,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-oss*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.6,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 2.4,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-08-20",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-6-astra*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-05",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-6*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-05",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 20.0,
+          "cacheReadPerMillionUsd": 2.0,
+          "cacheWritePerMillionUsd": 25.0,
+          "outputPerMillionUsd": 100.0
+        },
+        "flex": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 25.0
+        },
+        "batch": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 25.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 40.0,
+          "cacheReadPerMillionUsd": 4.0,
+          "cacheWritePerMillionUsd": 50.0,
+          "outputPerMillionUsd": 150.0
+        },
+        "flex": {
+          "inputPerMillionUsd": 10.0,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 37.5
+        },
+        "batch": {
+          "inputPerMillionUsd": 10.0,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 37.5
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6-astra",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 20.0,
+          "cacheReadPerMillionUsd": 2.0,
+          "cacheWritePerMillionUsd": 25.0,
+          "outputPerMillionUsd": 100.0
+        },
+        "flex": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 25.0
+        },
+        "batch": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 25.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 40.0,
+          "cacheReadPerMillionUsd": 4.0,
+          "cacheWritePerMillionUsd": 50.0,
+          "outputPerMillionUsd": 150.0
+        },
+        "flex": {
+          "inputPerMillionUsd": 10.0,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 37.5
+        },
+        "batch": {
+          "inputPerMillionUsd": 10.0,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 37.5
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6-astra-fast*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 20.0,
+      "cacheReadPerMillionUsd": 2.0,
+      "cacheWritePerMillionUsd": 25.0,
+      "outputPerMillionUsd": 100.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 40.0,
+        "cacheReadPerMillionUsd": 4.0,
+        "cacheWritePerMillionUsd": 50.0,
+        "outputPerMillionUsd": 150.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6-fast*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 20.0,
+      "cacheReadPerMillionUsd": 2.0,
+      "cacheWritePerMillionUsd": 25.0,
+      "outputPerMillionUsd": 100.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 40.0,
+        "cacheReadPerMillionUsd": 4.0,
+        "cacheWritePerMillionUsd": 50.0,
+        "outputPerMillionUsd": 150.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000,
+      "unverifiedReason": "不同 GPT-6 型号不能共用 Astra 价格"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.6",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 5,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 6.25,
+      "outputPerMillionUsd": 30,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 10,
+        "cacheReadPerMillionUsd": 1,
+        "cacheWritePerMillionUsd": 12.5,
+        "outputPerMillionUsd": 45
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 10,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 60
+        },
+        "flex": {
+          "inputPerMillionUsd": 2.5,
+          "cacheReadPerMillionUsd": 0.25,
+          "cacheWritePerMillionUsd": 3.125,
+          "outputPerMillionUsd": 15.0
+        },
+        "batch": {
+          "inputPerMillionUsd": 2.5,
+          "cacheReadPerMillionUsd": 0.25,
+          "cacheWritePerMillionUsd": 3.125,
+          "outputPerMillionUsd": 15.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 20,
+          "cacheReadPerMillionUsd": 2,
+          "cacheWritePerMillionUsd": 25.0,
+          "outputPerMillionUsd": 90
+        },
+        "flex": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 22.5
+        },
+        "batch": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 22.5
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.6-sol",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 5,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 6.25,
+      "outputPerMillionUsd": 30,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 10,
+        "cacheReadPerMillionUsd": 1,
+        "cacheWritePerMillionUsd": 12.5,
+        "outputPerMillionUsd": 45
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 10,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 60
+        },
+        "flex": {
+          "inputPerMillionUsd": 2.5,
+          "cacheReadPerMillionUsd": 0.25,
+          "cacheWritePerMillionUsd": 3.125,
+          "outputPerMillionUsd": 15.0
+        },
+        "batch": {
+          "inputPerMillionUsd": 2.5,
+          "cacheReadPerMillionUsd": 0.25,
+          "cacheWritePerMillionUsd": 3.125,
+          "outputPerMillionUsd": 15.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 20,
+          "cacheReadPerMillionUsd": 2,
+          "cacheWritePerMillionUsd": 25.0,
+          "outputPerMillionUsd": 90
+        },
+        "flex": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 22.5
+        },
+        "batch": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 22.5
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.6-terra",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 12.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": 5.0,
+        "outputPerMillionUsd": 18.0
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 4.0,
+          "cacheReadPerMillionUsd": 0.4,
+          "cacheWritePerMillionUsd": 5.0,
+          "outputPerMillionUsd": 24.0
+        },
+        "flex": {
+          "inputPerMillionUsd": 1.0,
+          "cacheReadPerMillionUsd": 0.1,
+          "cacheWritePerMillionUsd": 1.25,
+          "outputPerMillionUsd": 6.0
+        },
+        "batch": {
+          "inputPerMillionUsd": 1.0,
+          "cacheReadPerMillionUsd": 0.1,
+          "cacheWritePerMillionUsd": 1.25,
+          "outputPerMillionUsd": 6.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 8.0,
+          "cacheReadPerMillionUsd": 0.8,
+          "cacheWritePerMillionUsd": 10.0,
+          "outputPerMillionUsd": 36.0
+        },
+        "flex": {
+          "inputPerMillionUsd": 2.0,
+          "cacheReadPerMillionUsd": 0.2,
+          "cacheWritePerMillionUsd": 2.5,
+          "outputPerMillionUsd": 9.0
+        },
+        "batch": {
+          "inputPerMillionUsd": 2.0,
+          "cacheReadPerMillionUsd": 0.2,
+          "cacheWritePerMillionUsd": 2.5,
+          "outputPerMillionUsd": 9.0
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.6-luna",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.4,
+          "cacheReadPerMillionUsd": 0.04,
+          "cacheWritePerMillionUsd": 0.5,
+          "outputPerMillionUsd": 2.4
+        },
+        "flex": {
+          "inputPerMillionUsd": 0.1,
+          "cacheReadPerMillionUsd": 0.01,
+          "cacheWritePerMillionUsd": 0.125,
+          "outputPerMillionUsd": 0.6
+        },
+        "batch": {
+          "inputPerMillionUsd": 0.1,
+          "cacheReadPerMillionUsd": 0.01,
+          "cacheWritePerMillionUsd": 0.125,
+          "outputPerMillionUsd": 0.6
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.8,
+          "cacheReadPerMillionUsd": 0.08,
+          "cacheWritePerMillionUsd": 1.0,
+          "outputPerMillionUsd": 3.6
+        },
+        "flex": {
+          "inputPerMillionUsd": 0.2,
+          "cacheReadPerMillionUsd": 0.02,
+          "cacheWritePerMillionUsd": 0.25,
+          "outputPerMillionUsd": 0.9
+        },
+        "batch": {
+          "inputPerMillionUsd": 0.2,
+          "cacheReadPerMillionUsd": 0.02,
+          "cacheWritePerMillionUsd": 0.25,
+          "outputPerMillionUsd": 0.9
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-reserve*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000,
+      "unverifiedReason": "Reserve 底层模型及价格未经官方确认"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "codex-auto-review*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000,
+      "unverifiedReason": "Auto-Review 底层模型及价格未经官方确认"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.3-codex-spark*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000,
+      "unverifiedReason": "未取得 Spark 独立 API 定价"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.3*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000,
+      "unverifiedReason": "不同 GPT-5.3 模型不能共用价格"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.5",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 5.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 30.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.5",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 10,
+        "cacheReadPerMillionUsd": 1,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 45
+      },
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 12.5,
+          "cacheReadPerMillionUsd": 1.25,
+          "cacheWritePerMillionUsd": null,
+          "outputPerMillionUsd": 75.0
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.4-mini",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 4.5,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4-mini",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 1.5,
+          "cacheReadPerMillionUsd": 0.15,
+          "cacheWritePerMillionUsd": null,
+          "outputPerMillionUsd": 9.0
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.4-nano",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 1.25,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4-nano",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.4",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 2.5,
+      "cacheReadPerMillionUsd": 0.25,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.4",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 5,
+        "cacheReadPerMillionUsd": 0.5,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 22.5
+      },
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": null,
+          "outputPerMillionUsd": 30.0
+        }
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-4.1",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 8.0,
+      "sourceUrl": "https://platform.openai.com/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-sonnet-4-6*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://platform.claude.com/docs/en/models/sonnet-4-6/overview",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "unverifiedReason": "不同 Sonnet 版本不能共用价格"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-7-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3.7-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-5-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3.5-sonnet*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 3.0,
+      "cacheReadPerMillionUsd": 0.3,
+      "cacheWritePerMillionUsd": 3.75,
+      "outputPerMillionUsd": 15.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-opus-4-6*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 5,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 6.25,
+      "outputPerMillionUsd": 25,
+      "sourceUrl": "https://platform.claude.com/docs/en/models/opus-4-6/overview",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-opus*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 15.0,
+      "cacheReadPerMillionUsd": 1.5,
+      "cacheWritePerMillionUsd": 18.75,
+      "outputPerMillionUsd": 75.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "unverifiedReason": "不同 Opus 版本不能共用价格"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-opus*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 15.0,
+      "cacheReadPerMillionUsd": 1.5,
+      "cacheWritePerMillionUsd": 18.75,
+      "outputPerMillionUsd": 75.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3.5-opus*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 15.0,
+      "cacheReadPerMillionUsd": 1.5,
+      "cacheWritePerMillionUsd": 18.75,
+      "outputPerMillionUsd": 75.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "unverifiedReason": "模型与价格未核验"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3-5-haiku*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.8,
+      "cacheReadPerMillionUsd": 0.08,
+      "cacheWritePerMillionUsd": 1.0,
+      "outputPerMillionUsd": 4.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-3.5-haiku*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.8,
+      "cacheReadPerMillionUsd": 0.08,
+      "cacheWritePerMillionUsd": 1.0,
+      "outputPerMillionUsd": 4.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-haiku*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.8,
+      "cacheReadPerMillionUsd": 0.08,
+      "cacheWritePerMillionUsd": 1.0,
+      "outputPerMillionUsd": 4.0,
+      "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "unverifiedReason": "不同 Haiku 版本不能共用价格"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.8-flash",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 3.75,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.7-flash",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 3.75,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.6-flash",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 3.75,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.6-flash-tiered*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.75,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 3.75,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "unverifiedReason": "内部变体费率未核验"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.5-flash*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 9.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3-flash-a*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 9.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "unverifiedReason": "内部模型别名与公开 API 模型的映射未核验"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-default*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 9.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "unverifiedReason": "动态默认模型未核验"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.5-flash-lite*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.3,
+      "cacheReadPerMillionUsd": 0.03,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 2.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.1-flash-lite*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.25,
+      "cacheReadPerMillionUsd": 0.025,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 1.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.1-pro*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 12.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 18
+      },
+      "longContextThresholdTokens": 200000
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro-default*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 12.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 18
+      },
+      "longContextThresholdTokens": 200000,
+      "unverifiedReason": "动态默认模型未核验"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 12.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 18
+      },
+      "longContextThresholdTokens": 200000,
+      "unverifiedReason": "动态默认模型未核验"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-2.5-pro*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.25,
+      "cacheReadPerMillionUsd": 0.3125,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 2.5,
+        "cacheReadPerMillionUsd": 0.625,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 15.0
+      },
+      "longContextThresholdTokens": 200000
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-2.5-flash*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.3,
+      "cacheReadPerMillionUsd": 0.03,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 2.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-oss-120b*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.6,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 2.4,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "unverifiedReason": "未取得该服务的官方 API 价格"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-oss*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.6,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 2.4,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "unverifiedReason": "未取得该服务的官方 API 价格"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-6-astra",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-6*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 10.0,
+      "cacheReadPerMillionUsd": 1.0,
+      "cacheWritePerMillionUsd": 12.5,
+      "outputPerMillionUsd": 50.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 20.0,
+        "cacheReadPerMillionUsd": 2.0,
+        "cacheWritePerMillionUsd": 25.0,
+        "outputPerMillionUsd": 75.0
+      },
+      "longContextThresholdTokens": 272000,
+      "unverifiedReason": "不同 GPT-6 型号不能共用 Astra 价格"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.3-codex",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 1.75,
+      "cacheReadPerMillionUsd": 0.175,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 14,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.3-codex",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.5-pro",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 30,
+      "cacheReadPerMillionUsd": null,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 180,
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 60,
+        "cacheReadPerMillionUsd": 0,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 270
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-5.4-pro",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 30,
+      "cacheReadPerMillionUsd": null,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 180,
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 60,
+        "cacheReadPerMillionUsd": 0,
+        "cacheWritePerMillionUsd": null,
+        "outputPerMillionUsd": 270
+      }
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-reserve*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000,
+      "unverifiedReason": "Reserve 底层模型及价格未经官方确认"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "codex-auto-review*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.2,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+      "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.8
+      },
+      "longContextThresholdTokens": 272000,
+      "unverifiedReason": "Auto-Review 底层模型及价格未经官方确认"
+    }
+  ]
+}

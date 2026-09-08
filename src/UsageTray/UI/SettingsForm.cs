@@ -102,7 +102,7 @@ public sealed class SettingsForm : Form
 
         var pricingButton = new Button
         {
-            Text = "从官方获取最新价格",
+            Text = "更新内置参考基准",
             AutoSize = true,
             Height = buttonHeight,
             Padding = new Padding(10, 2, 10, 2),
@@ -118,8 +118,8 @@ public sealed class SettingsForm : Form
                 var result = await _coordinator.UpdatePricingAsync();
                 if (IsDisposed || Disposing || !IsHandleCreated) return;
                 var message = result.UpdatedCount > 0
-                    ? $"已从官方定价页更新 {result.UpdatedCount} 条价格规则（{result.FetchedAt.ToLocalTime():HH:mm:ss}）。"
-                    : "价格已是最新，已保留本地规则。";
+                    ? $"已更新内置参考基准，共 {result.UpdatedCount} 条价格规则（{result.FetchedAt.ToLocalTime():HH:mm:ss}）。"
+                    : "已使用当前软件内置基准，自定义规则保留。";
                 if (result.Warnings.Count > 0) message += $"{Environment.NewLine}提示：{result.Warnings[0]}";
                 MessageBox.Show(this, message, "UsageTray", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -147,7 +147,7 @@ public sealed class SettingsForm : Form
 
         var pricingNote = new Label
         {
-            Text = "• 可查看 Antigravity 与 Codex 各模型的输入、缓存读写、输出单价及长上下文规则。\r\n• 点击“从官方获取最新价格”可自动从官方定价页同步最新单价。",
+            Text = "• 可查看 Antigravity 与 Codex 各模型的输入、缓存读写、输出单价及长上下文规则。\r\n• 点击“更新内置参考基准”可合并软件附带的已核对基准；不会用 API 促销价覆盖订阅参考口径。",
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
             Margin = new Padding(0, 4, 0, 10)
@@ -155,7 +155,7 @@ public sealed class SettingsForm : Form
 
         var reviewNoteTitle = new Label
         {
-            Text = "Codex Auto-Review 审查模型计量说明",
+            Text = "Reserve / Auto-Review 计量说明",
             AutoSize = true,
             Font = new Font(Font, FontStyle.Bold),
             Margin = new Padding(0, 10, 0, 4)
@@ -163,7 +163,8 @@ public sealed class SettingsForm : Form
 
         var reviewNote = new Label
         {
-            Text = "• 模型与消耗不确定性说明：Codex 会话在自动审批审查（approvals_reviewer）时会调用 codex-auto-review。官方未公布其独立 API 定价，且不同任务下的额度折算规则存在不确定性。\r\n• 当前计量依据：系统当前将其按 GPT-5.6 Luna 轻量级价格体系（输入 $0.2 / 缓存 $0.02 / 写入 $0.25 / 输出 $1.2）进行 API 等值估算。该判定基于官方轻量评估模型架构文档，并经过本地全量历史重置窗口及纯净 Reserve 隔离会话数据的残差逆推验证（已定量排除 GPT-5.4 旗舰定价）。计算结果仅供等值参考，实际以 ChatGPT Codex 官方配额扣减为准。",
+            Text = "• Reserve 与 Auto-Review 按用户约定使用 GPT-5.6 Luna 参考价：输入 $0.2 / 缓存读取 $0.02 / 缓存创建 $0.25 / 输出 $1.2（每百万 Token）；长上下文及 Fast 档位同 Luna。\r\n• 这是本软件的参考计量约定，底层模型身份及官方实际扣减仍存在不确定性。Spark 维持未定价。\r\n• 本软件统计订阅消耗参考价值：Token × 非促销基准价；Codex Fast 采用订阅倍率。金额并非实际扣费或订阅余额。\r\n• 额度来自官方快照；满额参考金额只能基于同周期本机用量样本外推，其他设备、云端任务及缺失日志都会影响结果。",
+
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
             Margin = new Padding(0, 4, 0, 10)

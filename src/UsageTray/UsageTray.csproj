@@ -9,6 +9,7 @@
     <RootNamespace>UsageTray</RootNamespace>
     <AssemblyName>UsageTray</AssemblyName>
     <Platforms>AnyCPU</Platforms>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\publish\</PublishDir>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
@@ -16,6 +17,8 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\app.ico" />
+    <EmbeddedResource Include="Pricing\default-pricing.json" />
+    <EmbeddedResource Include="Pricing\legacy-pricing.json" />
     <EmbeddedResource Include="Resources\app.png" />
   </ItemGroup>
   <ItemGroup>

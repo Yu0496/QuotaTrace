@@ -409,16 +409,11 @@ public sealed class UsageRepository
     public IReadOnlyList<UsageBucket> GetCodexUsageInUtcWindow(DateTimeOffset startUtc, DateTimeOffset? endUtc = null)
     {
         var snapshots = GetCodexSnapshots();
-        if (snapshots.Count == 0)
-        {
-            var startDate = DateOnly.FromDateTime(startUtc.ToLocalTime().DateTime);
-            var endDate = DateOnly.FromDateTime((endUtc ?? DateTimeOffset.UtcNow).ToLocalTime().DateTime);
-            return GetUsage(new DateRange(startDate, endDate), ProviderKind.Codex);
-        }
+        if (snapshots.Count == 0) return [];
 
         var normalized = new CodexUsageNormalizer().Normalize(snapshots);
         var filteredAudits = normalized.Events
-            .Where(a => a.CapturedAt >= startUtc && (!endUtc.HasValue || a.CapturedAt <= endUtc.Value))
+            .Where(a => a.CapturedAt >= startUtc && (!endUtc.HasValue || a.CapturedAt < endUtc.Value))
             .ToList();
 
         if (filteredAudits.Count == 0) return [];
@@ -431,7 +426,7 @@ public sealed class UsageRepository
             var projectKey = audit.ProjectKey ?? string.Empty;
             var model = string.IsNullOrWhiteSpace(audit.ModelId) ? "Unknown" : audit.ModelId.Trim();
 
-            var tier = string.Empty;
+            var tier = audit.ServiceTier ?? string.Empty;
             (DateOnly Date, string ProjectKey, string Model, string Tier) key = (date, projectKey, model, tier);
             if (!aggregate.TryGetValue(key, out var acc))
                 acc = (0, 0, 0, 0, 0, true, 0, 0, 0, 0, 0, 0);
@@ -469,7 +464,8 @@ public sealed class UsageRepository
 
     public IReadOnlyList<UsageBucket> GetCodexUsageInPoolWindows(
         DateTimeOffset? standardStartUtc, DateTimeOffset? standardEndUtc,
-        DateTimeOffset? reserveStartUtc, DateTimeOffset? reserveEndUtc)
+        DateTimeOffset? reserveStartUtc, DateTimeOffset? reserveEndUtc,
+        DateTimeOffset? sparkStartUtc = null, DateTimeOffset? sparkEndUtc = null)
     {
         var snapshots = GetCodexSnapshots();
         if (snapshots.Count == 0) return [];
@@ -478,21 +474,13 @@ public sealed class UsageRepository
         var filteredAudits = normalized.Events
             .Where(a =>
             {
-                var isReserve = !string.IsNullOrWhiteSpace(a.ModelId) &&
-                    (a.ModelId.StartsWith("gpt-reserve", StringComparison.OrdinalIgnoreCase) ||
-                     a.ModelId.Contains("reserve", StringComparison.OrdinalIgnoreCase));
-                if (isReserve)
-                {
-                    if (reserveStartUtc.HasValue && a.CapturedAt < reserveStartUtc.Value) return false;
-                    if (reserveEndUtc.HasValue && a.CapturedAt > reserveEndUtc.Value) return false;
-                    return true;
-                }
-                else
-                {
-                    if (standardStartUtc.HasValue && a.CapturedAt < standardStartUtc.Value) return false;
-                    if (standardEndUtc.HasValue && a.CapturedAt > standardEndUtc.Value) return false;
-                    return true;
-                }
+                var window = CodexQuotaPools.IsReserveModel(a.ModelId)
+                    ? (Start: reserveStartUtc, End: reserveEndUtc)
+                    : CodexQuotaPools.IsSparkModel(a.ModelId)
+                        ? (Start: sparkStartUtc, End: sparkEndUtc)
+                        : (Start: standardStartUtc, End: standardEndUtc);
+                return window.Start.HasValue && window.End.HasValue &&
+                    a.CapturedAt >= window.Start.Value && a.CapturedAt < window.End.Value;
             })
             .ToList();
 
@@ -506,7 +494,7 @@ public sealed class UsageRepository
             var projectKey = audit.ProjectKey ?? string.Empty;
             var model = string.IsNullOrWhiteSpace(audit.ModelId) ? "Unknown" : audit.ModelId.Trim();
 
-            var tier = string.Empty;
+            var tier = audit.ServiceTier ?? string.Empty;
             (DateOnly Date, string ProjectKey, string Model, string Tier) key = (date, projectKey, model, tier);
             if (!aggregate.TryGetValue(key, out var acc))
                 acc = (0, 0, 0, 0, 0, true, 0, 0, 0, 0, 0, 0);
@@ -604,18 +592,9 @@ public sealed class UsageRepository
         var filtered = allGens.Where(gen =>
         {
             var pool = AntigravityQuotaEstimator.GetModelQuotaPool(gen.Model);
-            if (pool == "gemini")
-            {
-                if (geminiStartUtc.HasValue && gen.Timestamp < geminiStartUtc.Value) return false;
-                if (geminiEndUtc.HasValue && gen.Timestamp > geminiEndUtc.Value) return false;
-                return true;
-            }
-            else
-            {
-                if (threePStartUtc.HasValue && gen.Timestamp < threePStartUtc.Value) return false;
-                if (threePEndUtc.HasValue && gen.Timestamp > threePEndUtc.Value) return false;
-                return true;
-            }
+            var start = pool == "gemini" ? geminiStartUtc : threePStartUtc;
+            var end = pool == "gemini" ? geminiEndUtc : threePEndUtc;
+            return start.HasValue && end.HasValue && gen.Timestamp >= start.Value && gen.Timestamp < end.Value;
         }).ToList();
 
         return AntigravitySqliteHistoryParser.ConvertToBuckets(filtered, "antigravity://pool-window", pricingRules);
@@ -685,6 +664,10 @@ public sealed class UsageRepository
 
     public IReadOnlyList<QuotaSnapshot> GetLatestQuotas(ProviderKind provider)
     {
+        if (provider == ProviderKind.Codex)
+        {
+            CleanupStaleReserveSnapshots();
+        }
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
         if (provider == ProviderKind.Codex)
@@ -693,9 +676,17 @@ public sealed class UsageRepository
                 SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
                     q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
                 WHERE q.provider=$provider AND (
-                    (q.model_or_pool_id != 'codex-reserve' AND q.captured_at_utc=(SELECT MAX(captured_at_utc) FROM quota_snapshots WHERE provider=$provider AND model_or_pool_id != 'codex-reserve'))
+                    (q.model_or_pool_id NOT LIKE '%reserve%' AND q.model_or_pool_id NOT LIKE '%spark%' AND q.captured_at_utc=(
+                        SELECT MAX(captured_at_utc) FROM quota_snapshots
+                        WHERE provider=$provider AND model_or_pool_id NOT LIKE '%reserve%' AND model_or_pool_id NOT LIKE '%spark%'))
                     OR
-                    (q.model_or_pool_id = 'codex-reserve' AND q.captured_at_utc=(SELECT MAX(captured_at_utc) FROM quota_snapshots WHERE provider=$provider AND model_or_pool_id = 'codex-reserve'))
+                    (q.model_or_pool_id LIKE '%reserve%' AND q.captured_at_utc=(
+                        SELECT MAX(captured_at_utc) FROM quota_snapshots
+                        WHERE provider=$provider AND model_or_pool_id LIKE '%reserve%'))
+                    OR
+                    (q.model_or_pool_id LIKE '%spark%' AND q.captured_at_utc=(
+                        SELECT MAX(captured_at_utc) FROM quota_snapshots
+                        WHERE provider=$provider AND model_or_pool_id LIKE '%spark%'))
                 )
                 ORDER BY q.model_or_pool_id,q.window_kind";
         }
@@ -717,39 +708,32 @@ public sealed class UsageRepository
         }
 
         if (provider == ProviderKind.Codex)
-        {
-            var latestStd = list
-                .Where(item => !item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(item => item.CapturedAt)
-                .FirstOrDefault();
-
-            if (latestStd != null)
-            {
-                var plan = latestStd.PlanTier;
-                bool isNonPlus = !string.IsNullOrWhiteSpace(plan) && !plan.Equals("Plus", StringComparison.OrdinalIgnoreCase);
-
-                list.RemoveAll(item =>
-                {
-                    if (!item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase))
-                        return false;
-
-                    // Pro / ProLite / Team 等非 Plus 账号不享有 Reserve 配额
-                    if (isNonPlus) return true;
-
-                    // 若 Reserve 快照早于最新标准快照 24 小时以上，且已过重置时间，说明历史残留已失效
-                    if (item.CapturedAt < latestStd.CapturedAt.AddDays(-1) && item.ResetAt.HasValue && item.ResetAt.Value < DateTimeOffset.UtcNow)
-                        return true;
-
-                    return false;
-                });
-            }
-        }
+            list.RemoveAll(item => CodexQuotaPools.IsReserveModel(item.ModelOrPoolId) && item.IsResetPassed());
 
         return list
-            .GroupBy(item => provider == ProviderKind.Codex ? (item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase) ? "reserve" : item.WindowKind) : $"{item.ModelOrPoolId}_{item.WindowKind}")
+            .GroupBy(item => $"{item.ModelOrPoolId}_{item.WindowKind}")
             .Select(group => group.OrderByDescending(item => item.CapturedAt).First())
             .OrderBy(item => item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
             .ToList();
+    }
+
+    public void CleanupStaleReserveSnapshots()
+    {
+        try
+        {
+            using var connection = _database.OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                DELETE FROM quota_snapshots
+                WHERE provider='Codex' AND model_or_pool_id='codex-reserve'
+                AND reset_at_utc IS NOT NULL AND reset_at_utc < $threshold";
+            command.Parameters.AddWithValue("$threshold", DateTimeOffset.UtcNow.AddDays(-1).ToString("O"));
+            command.ExecuteNonQuery();
+        }
+        catch
+        {
+            // 忽略非关键清理异常
+        }
     }
 
     public RecorderState? GetRecorderState(string conversationId)

@@ -29,10 +29,10 @@ public sealed class AntigravityQuotaEstimatorTests
     }
 
     [Fact]
-    public void EstimatesQuotaCorrectlyWithConfidence()
+    public void EstimatesMatchingLocalSamplesWithLowConfidence()
     {
         var estimator = new AntigravityQuotaEstimator(_pricing);
-        var baseTime = DateTimeOffset.UtcNow.AddDays(-2);
+        var baseTime = DateTimeOffset.UtcNow.AddDays(-1);
 
         var snapshots = new List<QuotaSnapshot>
         {
@@ -60,8 +60,8 @@ public sealed class AntigravityQuotaEstimatorTests
         Assert.Equal(0.2, weekly.ConsumedFraction.Value, 2);
         Assert.NotNull(weekly.EstimatedFullQuotaUsd);
         // $2.00 / 0.20 = $10.00
-        Assert.Equal(10.00m, Math.Round(weekly.EstimatedFullQuotaUsd.Value, 2));
-        Assert.Equal(QuotaEstimateConfidence.Medium, weekly.Confidence);
+        Assert.Equal(20.00m, Math.Round(weekly.EstimatedFullQuotaUsd.Value, 2));
+        Assert.Equal(QuotaEstimateConfidence.Low, weekly.Confidence);
     }
 
     [Fact]

@@ -11,7 +11,7 @@ public static class PricingMatcher
         return rules
             .Select((rule, index) => (rule, index))
             .Where(pair => string.Equals(pair.rule.Provider, providerName, StringComparison.OrdinalIgnoreCase))
-            .Where(pair => IsMatch(pair.rule, modelId))
+            .Where(pair => Matches(pair.rule, modelId))
             .OrderByDescending(pair => pair.rule.MatchMode == MatchMode.Exact ? 4 : pair.rule.MatchMode == MatchMode.Prefix ? 3 : pair.rule.MatchMode == MatchMode.Wildcard ? 2 : 1)
             .ThenByDescending(pair => pair.rule.ModelPattern.Length)
             .ThenBy(pair => pair.index)
@@ -19,7 +19,7 @@ public static class PricingMatcher
             .FirstOrDefault();
     }
 
-    private static bool IsMatch(PricingRule rule, string modelId)
+    internal static bool Matches(PricingRule rule, string modelId)
     {
         var pattern = rule.ModelPattern.Trim();
         return rule.MatchMode switch

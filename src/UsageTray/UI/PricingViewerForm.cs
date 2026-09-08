@@ -158,7 +158,7 @@ public sealed class PricingViewerForm : Form
             var cacheRead = rule.CacheReadPerMillionUsd.HasValue ? $"${rule.CacheReadPerMillionUsd.Value:0.####}" : "—";
             var cacheWrite = rule.CacheWritePerMillionUsd.HasValue ? $"${rule.CacheWritePerMillionUsd.Value:0.####}" : "—";
 
-            _grid.Rows.Add(
+            var rowIndex = _grid.Rows.Add(
                 rule.Provider,
                 rule.ModelPattern,
                 rule.MatchMode.ToString(),
@@ -167,11 +167,16 @@ public sealed class PricingViewerForm : Form
                 cacheWrite,
                 $"${rule.OutputPerMillionUsd:0.##}",
                 longCtx,
-                rule.LastVerifiedAt.ToString("yyyy-MM-dd")
+                rule.LastVerifiedAt.ToString("yyyy-MM-dd"),
+                rule.UnverifiedReason ?? rule.ReferenceBasis ?? "自定义参考基准"
             );
+            if (rule.UnverifiedReason is not null)
+                for (var col = 3; col <= 7; col++) _grid.Rows[rowIndex].Cells[col].Value = "—";
+            foreach (DataGridViewCell cell in _grid.Rows[rowIndex].Cells)
+                cell.ToolTipText = rule.UnverifiedReason ?? $"{rule.ReferenceBasis ?? "自定义参考基准"}。来源：{rule.SourceUrl}";
         }
 
-        _statusLabel.Text = $"共显示 {filtered.Count} / {_rules.Count} 条价格规则；单位均为 $/1M Tokens。数据已同步自本地 pricing.json。";
+        _statusLabel.Text = $"共显示 {filtered.Count} / {_rules.Count} 条价格规则；单位均为 $/1M Tokens。固定参考基准，非实际账单。";
     }
 
     private DataGridView CreateGrid()
@@ -216,7 +221,7 @@ public sealed class PricingViewerForm : Form
         };
 
         string[] columns = [
-            "Provider", "模型模式 (Pattern)", "匹配类型", "输入价格", "缓存读取", "缓存创建", "输出价格", "长上下文价格", "核验日期"
+            "Provider", "模型模式 (Pattern)", "匹配类型", "输入价格", "缓存读取", "缓存创建", "输出价格", "长上下文价格", "核验日期", "参考依据"
         ];
         foreach (var col in columns) grid.Columns.Add(col, col);
 
@@ -229,6 +234,8 @@ public sealed class PricingViewerForm : Form
         grid.Columns[6].FillWeight = 45;
         grid.Columns[7].FillWeight = 90;
         grid.Columns[8].FillWeight = 50;
+        grid.Columns[9].FillWeight = 120;
+        grid.Columns[9].DefaultCellStyle.WrapMode = DataGridViewTriState.True;
 
         return grid;
     }

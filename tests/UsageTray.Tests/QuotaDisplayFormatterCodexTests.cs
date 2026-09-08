@@ -24,7 +24,7 @@ public sealed class QuotaDisplayFormatterCodexTests
         Assert.Contains("Input（未命中）：550", text, StringComparison.Ordinal);
         Assert.Contains("Cache Read：400", text, StringComparison.Ordinal);
         Assert.Contains("Cache Creation：50", text, StringComparison.Ordinal);
-        Assert.Contains("API 等值：$1.23", text, StringComparison.Ordinal);
+        Assert.Contains("订阅参考金额：$1.23", text, StringComparison.Ordinal);
         Assert.Contains("暂无可用 quota 快照（当前 session 未写入 rate_limits）", text, StringComparison.Ordinal);
         Assert.DoesNotContain("5 小时窗口", text, StringComparison.Ordinal);
     }
@@ -84,7 +84,7 @@ public sealed class QuotaDisplayFormatterCodexTests
 
         Assert.Contains("Codex 62%", compact, StringComparison.Ordinal);
         Assert.DoesNotContain("5h 0%", compact, StringComparison.Ordinal);
-        Assert.Contains("100% 剩余 (推断已重置)", popup, StringComparison.Ordinal);
+        Assert.Contains("待同步（上次 0%）", popup, StringComparison.Ordinal);
     }
 }
 

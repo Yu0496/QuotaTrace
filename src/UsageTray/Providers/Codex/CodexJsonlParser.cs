@@ -6,7 +6,7 @@ namespace UsageTray.Providers.Codex;
 
 public sealed class CodexJsonlParser
 {
-    public const int ParserVersion = 7;
+    public const int ParserVersion = 11;
 
     private static readonly string[] InputNames = ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "input", "total_input_tokens", "totalInputTokens"];
     private static readonly string[] CachedNames = ["cached_input_tokens", "cachedInputTokens", "cache_read_input_tokens", "cacheReadInputTokens", "cached", "cache_read"];
@@ -220,23 +220,41 @@ public sealed class CodexJsonlParser
                 effectivePlan.Contains("team", StringComparison.OrdinalIgnoreCase) ||
                 effectivePlan.Contains("ent", StringComparison.OrdinalIgnoreCase));
 
-            var isReserve = isReserveModel;
-            if (!isReserve && !isProOrTeam)
-            {
-                var isPlus = string.Equals(effectivePlan, "plus", StringComparison.OrdinalIgnoreCase);
-                if (isPlus)
-                {
-                    var hasSecondary = JsonValueReader.TryGetProperty(rateLimits, out var sec, "secondary") && sec.ValueKind == JsonValueKind.Object && sec.EnumerateObject().Any();
-                    if (!hasSecondary && JsonValueReader.TryGetProperty(rateLimits, out var prim, "primary") && prim.ValueKind == JsonValueKind.Object)
-                    {
-                        var primMins = JsonValueReader.GetLong(prim, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
-                        if (primMins >= 10000)
-                        {
-                            isReserve = true;
-                        }
-                    }
-                }
-            }
+            var limitId = JsonValueReader.FindString(rateLimits, "limit_id", "limitId");
+            var limitName = JsonValueReader.FindString(rateLimits, "limit_name", "limitName");
+
+            var explicitPool = string.Equals(limitId, "base_model_inference", StringComparison.OrdinalIgnoreCase)
+                ? CodexQuotaPools.FromLimitId(limitName) : CodexQuotaPools.FromLimitId(limitId);
+            if (explicitPool == "unknown") continue;
+            var isSparkModel = explicitPool is not null ? explicitPool == "spark" :
+                CodexQuotaPools.IsSparkModel(limitName) || CodexQuotaPools.IsSparkModel(currentModel);
+            var isReserve = explicitPool is not null ? explicitPool == "reserve" :
+                CodexQuotaPools.IsReserveModel(limitName) || isReserveModel;
+
+            // Observed Pro/ProLite Spark logs can report the generic codex id with
+            // Spark's 5h + weekly pair; the main pool reports a single weekly window.
+            if (explicitPool == "standard" && isProOrTeam && CodexQuotaPools.IsSparkModel(currentModel) &&
+                JsonValueReader.TryGetProperty(rateLimits, out var sparkPrimary, "primary") && sparkPrimary.ValueKind == JsonValueKind.Object &&
+                JsonValueReader.GetLong(sparkPrimary, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins") == 300 &&
+                JsonValueReader.TryGetProperty(rateLimits, out var sparkSecondary, "secondary") && sparkSecondary.ValueKind == JsonValueKind.Object &&
+                JsonValueReader.GetLong(sparkSecondary, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins") == 10080)
+                isSparkModel = true;
+
+            // Observed legacy Reserve: limit_id=codex, current model=gpt-reserve,
+            // one weekly primary and no secondary. Standard ids otherwise win over current model.
+            if (explicitPool == "standard" && isReserveModel &&
+                (!JsonValueReader.TryGetProperty(rateLimits, out var reserveSecondary, "secondary") || reserveSecondary.ValueKind != JsonValueKind.Object) &&
+                JsonValueReader.TryGetProperty(rateLimits, out var reservePrimary, "primary") && reservePrimary.ValueKind == JsonValueKind.Object &&
+                JsonValueReader.GetLong(reservePrimary, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins") == 10080)
+                isReserve = true;
+
+            // Compatibility with legacy Plus logs that omit a pool id.
+            if (explicitPool is null && !isReserve && !isSparkModel &&
+                string.Equals(effectivePlan, "plus", StringComparison.OrdinalIgnoreCase) &&
+                (!JsonValueReader.TryGetProperty(rateLimits, out var sec, "secondary") || sec.ValueKind != JsonValueKind.Object) &&
+                JsonValueReader.TryGetProperty(rateLimits, out var prim, "primary") && prim.ValueKind == JsonValueKind.Object &&
+                JsonValueReader.GetLong(prim, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins") == 10080)
+                isReserve = true;
 
             if (isReserve)
             {
@@ -259,22 +277,47 @@ public sealed class CodexJsonlParser
                     var usedPercent = JsonValueReader.GetDouble(window, "used_percent", "usedPercent");
                     if (!usedPercent.HasValue || usedPercent.Value is < 0 or > 100) continue;
                     var minutes = JsonValueReader.GetLong(window, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
-                    var kind = ClassifyWindow(windowName, minutes, isProOrTeam);
-                    var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, $"codex-{kind}", $"Codex {kind}",
+                    var kind = ClassifyWindow(windowName, minutes, isProOrTeam, isSparkModel);
+
+                    string modelOrPoolId;
+                    string displayLabel;
+                    if (isSparkModel)
+                    {
+                        modelOrPoolId = $"codex-spark-{kind}";
+                        displayLabel = kind switch
+                        {
+                            "5h" => "GPT-5.3 Spark (5小时额度)",
+                            "weekly" => "GPT-5.3 Spark (周额度)",
+                            _ => $"GPT-5.3 Spark ({kind})"
+                        };
+                    }
+                    else
+                    {
+                        modelOrPoolId = $"codex-{kind}";
+                        displayLabel = kind switch
+                        {
+                            "5h" => "Codex 主力模型 (5小时额度)",
+                            "weekly" => "Codex 主力模型 (周额度)",
+                            _ => $"Codex 主力模型 ({kind})"
+                        };
+                    }
+
+                    var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, modelOrPoolId, displayLabel,
                         1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), kind, "codex-session-rate-limits", effectivePlan ?? planTier);
-                    result[kind] = snapshot;
+                    result[$"{modelOrPoolId}_{kind}"] = snapshot;
                 }
             }
         }
         return result;
     }
 
-    private static string ClassifyWindow(string windowName, long? minutes, bool isProOrTeam = false) => minutes switch
+    private static string ClassifyWindow(string windowName, long? minutes, bool isProOrTeam = false, bool isSpark = false) => minutes switch
     {
-        <= 360 and > 0 => "5h",
-        >= 10_000 => "weekly",
+        300 => "5h",
+        10080 => "weekly",
         > 0 => $"{minutes}m",
-        _ when isProOrTeam => "weekly",
+        _ when isSpark && string.Equals(windowName, "primary", StringComparison.OrdinalIgnoreCase) => "5h",
+        _ when isSpark && string.Equals(windowName, "secondary", StringComparison.OrdinalIgnoreCase) => "weekly",
         _ when string.Equals(windowName, "primary", StringComparison.OrdinalIgnoreCase) => "5h",
         _ when string.Equals(windowName, "secondary", StringComparison.OrdinalIgnoreCase) => "weekly",
         _ => "unknown"
@@ -288,7 +331,11 @@ public sealed class CodexJsonlParser
             try { return reset.Value > 10_000_000_000 ? DateTimeOffset.FromUnixTimeMilliseconds(reset.Value) : DateTimeOffset.FromUnixTimeSeconds(reset.Value); }
             catch (ArgumentOutOfRangeException) { }
         }
-        if (JsonValueReader.GetLong(window, "resets_in_seconds", "resetsInSeconds") is { } seconds && seconds >= 0) return capturedAt.AddSeconds(seconds);
+        if (JsonValueReader.GetLong(window, "resets_in_seconds", "resetsInSeconds") is { } seconds && seconds >= 0)
+        {
+            try { return capturedAt.AddSeconds(seconds); }
+            catch (ArgumentOutOfRangeException) { }
+        }
         if (JsonValueReader.TryGetString(window, out var text, "resets_at", "resetsAt") && DateTimeOffset.TryParse(text, out var parsed)) return parsed;
         return null;
     }

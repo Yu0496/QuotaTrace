@@ -47,7 +47,7 @@ public sealed class EnhancementTests
         Assert.Equal(CostQuality.Unavailable, result.Quality);
         Assert.Equal(100, result.UnpricedTokens);
         Assert.Equal(1, result.UnpricedBucketCount);
-        Assert.Equal(0.0001m, result.PricedCostUsd);
+        Assert.Null(result.PricedCostUsd);
     }
 
     [Fact]
@@ -86,6 +86,61 @@ public sealed class EnhancementTests
 
         var height = control.MeasureHeight(600);
         Assert.True(height > 0);
+    }
+
+    [Fact]
+    public void QuotaSummaryControl_ShowsReported5HourWindow_WhenPlanTierIsProOrAbove()
+    {
+        using var control = new UsageTray.UI.Controls.QuotaSummaryControl();
+        control.Size = new System.Drawing.Size(600, 500);
+
+        var now = DateTimeOffset.UtcNow;
+        var plusSnapshot = new DashboardSnapshot
+        {
+            Range = DateRange.LastDays(7),
+            Quotas =
+            [
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now, "codex-primary", "5-hour limit", 0.5, now.AddHours(2), "5h", "rate_limits", "Plus"), false),
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Weekly limit", 0.8, now.AddDays(5), "weekly", "rate_limits", "Plus"), false)
+            ]
+        };
+        control.SetSnapshot(plusSnapshot);
+        var heightPlus = control.MeasureHeight(600);
+
+        var proSnapshot = new DashboardSnapshot
+        {
+            Range = DateRange.LastDays(7),
+            Quotas =
+            [
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now, "codex-primary", "5-hour limit", 0.5, now.AddHours(2), "5h", "rate_limits", "ProLite"), false),
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Weekly limit", 0.8, now.AddDays(5), "weekly", "rate_limits", "ProLite"), false)
+            ]
+        };
+        control.SetSnapshot(proSnapshot);
+        var heightPro = control.MeasureHeight(600);
+
+        // The same reported windows occupy the same height for either plan.
+        Assert.Equal(heightPlus, heightPro);
+    }
+
+    [Fact]
+    public void QuotaDisplayFormatter_ShowsReported5HourWindow_WhenPlanIsProLite()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = new DashboardSnapshot
+        {
+            Range = DateRange.Today(),
+            Quotas =
+            [
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now, "codex-primary", "5-hour limit", 0.95, now.AddHours(2), "5h", "rate_limits", "ProLite"), false),
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Weekly limit", 0.98, now.AddDays(7), "weekly", "rate_limits", "ProLite"), false)
+            ]
+        };
+
+        var popupText = UsageTray.UI.QuotaDisplayFormatter.BuildPopupText(snapshot);
+        Assert.Contains("5 小时窗口", popupText);
+        Assert.Contains("周窗口", popupText);
+        Assert.Contains("98%", popupText);
     }
 
     [Fact]
@@ -130,5 +185,27 @@ public sealed class EnhancementTests
         Assert.Equal("hello", System.Text.Encoding.UTF8.GetString(reader.Bytes));
 
         Assert.False(reader.ReadNext());
+    }
+
+    [Fact]
+    public void CompactTooltip_SingleSourceOfTruth_DecouplesStandardAndSparkWithoutMisleading77Percent()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var resetAt = now.AddDays(6);
+
+        var snapshot = new DashboardSnapshot
+        {
+            Quotas =
+            [
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Codex 主力模型", 0.98, resetAt, "weekly", "rate_limits", "ProLite"), false),
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now.AddSeconds(10), "codex-spark-5h", "GPT-5.3 Spark", 0.48, now.AddHours(4), "5h", "rate_limits", "ProLite"), false),
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, now.AddSeconds(10), "codex-spark-weekly", "GPT-5.3 Spark", 0.77, resetAt.AddHours(1), "weekly", "rate_limits", "ProLite"), false)
+            ]
+        };
+
+        var compact = UsageTray.UI.QuotaDisplayFormatter.BuildCompactText(snapshot);
+        // 核心验证：单行紧凑显示必须准确反映主力 98% 与 Spark 77%，绝不能被误导显示成 "Codex 77%"
+        Assert.Contains("Codex 98% / Spark 77%", compact);
+        Assert.DoesNotContain("Codex 77%", compact);
     }
 }

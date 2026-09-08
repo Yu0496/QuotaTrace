@@ -10,32 +10,13 @@ namespace UsageTray.Tests;
 public sealed class CodexReserveQuotaTests
 {
     [Fact]
-    public void GptReservePricing_MatchesLunaPrices_IncludingLongContext()
+    public void ReserveUsesAgreedLunaReference()
     {
-        var pricing = PricingService.BuiltInDefaults();
-        var rule = PricingMatcher.Find(pricing.Rules, ProviderKind.Codex, "gpt-reserve");
-
-        Assert.NotNull(rule);
-        Assert.Equal(0.2m, rule.InputPerMillionUsd);
-        Assert.Equal(0.02m, rule.CacheReadPerMillionUsd);
-        Assert.Equal(0.25m, rule.CacheWritePerMillionUsd);
-        Assert.Equal(1.2m, rule.OutputPerMillionUsd);
-        Assert.NotNull(rule.LongContextPrice);
-        Assert.Equal(0.4m, rule.LongContextPrice.InputPerMillionUsd);
-        Assert.Equal(0.04m, rule.LongContextPrice.CacheReadPerMillionUsd);
-        Assert.Equal(0.5m, rule.LongContextPrice.CacheWritePerMillionUsd);
-        Assert.Equal(1.8m, rule.LongContextPrice.OutputPerMillionUsd);
-        Assert.Equal(272000, rule.LongContextThresholdTokens);
-
-        // Calculate a test bucket
-        // 1M input (no cache), 100K output
-        // Cost = 1.0 * 0.2 + 0.1 * 1.2 = 0.2 + 0.12 = 0.32
-        var bucket = new UsageBucket(ProviderKind.Codex, DateOnly.FromDateTime(DateTime.Today), "test", "gpt-reserve",
-            1_000_000, 0, 100_000, 1, DataQuality.Exact, "path", "sess1");
-        var calc = new PricingService("fake.json", pricing).Calculate(bucket);
-
-        Assert.True(calc.IsPriced);
-        Assert.Equal(0.32m, calc.CostUsd!.Value);
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+        var bucket = new UsageBucket(ProviderKind.Codex, DateOnly.FromDateTime(DateTime.Today), null,
+            "gpt-reserve", 1_000_000, 0, 100_000, 1, DataQuality.Exact, "fixture");
+        Assert.Equal(.32m, pricing.Calculate(bucket).CostUsd);
+        Assert.Null(pricing.Calculate(bucket).Warning);
     }
 
     [Fact]
@@ -122,9 +103,9 @@ public sealed class CodexReserveQuotaTests
             var aggregator = new UsageAggregator(repository, pricing);
             var dashboard = aggregator.BuildSnapshot(DateRange.Today(), provider: ProviderKind.Codex, isWeeklyCycle: true);
 
-            Assert.Equal(0.96m, dashboard.CodexApiEquivalentUsd);
+            Assert.Equal(.96m, dashboard.CodexApiEquivalentUsd);
             Assert.Equal(0.80m, dashboard.CodexStandardApiEquivalentUsd);
-            Assert.Equal(0.16m, dashboard.CodexReserveApiEquivalentUsd);
+            Assert.Equal(.16m, dashboard.CodexReserveApiEquivalentUsd);
 
             // Check standard cycle
             Assert.NotNull(dashboard.CodexWeeklyCycle);
@@ -132,15 +113,15 @@ public sealed class CodexReserveQuotaTests
             Assert.Equal(0.80m, stdCycle.CycleCostUsd);
             Assert.Equal(0.25, stdCycle.UsedFraction!.Value, 4);
             // Projection = 0.80 / 0.25 = $3.20
-            Assert.Equal(3.20m, stdCycle.EstimatedWeeklyCostUsd);
+            Assert.Null(stdCycle.EstimatedWeeklyCostUsd);
 
             // Check reserve cycle
             Assert.NotNull(dashboard.CodexReserveWeeklyCycle);
             var resCycle = dashboard.CodexReserveWeeklyCycle;
-            Assert.Equal(0.16m, resCycle.CycleCostUsd);
+            Assert.Equal(.16m, resCycle.CycleCostUsd);
             Assert.Equal(0.10, resCycle.UsedFraction!.Value, 4);
             // Projection = 0.16 / 0.10 = $1.60
-            Assert.Equal(1.60m, resCycle.EstimatedWeeklyCostUsd);
+            Assert.Null(resCycle.EstimatedWeeklyCostUsd);
 
             Assert.Equal(2, dashboard.CodexWeeklyCycles.Count);
         }
@@ -203,8 +184,8 @@ public sealed class CodexReserveQuotaTests
 
             // Verify: standard cost is strictly the $0.80 from the current standard cycle, NOT $10.80
             Assert.Equal(0.80m, dashboard.CodexStandardApiEquivalentUsd);
-            Assert.Equal(0.16m, dashboard.CodexReserveApiEquivalentUsd);
-            Assert.Equal(0.96m, dashboard.CodexApiEquivalentUsd);
+            Assert.Equal(.16m, dashboard.CodexReserveApiEquivalentUsd);
+            Assert.Equal(.96m, dashboard.CodexApiEquivalentUsd);
 
             // Verify cycle view matches dashboard exactly
             Assert.Equal(dashboard.CodexStandardApiEquivalentUsd, dashboard.CodexWeeklyCycle?.CycleCostUsd);
@@ -212,31 +193,7 @@ public sealed class CodexReserveQuotaTests
         }
     }
 
-    [Fact]
-    public void DiagnoseRealDatabaseSnapshot()
-    {
-        var dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "UsageTray", "usage.db");
-        if (!File.Exists(dbPath)) return;
-        var database = new UsageDatabase(dbPath);
-        var repository = new UsageRepository(database);
-        var pricing = PricingService.BuiltInDefaults();
-        var aggregator = new UsageAggregator(repository, new PricingService("fake.json", pricing));
-        var snapshot = aggregator.BuildSnapshot(DateRange.Today());
 
-        // Check Quotas
-        var codexQuotas = snapshot.Quotas.Where(q => q.Snapshot.Provider == ProviderKind.Codex).ToList();
-        Assert.NotNull(snapshot.CodexWeeklyCycle);
-        // Print to test output
-        var cycles = snapshot.CodexWeeklyCycles;
-        System.Diagnostics.Debug.WriteLine($"Cycles count: {cycles.Count}");
-        foreach (var c in cycles)
-        {
-            System.Diagnostics.Debug.WriteLine($"Cycle: {c.PoolName}, cost: {c.CycleCostUsd}, est: {c.EstimatedWeeklyCostUsd}");
-        }
-        // In real db, user is currently ProLite and old reserve is filtered out, so only standard cycle exists
-        var hasReserve = codexQuotas.Any(q => q.Snapshot.ModelOrPoolId == "codex-reserve");
-        Assert.Equal(hasReserve ? 2 : 1, cycles.Count);
-    }
 
     [Fact]
     public void QuotaDisplayFormatter_FormatsReserveQuotaInCompactText()
@@ -341,6 +298,121 @@ public sealed class CodexReserveQuotaTests
 
             Assert.Single(latest);
             Assert.Equal("codex-weekly", latest[0].ModelOrPoolId);
+        }
+    }
+
+    [Fact]
+    public void ExtractRateLimits_IsolatesSparkQuotaFromStandardQuota()
+    {
+        using var workspace = new TempWorkspace();
+        var sessionPath = workspace.File("session_spark.jsonl");
+
+        var jsonLines = new[]
+        {
+            // Turn 1: standard model with 90% used (10% remaining)
+            "{\"timestamp\":\"2026-09-07T20:35:34.818Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.6-luna\"}}",
+            "{\"timestamp\":\"2026-09-07T20:35:34.818Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":0,\"cache_write_input_tokens\":0,\"output_tokens\":100}},\"rate_limits\":{\"limit_id\":\"codex\",\"limit_name\":null,\"primary\":{\"used_percent\":90.0,\"window_minutes\":10080,\"resets_at\":1789274934},\"secondary\":null,\"plan_type\":\"prolite\"}}}",
+            // Turn 2: auxiliary spark model with 1% used (99% remaining), captured 11 seconds later
+            "{\"timestamp\":\"2026-09-07T20:35:45.967Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.3-codex-spark\"}}",
+            "{\"timestamp\":\"2026-09-07T20:35:45.967Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":2000,\"cached_input_tokens\":0,\"cache_write_input_tokens\":0,\"output_tokens\":200}},\"rate_limits\":{\"limit_id\":\"codex_bengalfox\",\"limit_name\":\"GPT-5.3-Codex-Spark\",\"primary\":{\"used_percent\":0.0,\"window_minutes\":300,\"resets_at\":1788831336},\"secondary\":{\"used_percent\":1.0,\"window_minutes\":10080,\"resets_at\":1789279059},\"plan_type\":\"prolite\"}}}"
+        };
+        File.WriteAllLines(sessionPath, jsonLines);
+
+        var parser = new CodexJsonlParser();
+        var result = parser.ParseFile(sessionPath);
+
+        // Verify standard weekly quota is not overwritten by spark
+        var standardWeekly = result.Quotas.FirstOrDefault(q => q.ModelOrPoolId == "codex-weekly");
+        Assert.NotNull(standardWeekly);
+        Assert.Equal(0.10, standardWeekly.RemainingFraction!.Value, 4);
+
+        // Verify spark quota is isolated
+        var sparkWeekly = result.Quotas.FirstOrDefault(q => q.ModelOrPoolId == "codex-spark-weekly");
+        Assert.NotNull(sparkWeekly);
+        Assert.Equal(0.99, sparkWeekly.RemainingFraction!.Value, 4);
+
+        var spark5h = result.Quotas.FirstOrDefault(q => q.ModelOrPoolId == "codex-spark-5h");
+        Assert.NotNull(spark5h);
+        Assert.Equal(1.0, spark5h.RemainingFraction!.Value, 4);
+    }
+
+    [Theory]
+    [InlineData("ProLite", true)]
+    [InlineData("Pro", true)]
+    [InlineData("Team", true)]
+    [InlineData("Enterprise", true)]
+    [InlineData("Plus", false)]
+    [InlineData("Free", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void IsProOrAbovePlan_IdentifiesTiersCorrectly(string? tier, bool expected)
+    {
+        Assert.Equal(expected, UsageTray.Services.UsageAggregator.IsProOrAbovePlan(tier));
+    }
+
+    [Fact]
+    public void UsageAggregator_IgnoresSparkQuotaWhenBuildingStandardCycle()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repository) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var resetAt = now.AddDays(5);
+
+            // Add standard weekly quota (90% used, 10% remaining)
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Codex weekly", 0.10, resetAt, "weekly", "rate_limits", "ProLite"),
+                new QuotaSnapshot(ProviderKind.Codex, now.AddSeconds(10), "codex-spark-weekly", "Codex Spark weekly", 0.99, resetAt.AddHours(1), "weekly", "rate_limits", "ProLite")
+            ]);
+
+            var aggregator = new UsageAggregator(repository, new PricingService("fake.json", new PricingDocument(1, DateOnly.FromDateTime(DateTime.Today), [])));
+            var snapshot = aggregator.BuildSnapshot(new DateRange(DateOnly.MinValue, DateOnly.MaxValue));
+
+            Assert.NotNull(snapshot.CodexWeeklyCycle);
+            // Must use standard quota (10% remaining, 90% used), NOT spark (99% remaining, 1% used)
+            Assert.Equal(0.90, snapshot.CodexWeeklyCycle.UsedFraction!.Value, 4);
+            Assert.Equal(0.10, snapshot.CodexWeeklyCycle.RemainingFraction!.Value, 4);
+        }
+    }
+
+    [Fact]
+    public void GetLatestQuotas_IncludesReserve_WhenProLiteUserTriggersReserve()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repository) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var stdReset = now.AddDays(5);
+            var resReset = now.AddDays(3);
+
+            // ProLite user with standard quota (95% used, 5% remaining -> exhausted) and active reserve triggered
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Codex 主力模型", 0.05, stdReset, "weekly", "source", "ProLite"),
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-spark-weekly", "GPT-5.3 Spark", 0.70, stdReset, "weekly", "source", "ProLite"),
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-reserve", "Codex Reserve", 0.50, resReset, "weekly", "source", "ProLite")
+            ]);
+
+            var latest = repository.GetLatestQuotas(ProviderKind.Codex);
+            Assert.Equal(3, latest.Count);
+            Assert.Contains(latest, q => q.ModelOrPoolId == "codex-weekly");
+            Assert.Contains(latest, q => q.ModelOrPoolId == "codex-spark-weekly");
+            Assert.Contains(latest, q => q.ModelOrPoolId == "codex-reserve");
+
+            var aggregator = new UsageAggregator(repository, new PricingService("fake.json", new PricingDocument(1, DateOnly.FromDateTime(DateTime.Today), [])));
+            var snapshot = aggregator.BuildSnapshot(new DateRange(DateOnly.MinValue, DateOnly.MaxValue), ProviderKind.Codex);
+
+            // Pro user with triggered reserve has 3 cycles: standard, spark, reserve
+            Assert.Equal(3, snapshot.CodexWeeklyCycles.Count);
+            Assert.Contains(snapshot.CodexWeeklyCycles, c => c.PoolCategory == "standard");
+            Assert.Contains(snapshot.CodexWeeklyCycles, c => c.PoolCategory == "spark");
+            Assert.Contains(snapshot.CodexWeeklyCycles, c => c.PoolCategory == "reserve");
+
+            var popupText = QuotaDisplayFormatter.BuildPopupText(snapshot);
+            Assert.Contains("Codex 主力模型", popupText);
+            Assert.Contains("GPT-5.3 Spark", popupText);
+            Assert.Contains("Codex Reserve", popupText);
         }
     }
 }

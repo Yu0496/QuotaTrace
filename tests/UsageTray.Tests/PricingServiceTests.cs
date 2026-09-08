@@ -6,68 +6,6 @@ namespace UsageTray.Tests;
  
 public sealed class PricingServiceTests
 {
-    private readonly Xunit.Abstractions.ITestOutputHelper _output;
-
-    public PricingServiceTests(Xunit.Abstractions.ITestOutputHelper output)
-    {
-        _output = output;
-    }
-
-    [Fact]
-    public void DebugRealBucketsCalculation()
-    {
-        var dbPath = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "UsageTray", "usage.db");
-        if (!System.IO.File.Exists(dbPath)) return;
-        var pricingPath = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "UsageTray", "pricing.json");
-        var pricing = PricingService.LoadOrCreate(pricingPath);
-        var db = new UsageTray.Data.UsageDatabase(dbPath);
-        var repo = new UsageTray.Data.UsageRepository(db);
-        var sessionFile = @"C:\Users\xiong\.codex\sessions\2026\09\05\rollout-2026-09-05T14-00-02-01a07027-0b2d-7882-9c1b-41482c1699ee.jsonl";
-        if (System.IO.File.Exists(sessionFile))
-        {
-            using var fs = new System.IO.FileStream(sessionFile, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite);
-            using var sr = new System.IO.StreamReader(fs);
-            var records = new List<(int line, string type, string? subtype)>();
-            int lineIdx = 0;
-            while (sr.ReadLine() is { } line)
-            {
-                lineIdx++;
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                using var doc = System.Text.Json.JsonDocument.Parse(line);
-                var root = doc.RootElement;
-                if (root.TryGetProperty("type", out var t))
-                {
-                    var tStr = t.GetString();
-                    if (tStr == "token_usage_record")
-                    {
-                        records.Add((lineIdx, tStr, null));
-                    }
-                    else if (tStr == "event_msg" && root.TryGetProperty("payload", out var p) && p.TryGetProperty("type", out var pt) && pt.GetString() == "token_count")
-                    {
-                        records.Add((lineIdx, "token_count", null));
-                    }
-                }
-            }
-            var tokenUsageLines = records.Where(r => r.type == "token_usage_record").Select(r => r.line).ToHashSet();
-            var tokenCountLines = records.Where(r => r.type == "token_count").Select(r => r.line).ToHashSet();
-            _output.WriteLine($"token_usage_record count: {tokenUsageLines.Count}, token_count count: {tokenCountLines.Count}");
-            int isolatedCount = 0;
-            for (int i = 0; i < records.Count; i++)
-            {
-                if (records[i].type == "token_usage_record")
-                {
-                    bool hasNextTokenCount = (i + 1 < records.Count && records[i + 1].type == "token_count" && records[i + 1].line - records[i].line <= 5);
-                    if (!hasNextTokenCount)
-                    {
-                        isolatedCount++;
-                        if (isolatedCount <= 5) _output.WriteLine($"Isolated token_usage_record at line {records[i].line}");
-                    }
-                }
-            }
-            _output.WriteLine($"Isolated token_usage_record total: {isolatedCount}");
-        }
-    }
-
     [Fact]
     public void CachedInputIsNotDoubleBilled()
     {
@@ -111,40 +49,25 @@ public sealed class PricingServiceTests
         Assert.NotNull(sonnetResult.CostUsd);
         Assert.Equal(18.3m, sonnetResult.CostUsd.Value);
 
-        // Claude Opus 4.6 Thinking (1M uncached = $15.0, 1M cached = $1.5, 1M output = $75.0 => $91.5)
+        // Claude Opus 4.6 Thinking (1M uncached = $5, 1M cached = $0.5, 1M output = $25 => $30.5)
         var opusBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 8, 20), null, "claude-opus-4-6-thinking",
             2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
         var opusResult = pricing.Calculate(opusBucket);
         Assert.NotNull(opusResult.CostUsd);
-        Assert.Equal(91.5m, opusResult.CostUsd.Value);
+        Assert.Equal(30.5m, opusResult.CostUsd.Value);
     }
 
-    [Fact]
-    public void GeminiAliasesMatchAndCalculateCost()
+    [Theory]
+    [InlineData("gemini-pro-default")]
+    [InlineData("gemini-3-flash-a")]
+    [InlineData("gemini-default")]
+    public void UnverifiedAliasesKeepTokensUnpriced(string model)
     {
-        var service = PricingService.BuiltInDefaults();
-        var pricing = new PricingService("dummy", service);
-
-        // gemini-pro-default -> Gemini 3.1 Pro ($2.0 in, $0.5 cached, $12.0 out)
-        var proBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 8, 20), null, "gemini-pro-default",
-            1_000_000, 0, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
-        var proResult = pricing.Calculate(proBucket);
-        Assert.NotNull(proResult.CostUsd);
-        Assert.Equal(14.0m, proResult.CostUsd.Value);
-
-        // gemini-3-flash-a -> Gemini 3.5 Flash ($1.5 in, $0.15 cached, $9.0 out)
-        var flashBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 8, 20), null, "gemini-3-flash-a",
-            1_000_000, 0, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
-        var flashResult = pricing.Calculate(flashBucket);
-        Assert.NotNull(flashResult.CostUsd);
-        Assert.Equal(10.5m, flashResult.CostUsd.Value);
-
-        // gemini-default -> Gemini 3.5 Flash
-        var defaultFlashBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 8, 20), null, "gemini-default",
-            1_000_000, 0, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
-        var defaultFlashResult = pricing.Calculate(defaultFlashBucket);
-        Assert.NotNull(defaultFlashResult.CostUsd);
-        Assert.Equal(10.5m, defaultFlashResult.CostUsd.Value);
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+        var result = pricing.Calculate(new UsageBucket(ProviderKind.Antigravity, DateOnly.FromDateTime(DateTime.Today), null,
+            model, 1_000_000, 0, 1_000_000, 1, DataQuality.Exact, "fixture"));
+        Assert.Null(result.CostUsd);
+        Assert.Contains("未定价", result.Warning);
     }
 
     [Fact]
@@ -165,10 +88,10 @@ public sealed class PricingServiceTests
         // Custom rule is preserved AND built-in rules are merged
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "custom-model");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6");
-        Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-astra*");
-        Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.8-flash*");
+        Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-astra");
+        Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.8-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-4-6*");
-        Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash*");
+        Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-pro-default*");
     }
 
@@ -185,7 +108,7 @@ public sealed class PricingServiceTests
     }
 
     [Fact]
-    public void CodexAutoReviewModelCalculatesCostAtLunaPricing()
+    public void CodexAutoReviewUsesAgreedLunaReference()
     {
         var service = PricingService.BuiltInDefaults();
         var pricing = new PricingService("dummy", service);
@@ -194,8 +117,8 @@ public sealed class PricingServiceTests
         var reviewBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 8, 31), null, "codex-auto-review",
             11_000_000, 10_000_000, 100_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
         var result = pricing.Calculate(reviewBucket);
-        Assert.NotNull(result.CostUsd);
-        Assert.Equal(0.52m, result.CostUsd.Value);
+        Assert.Equal(0.52m, result.CostUsd);
+        Assert.Equal(CostQuality.ExactTokenSplit, result.Quality);
     }
 
     [Fact]
@@ -233,31 +156,26 @@ public sealed class PricingServiceTests
             2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
         var fastResult = pricing.Calculate(fastBucket);
         Assert.NotNull(fastResult.CostUsd);
-        Assert.Equal(122.0m, fastResult.CostUsd.Value);
+        Assert.Equal(152.5m, fastResult.CostUsd.Value);
 
         var serviceTierFastBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 9, 5), null, "gpt-6-astra",
             2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit,
             "fast");
         var serviceTierResult = pricing.Calculate(serviceTierFastBucket);
         Assert.NotNull(serviceTierResult.CostUsd);
-        Assert.Equal(122.0m, serviceTierResult.CostUsd.Value);
+        Assert.Equal(152.5m, serviceTierResult.CostUsd.Value);
     }
 
     [Fact]
-    public void Gpt53CodexSparkPricing_CalculatesCorrectCost()
+    public void SparkIsUnpricedAndPlainCodex53HasItsOwnReference()
     {
         var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
-        var bucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 9, 6), "test", "gpt-5.3-codex-spark",
-            27992, 9856, 74, 1, DataQuality.Exact, "path", "sess1");
-        var result = pricing.Calculate(bucket);
-
-        Assert.True(result.IsPriced);
-        Assert.NotNull(result.CostUsd);
-        // nonCached = 27992 - 9856 = 18136 -> 18136 * 0.2 / 1M = 0.0036272
-        // cached = 9856 -> 9856 * 0.02 / 1M = 0.00019712
-        // output = 74 -> 74 * 1.2 / 1M = 0.0000888
-        // total = 0.00391312
-        Assert.Equal(0.00391312m, result.CostUsd.Value);
+        var bucket = new UsageBucket(ProviderKind.Codex, DateOnly.FromDateTime(DateTime.Today), null,
+            "gpt-5.3-codex-spark", 1_000_000, 0, 100_000, 1, DataQuality.Exact, "fixture");
+        Assert.Null(pricing.Calculate(bucket).CostUsd);
+        Assert.Equal(3.15m, pricing.Calculate(bucket with { ModelId = "gpt-5.3-codex" }).CostUsd);
     }
+
+
 }
 

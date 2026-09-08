@@ -32,6 +32,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         AppPaths.EnsureDirectories();
         _settingsStore = new AppSettingsStore(AppPaths.SettingsPath);
         var settings = _settingsStore.Load();
+        new StartupManager().SyncStartupPathIfEnabled();
         var pricing = PricingService.LoadOrCreate(AppPaths.PricingPath, Path.Combine(AppContext.BaseDirectory, "Pricing", "default-pricing.json"));
         _database = new UsageDatabase(AppPaths.DatabasePath);
         var repository = new UsageRepository(_database);
@@ -186,6 +187,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private QuotaPopupForm CreateQuotaPopup()
     {
         var popup = new QuotaPopupForm();
+        popup.CloseRequested += (_, _) => SetQuotaPopupPinned(false);
         popup.DismissRequested += (_, _) =>
         {
             if (!_quotaPopupPinned) HideQuotaPopup();

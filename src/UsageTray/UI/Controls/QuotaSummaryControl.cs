@@ -117,9 +117,9 @@ public sealed class QuotaSummaryControl : UserControl
                 {
                     var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
                     var name = isGemini ? "Gemini Models" : "Claude and GPT models";
-                    var rem = w.RemainingFraction;
+                    var rem = w.EffectiveRemainingFraction();
                     var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
-                    return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, 0m, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
+                    return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, null, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
                 }).ToList();
             }
         }
@@ -130,8 +130,8 @@ public sealed class QuotaSummaryControl : UserControl
             y += _boldFont.Height + 3; // "周订阅统计与预估 (本轮 7 天窗口)"
             foreach (var _ in agWeeklyEstimates)
             {
-                y += _regularFont.Height + 3; // 本轮周消耗
-                y += _regularFont.Height + 4; // 周满额预估
+                y += _regularFont.Height + 3; // 本轮参考金额
+                y += _regularFont.Height + 4; // 满额样本外推
             }
         }
 
@@ -144,6 +144,17 @@ public sealed class QuotaSummaryControl : UserControl
         var codexSnapshots = _snapshot.Quotas
             .Where(q => q.Snapshot.Provider == ProviderKind.Codex)
             .Select(q => q.Snapshot).ToList();
+        var codexPlan = codexSnapshots
+            .Where(s => !UsageAggregator.IsReserveSnapshot(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
+            .OrderByDescending(s => s.CapturedAt)
+            .Select(s => s.PlanTier)
+            .FirstOrDefault()
+            ?? codexSnapshots
+            .Where(s => !string.IsNullOrWhiteSpace(s.PlanTier))
+            .OrderByDescending(s => s.CapturedAt)
+            .Select(s => s.PlanTier)
+            .FirstOrDefault();
+
         if (codexSnapshots.Count > 0)
         {
             var fiveHour = codexSnapshots.Where(IsFiveHour).ToList();
@@ -152,7 +163,8 @@ public sealed class QuotaSummaryControl : UserControl
             if (weekly.Count > 0) y += MeasureQuotaWindowHeight(weekly);
             var others = codexSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
             if (others.Count > 0) y += MeasureQuotaWindowHeight(others);
-            if (codexSnapshots.Any(s => s.IsResetPassed())) y += _smallFont.Height + 4;
+            var activeSnapshots = codexSnapshots;
+            if (activeSnapshots.Any(s => s.IsResetPassed())) y += _smallFont.Height + 4;
         }
         else
         {
@@ -173,8 +185,8 @@ public sealed class QuotaSummaryControl : UserControl
             y += _boldFont.Height + 3; // "周订阅统计与预估 (本轮 7 天窗口)"
             foreach (var _ in codexCycles)
             {
-                y += _regularFont.Height + 3; // 本轮周消耗
-                y += _regularFont.Height + 4; // 周满额预估
+                y += _regularFont.Height + 3; // 本轮参考金额
+                y += _regularFont.Height + 4; // 满额样本外推
             }
         }
 
@@ -197,8 +209,7 @@ public sealed class QuotaSummaryControl : UserControl
     private int MeasureQuotaWindowHeight(IReadOnlyList<QuotaSnapshot> snapshots)
     {
         if (snapshots.Count == 0) return 0;
-        if (snapshots.Count == 1) return _regularFont.Height + 4;
-        return _boldFont.Height + 2 + (_regularFont.Height + 3) * snapshots.Count + 1;
+        return _boldFont.Height + 2 + (_regularFont.Height + _smallFont.Height + 7) * snapshots.Count + 1;
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -295,9 +306,9 @@ public sealed class QuotaSummaryControl : UserControl
                 {
                     var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
                     var name = isGemini ? "Gemini Models" : "Claude and GPT models";
-                    var rem = w.RemainingFraction;
+                    var rem = w.EffectiveRemainingFraction();
                     var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
-                    return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, 0m, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
+                    return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, null, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
                 }).ToList();
             }
         }
@@ -315,13 +326,13 @@ public sealed class QuotaSummaryControl : UserControl
 
             foreach (var est in agWeeklyEstimates)
             {
-                var usedText = est.ConsumedFraction.HasValue ? $"{est.ConsumedFraction.Value:P0}" : (est.RemainingFraction.HasValue ? $"{1.0 - est.RemainingFraction.Value:P0}" : "0%");
-                var cycleCostText = est.ObservedCostUsd.HasValue ? "$" + est.ObservedCostUsd.Value.ToString("0.00") : "$0.00";
-                var estCostText = est.EstimatedFullQuotaUsd.HasValue ? $"约 ${est.EstimatedFullQuotaUsd.Value:0.00}" : "待产生消耗后推算";
+                var usedText = est.ConsumedFraction.HasValue ? $"{est.ConsumedFraction.Value:P0}" : (est.RemainingFraction.HasValue ? $"{1.0 - est.RemainingFraction.Value:P0}" : "未知");
+                var cycleCostText = est.ObservedCostUsd.HasValue ? "$" + est.ObservedCostUsd.Value.ToString("0.00") : "—";
+                var estCostText = est.EstimatedFullQuotaUsd.HasValue ? $"约 ${est.EstimatedFullQuotaUsd.Value:0.00}" : est.CalculationDetails ?? "样本不足";
                 var resetNote = est.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(est.ResetAt.Value)}）" : string.Empty;
 
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 本轮消耗", cycleCostText, $"（已消耗 {usedText}）{resetNote}", Color.FromArgb(37, 99, 235));
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 满额预估", estCostText, $"（置信度：{est.Confidence}）", Color.FromArgb(5, 150, 105));
+                DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 本轮参考金额", cycleCostText, $"（已消耗 {usedText}）", Color.FromArgb(37, 99, 235));
+                DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 满额样本外推", estCostText, est.EstimatedFullQuotaUsd.HasValue ? "（仅本机样本）" : string.Empty, Color.FromArgb(5, 150, 105));
             }
         }
 
@@ -354,10 +365,11 @@ public sealed class QuotaSummaryControl : UserControl
             var others = codexSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
             if (others.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "其他窗口", others);
 
-            if (codexSnapshots.Any(s => s.IsResetPassed()))
+            var activeSnapshots = codexSnapshots;
+            if (activeSnapshots.Any(s => s.IsResetPassed()))
             {
                 using var tipBrush = new SolidBrush(Color.FromArgb(100, 116, 139));
-                g.DrawString("💡 部分窗口已过重置时间，在 Codex 中发送任意消息即可同步最新官方快照。", _smallFont, tipBrush, padX + 8, y);
+                g.DrawString("部分窗口已过期；使用对应模型后等待新快照。", _smallFont, tipBrush, padX + 8, y);
                 y += _smallFont.Height + 4;
             }
         }
@@ -386,12 +398,12 @@ public sealed class QuotaSummaryControl : UserControl
             {
                 var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : "未知";
                 var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
-                var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : "待产生消耗后推算";
+                var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : cycle.EstimateNote ?? "样本不足";
                 var codexResetNote = cycle.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(cycle.ResetAt.Value)}）" : string.Empty;
                 var poolPrefix = codexCycles.Count > 1 ? $"{cycle.PoolName} " : string.Empty;
 
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}本轮周消耗", cycleCostText, $"（已消耗 {usedText}）{codexResetNote}", Color.FromArgb(37, 99, 235));
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}周满额预估", estCostText, "（按当前用量推算满额价值）", Color.FromArgb(5, 150, 105));
+                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}本轮参考金额", cycleCostText, $"（已消耗 {usedText}）", Color.FromArgb(37, 99, 235));
+                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}满额样本外推", estCostText, cycle.EstimatedWeeklyCostUsd.HasValue ? "（仅本机样本）" : string.Empty, Color.FromArgb(5, 150, 105));
             }
         }
 
@@ -400,20 +412,16 @@ public sealed class QuotaSummaryControl : UserControl
         y += 8;
 
         // Footer / Timestamp
-        var captured = _snapshot.Quotas.Select(item => item.Snapshot.CapturedAt)
-            .Append(_snapshot.RefreshedAt)
-            .Max()
-            .ToLocalTime();
         using var footerBrush = new SolidBrush(Color.FromArgb(148, 163, 184));
-        g.DrawString($"采样时间：{captured:yyyy-MM-dd HH:mm:ss}", _smallFont, footerBrush, padX, y);
+        g.DrawString($"界面刷新：{_snapshot.RefreshedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}", _smallFont, footerBrush, padX, y);
         y += _smallFont.Height + 6;
 
         if (ShowFooterNote)
         {
             using var noteBrush = new SolidBrush(Color.FromArgb(160, 174, 192));
-            g.DrawString("• Antigravity 额度通过本地官方 Language Server API 实时获取，不参与 API 等值折算。", _smallFont, noteBrush, padX, y);
+            g.DrawString("• 订阅参考金额按固定基准计量，并非账单或可用余额。", _smallFont, noteBrush, padX, y);
             y += _smallFont.Height + 3;
-            g.DrawString("• Codex 额度通过 Session 对话记录提取；若额度已过重置时间，系统自动按周期推断为满额，在 Codex 中发送一次常规模型消息即可校准云端精确快照。", _smallFont, noteBrush, padX, y);
+            g.DrawString("• 满额金额仅按同周期本机样本外推；过期额度等待新快照。", _smallFont, noteBrush, padX, y);
         }
 
 
@@ -463,67 +471,21 @@ public sealed class QuotaSummaryControl : UserControl
     private void DrawQuotaWindowLine(Graphics g, int x, ref int y, string windowLabel, IReadOnlyList<QuotaSnapshot> snapshots)
     {
         if (snapshots.Count == 0) return;
-        if (snapshots.Count == 1)
-        {
-            var snapshot = snapshots[0];
-            using var labelBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
-            var labelText = $"{windowLabel}：";
-            g.DrawString(labelText, _boldFont, labelBrush, x, y);
-            var labelWidth = TextRenderer.MeasureText(g, labelText, _boldFont).Width;
-            var currentX = x + labelWidth;
-
-            var modelLabel = ShortLabel(snapshot);
-            if (!string.IsNullOrWhiteSpace(modelLabel) &&
-                !modelLabel.StartsWith("Codex", StringComparison.OrdinalIgnoreCase))
-            {
-                using var modelBrush = new SolidBrush(Color.FromArgb(51, 65, 85));
-                g.DrawString($"{modelLabel} ", _regularFont, modelBrush, currentX, y);
-                currentX += TextRenderer.MeasureText(g, $"{modelLabel} ", _regularFont).Width;
-            }
-
-            var (remText, remColor) = GetRemainingTextAndColor(snapshot);
-            using var remBrush = new SolidBrush(remColor);
-            g.DrawString(remText, _boldFont, remBrush, currentX, y);
-            currentX += TextRenderer.MeasureText(g, remText, _boldFont).Width;
-
-            var resetText = FormatReset(snapshot);
-            using var resetBrush = new SolidBrush(Color.FromArgb(100, 116, 139));
-            g.DrawString($"  （重置 {resetText}）", _regularFont, resetBrush, currentX, y);
-
-            y += _regularFont.Height + 4;
-            return;
-        }
-
-        // Multiple snapshots for this window (e.g. Gemini Models & Claude and GPT models)
-        using var windowLabelBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
-        g.DrawString($"{windowLabel}：", _boldFont, windowLabelBrush, x, y);
+        using var labelBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
+        using var detailBrush = new SolidBrush(Color.FromArgb(100, 116, 139));
+        g.DrawString($"{windowLabel}：", _boldFont, labelBrush, x, y);
         y += _boldFont.Height + 2;
-
         foreach (var snapshot in snapshots)
         {
-            var currentX = x + 12;
-            using var bulletBrush = new SolidBrush(Color.FromArgb(148, 163, 184));
-            g.DrawString("• ", _regularFont, bulletBrush, currentX, y);
-            currentX += TextRenderer.MeasureText(g, "• ", _regularFont).Width;
-
-            var modelLabel = ShortLabel(snapshot);
-            if (!string.IsNullOrWhiteSpace(modelLabel))
-            {
-                using var modelBrush = new SolidBrush(Color.FromArgb(51, 65, 85));
-                g.DrawString($"{modelLabel}：", _regularFont, modelBrush, currentX, y);
-                currentX += TextRenderer.MeasureText(g, $"{modelLabel}：", _regularFont).Width;
-            }
-
-            var (remText, remColor) = GetRemainingTextAndColor(snapshot);
-            using var remBrush = new SolidBrush(remColor);
-            g.DrawString(remText, _boldFont, remBrush, currentX, y);
-            currentX += TextRenderer.MeasureText(g, remText, _boldFont).Width;
-
-            var resetText = FormatReset(snapshot);
-            using var resetBrush = new SolidBrush(Color.FromArgb(100, 116, 139));
-            g.DrawString($"  （重置 {resetText}）", _regularFont, resetBrush, currentX, y);
-
+            var label = $"{ShortLabel(snapshot)}  ";
+            g.DrawString(label, _regularFont, labelBrush, x + 12, y);
+            var (text, color) = GetRemainingTextAndColor(snapshot);
+            using var brush = new SolidBrush(color);
+            g.DrawString(text, _boldFont, brush, x + 12 + TextRenderer.MeasureText(g, label, _regularFont).Width, y);
             y += _regularFont.Height + 3;
+            var detail = $"采样 {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm} · 重置 {FormatReset(snapshot)}";
+            g.DrawString(detail, _smallFont, detailBrush, x + 12, y);
+            y += _smallFont.Height + 4;
         }
         y += 1;
     }
@@ -556,11 +518,11 @@ public sealed class QuotaSummaryControl : UserControl
     {
         if (!snapshot.RemainingFraction.HasValue) return ("剩余未知", Color.FromArgb(100, 116, 139));
         var frac = snapshot.RemainingFraction.Value;
-        if (frac <= 0.0001 && snapshot.IsResetPassed())
+        if (snapshot.IsResetPassed())
         {
-            return ("100% (推断已重置)", Color.FromArgb(22, 163, 74));
+            return ($"待同步（上次 {frac:P0}）", Color.FromArgb(100, 116, 139));
         }
-        var text = $"{frac:P0} 剩余";
+        var text = $"{frac:P0} 剩余{(snapshot.IsStale() ? "（旧快照）" : "")}";
         var color = frac switch
         {
             > 0.30 => Color.FromArgb(22, 163, 74),  // Green
@@ -574,10 +536,19 @@ public sealed class QuotaSummaryControl : UserControl
 
     private static string FormatReset(QuotaSnapshot snapshot) => TimeFormatter.FormatResetWithRelative(snapshot.ResetAt);
 
-    private static string ShortLabel(QuotaSnapshot snapshot) => string.IsNullOrWhiteSpace(snapshot.DisplayLabel) ||
-        string.Equals(snapshot.DisplayLabel, snapshot.ModelOrPoolId, StringComparison.OrdinalIgnoreCase)
-        ? snapshot.ModelOrPoolId
-        : snapshot.DisplayLabel;
+    private static string ShortLabel(QuotaSnapshot snapshot)
+    {
+        var label = string.IsNullOrWhiteSpace(snapshot.DisplayLabel) ||
+            string.Equals(snapshot.DisplayLabel, snapshot.ModelOrPoolId, StringComparison.OrdinalIgnoreCase)
+            ? snapshot.ModelOrPoolId
+            : snapshot.DisplayLabel;
+        return label
+            .Replace("(5小时额度)", "")
+            .Replace("(周额度)", "")
+            .Replace("(5h)", "")
+            .Replace("(weekly)", "")
+            .Trim();
+    }
 
     private static bool IsFiveHour(QuotaSnapshot snapshot)
     {
@@ -611,6 +582,8 @@ public sealed class QuotaSummaryControl : UserControl
             value.Contains("7-day", StringComparison.Ordinal) || value.Contains("7 day", StringComparison.Ordinal) ||
             value.Contains("7d", StringComparison.Ordinal) || value.Contains("周", StringComparison.Ordinal);
     }
+
+    public static bool IsProOrAbovePlan(string? planTier) => UsageAggregator.IsProOrAbovePlan(planTier);
 
     protected override void Dispose(bool disposing)
     {

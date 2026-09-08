@@ -3,13 +3,14 @@ using UsageTray.Data;
 using UsageTray.Pricing;
 using UsageTray.Providers.Codex;
 using UsageTray.Services;
+using UsageTray.UI;
 
 namespace UsageTray.Tests;
 
 public sealed class CodexWeeklyCycleTests
 {
     [Fact]
-    public void AutomaticallyDetectsCycleStartAndProjectsWeeklyCost()
+    public void DetectsCycleButRequiresObservedBaselineForProjection()
     {
         using var workspace = new TempWorkspace();
         var (database, repository) = RepositoryFactory.Create(workspace);
@@ -58,7 +59,7 @@ public sealed class CodexWeeklyCycleTests
             Assert.Equal(0.10, cycle.UsedFraction!.Value, 4);
             Assert.Equal(0.235m, cycle.CycleCostUsd);
             // Projection = 0.235 / 0.10 = 2.35
-            Assert.Equal(2.35m, cycle.EstimatedWeeklyCostUsd);
+            Assert.Null(cycle.EstimatedWeeklyCostUsd);
         }
     }
 
@@ -109,7 +110,7 @@ public sealed class CodexWeeklyCycleTests
             Assert.Equal(0.235m, cycle.CycleCostUsd);
             Assert.Equal(0.20, cycle.UsedFraction!.Value, 4);
             // Projection = 0.235 / 0.20 = 1.175 -> round to 1.18
-            Assert.Equal(1.18m, cycle.EstimatedWeeklyCostUsd);
+            Assert.Null(cycle.EstimatedWeeklyCostUsd);
         }
     }
 
@@ -244,6 +245,83 @@ public sealed class CodexWeeklyCycleTests
             Assert.Equal(10_000, dashboard.OutputTokens);
             Assert.Equal(55_000, dashboard.NonCachedInputTokens);
             Assert.Equal(0.235m, dashboard.ApiEquivalentUsd);
+        }
+    }
+
+    [Fact]
+    public void BuildSnapshot_DecouplesStandardAndSparkWeeklyCycles()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repository) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var stdReset = now.AddDays(3);
+            var sparkReset = now.AddDays(5);
+
+            // Add standard and spark quotas
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Codex 主力模型 (周额度)", 0.80, stdReset, "weekly", "rate_limits", "Pro"),
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-spark-5h", "GPT-5.3 Spark (5小时额度)", 0.48, now.AddHours(2), "5h", "rate_limits", "Pro"),
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-spark-weekly", "GPT-5.3 Spark (周额度)", 0.77, sparkReset, "weekly", "rate_limits", "Pro")
+            ]);
+
+            var sessionPath1 = workspace.File("session_std.jsonl");
+            var file1 = new FileInfo(sessionPath1);
+            File.WriteAllText(sessionPath1, "mock1");
+            var snapshots1 = new List<CodexTokenSnapshot>
+            {
+                new("session_std", now.AddDays(-1), "gpt-5.6-luna", null, "standard",
+                    new CodexCumulativeUsage(100_000, 40_000, 10_000, 0),
+                    new CodexRequestUsage(100_000, 40_000, 10_000, 0),
+                    null, sessionPath1, 1)
+            };
+            repository.ReplaceCodexSource(file1, snapshots1, "session_std", null, "gpt-5.6-luna", null);
+
+            var sessionPath2 = workspace.File("session_spark.jsonl");
+            var file2 = new FileInfo(sessionPath2);
+            File.WriteAllText(sessionPath2, "mock2");
+            var snapshots2 = new List<CodexTokenSnapshot>
+            {
+                new("session_spark", now.AddHours(-2), "gpt-5.3-codex-spark", null, "standard",
+                    new CodexCumulativeUsage(50_000, 10_000, 5_000, 0),
+                    new CodexRequestUsage(50_000, 10_000, 5_000, 0),
+                    null, sessionPath2, 1)
+            };
+            repository.ReplaceCodexSource(file2, snapshots2, "session_spark", null, "gpt-5.3-codex-spark", null);
+
+            var pricing = new PricingService(workspace.File("pricing.json"), new PricingDocument(1, DateOnly.FromDateTime(now.DateTime), [
+                new PricingRule("Codex", "gpt-5.6-luna", MatchMode.Exact, 2.0m, 0.5m, 1.0m, 10.0m, "https://example.invalid", new DateOnly(2026, 8, 19)),
+                new PricingRule("Codex", "gpt-5.3-codex-spark", MatchMode.Exact, 1.0m, 0.2m, 0.5m, 5.0m, "https://example.invalid", new DateOnly(2026, 8, 19))
+            ]));
+
+            var aggregator = new UsageAggregator(repository, pricing);
+            var dashboard = aggregator.BuildSnapshot(DateRange.Today(), ProviderKind.Codex);
+
+            // Both cycles exist
+            Assert.NotNull(dashboard.CodexWeeklyCycle);
+            Assert.NotNull(dashboard.CodexSparkWeeklyCycle);
+            Assert.Equal(2, dashboard.CodexWeeklyCycles.Count);
+
+            // Standard cycle: only includes luna tokens
+            var stdCycle = dashboard.CodexWeeklyCycle!;
+            Assert.Equal("Codex 主力模型", stdCycle.PoolName);
+            Assert.Equal(100_000, stdCycle.CycleInputTokens);
+            Assert.Equal(10_000, stdCycle.CycleOutputTokens);
+            Assert.True(stdCycle.CycleCostUsd > 0);
+
+            // Spark cycle: only includes spark tokens
+            var sparkCycle = dashboard.CodexSparkWeeklyCycle!;
+            Assert.Equal("GPT-5.3 Spark", sparkCycle.PoolName);
+            Assert.Equal(50_000, sparkCycle.CycleInputTokens);
+            Assert.Equal(5_000, sparkCycle.CycleOutputTokens);
+            Assert.True(sparkCycle.CycleCostUsd > 0);
+
+            // Verify QuotaDisplayFormatter output
+            var formatted = QuotaDisplayFormatter.BuildPopupText(dashboard);
+            Assert.Contains("5 小时窗口：GPT-5.3 Spark 48% 剩余", formatted);
+            Assert.Contains("GPT-5.3 Spark 本轮订阅参考金额", formatted);
+            Assert.Contains("Codex 主力模型 本轮订阅参考金额", formatted);
         }
     }
 }

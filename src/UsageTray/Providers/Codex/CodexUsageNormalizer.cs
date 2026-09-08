@@ -106,7 +106,7 @@ public sealed class CodexUsageNormalizer
 
                 audits.Add(new CodexEventAudit(snapshot.SessionId, snapshot.ProjectKey, snapshot.StableEventKey, snapshot.CapturedAt, model,
                     snapshot.SourcePath, snapshot.SourceLine, epoch, delta, requestQuality, isLongContext,
-                    item.Duplicate, item.Sources));
+                    item.Duplicate, item.Sources, serviceTier));
 
             }
         }
@@ -141,10 +141,7 @@ public sealed class CodexUsageNormalizer
         path.Contains("archived_sessions", StringComparison.OrdinalIgnoreCase) ? 0 :
         path.Contains("sessions", StringComparison.OrdinalIgnoreCase) ? 1 : 2;
 
-    private static string? NormalizeServiceTier(string? tier) =>
-        string.IsNullOrWhiteSpace(tier) || tier.Equals("standard", StringComparison.OrdinalIgnoreCase) ||
-        tier.Equals("default", StringComparison.OrdinalIgnoreCase) || tier.Equals("auto", StringComparison.OrdinalIgnoreCase)
-            ? null : tier.Trim().ToLowerInvariant();
+    private static string? NormalizeServiceTier(string? tier) => UsageTray.Pricing.PricingService.NormalizeTier(tier);
 
     private static bool IsRewind(CodexCumulativeUsage previous, CodexCumulativeUsage current)
     {

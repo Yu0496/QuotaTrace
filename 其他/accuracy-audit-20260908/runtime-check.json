@@ -1,0 +1,407 @@
+{
+  "parser_gpt-5.3-codex_codex_": [
+    {
+      "ModelOrPoolId": "codex-weekly",
+      "WindowKind": "weekly",
+      "RemainingFraction": 0.94
+    }
+  ],
+  "parser_gpt-5.3-codex-spark_codex_": [
+    {
+      "ModelOrPoolId": "codex-weekly",
+      "WindowKind": "weekly",
+      "RemainingFraction": 0.94
+    }
+  ],
+  "parser_gpt-6-astra_codex_bengalfox_": [
+    {
+      "ModelOrPoolId": "codex-spark-weekly",
+      "WindowKind": "weekly",
+      "RemainingFraction": 0.94
+    }
+  ],
+  "parser_gpt-6-astra_codex_bengalfox_GPT-5.3-Codex-Spark": [
+    {
+      "ModelOrPoolId": "codex-spark-weekly",
+      "WindowKind": "weekly",
+      "RemainingFraction": 0.94
+    }
+  ],
+  "stale_display": {
+    "compact": "AG 5h — / 周 — | Codex 待同步",
+    "popup": "Antigravity 额度与用量\r\n状态：当前快照\r\n暂无可用 quota 快照，请先刷新并确保 Antigravity 正在运行。\r\n本次统计范围没有可显示的 Antigravity token。\r\n\r\nCodex 额度与用量（ProLite）\r\n周窗口：Codex weekly 待同步（上次 0%）（采样 09-07 00:13；重置 2026-09-08 00:13，已重置）\r\n本次统计范围没有可显示的 Codex token。\r\n\r\n界面刷新：2026-09-09 00:13:27\r\n订阅参考金额按固定基准计量，并非账单或可用余额；满额金额仅按本机样本外推。",
+    "captured": "2026-09-06T16:13:27.8042283+00:00"
+  },
+  "pro_real_5h_hidden": "Antigravity 额度与用量\r\n状态：当前快照\r\n暂无可用 quota 快照，请先刷新并确保 Antigravity 正在运行。\r\n本次统计范围没有可显示的 Antigravity token。\r\n\r\nCodex 额度与用量（Pro）\r\n5 小时窗口：Codex 5h 1% 剩余（采样 09-09 00:13；重置 2026-09-09 02:13，1小时59分后）\r\n周窗口：Codex weekly 80% 剩余（采样 09-09 00:13；重置 2026-09-12 00:13，2天23小时59分后）\r\n本次统计范围没有可显示的 Codex token。\r\n\r\n界面刷新：2026-09-09 00:13:27\r\n订阅参考金额按固定基准计量，并非账单或可用余额；满额金额仅按本机样本外推。",
+  "fast_tier_loss": {
+    "daily": 3.75,
+    "weekly": 3.75,
+    "dailyTier": "fast",
+    "weeklyTier": "fast"
+  },
+  "no_reserve_cycle_leaks_history": {
+    "RangeDisplayOverride": "本次周额度（各模型池独立周期；09-05 00:13起）",
+    "InputTokens": 100000,
+    "reserveInput": 0,
+    "reserveCycle": null
+  },
+  "reference_migration": {
+    "SchemaVersion": 4,
+    "sol": {
+      "Provider": "Codex",
+      "ModelPattern": "gpt-5.6-sol",
+      "MatchMode": "Exact",
+      "InputPerMillionUsd": 5,
+      "CacheReadPerMillionUsd": 0.5,
+      "CacheWritePerMillionUsd": 6.25,
+      "OutputPerMillionUsd": 30,
+      "SourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+      "LastVerifiedAt": "2026-09-08",
+      "CacheSplitValidated": true,
+      "LongContextPrice": {
+        "InputPerMillionUsd": 10,
+        "CacheReadPerMillionUsd": 1,
+        "CacheWritePerMillionUsd": 12.5,
+        "OutputPerMillionUsd": 45
+      },
+      "LongContextThresholdTokens": 272000,
+      "ServiceTierPrices": {
+        "fast": {
+          "InputPerMillionUsd": 12.5,
+          "CacheReadPerMillionUsd": 1.25,
+          "CacheWritePerMillionUsd": 15.625,
+          "OutputPerMillionUsd": 75.0
+        }
+      },
+      "ServiceTierLongContextPrices": {
+        "fast": {
+          "InputPerMillionUsd": 25.0,
+          "CacheReadPerMillionUsd": 2.5,
+          "CacheWritePerMillionUsd": 31.25,
+          "OutputPerMillionUsd": 112.5
+        }
+      },
+      "UnverifiedReason": null,
+      "ReferenceBasis": "固定非促销基准 $5/$0.5/$6.25/$30；Fast 按订阅 2.5 倍"
+    },
+    "astra": {
+      "Provider": "Codex",
+      "ModelPattern": "gpt-6-astra",
+      "MatchMode": "Exact",
+      "InputPerMillionUsd": 10.0,
+      "CacheReadPerMillionUsd": 1.0,
+      "CacheWritePerMillionUsd": 12.5,
+      "OutputPerMillionUsd": 50.0,
+      "SourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+      "LastVerifiedAt": "2026-09-08",
+      "CacheSplitValidated": true,
+      "LongContextPrice": {
+        "InputPerMillionUsd": 20.0,
+        "CacheReadPerMillionUsd": 2.0,
+        "CacheWritePerMillionUsd": 25.0,
+        "OutputPerMillionUsd": 75.0
+      },
+      "LongContextThresholdTokens": 272000,
+      "ServiceTierPrices": {
+        "fast": {
+          "InputPerMillionUsd": 25.0,
+          "CacheReadPerMillionUsd": 2.5,
+          "CacheWritePerMillionUsd": 31.25,
+          "OutputPerMillionUsd": 125.0
+        }
+      },
+      "ServiceTierLongContextPrices": {
+        "fast": {
+          "InputPerMillionUsd": 50.0,
+          "CacheReadPerMillionUsd": 5.0,
+          "CacheWritePerMillionUsd": 62.5,
+          "OutputPerMillionUsd": 187.5
+        }
+      },
+      "UnverifiedReason": null,
+      "ReferenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    }
+  },
+  "actual_dashboard": {
+    "RefreshedAt": "2026-09-09T00:13:30.0372062+08:00",
+    "compact": "AG 5h 81% / 周 69% | Codex 90% / Spark 99%旧",
+    "popup": "Antigravity 额度与用量\r\n状态：当前快照\r\n5 小时窗口：Claude / GPT 100% 剩余（采样 09-09 00:08；重置 2026-09-09 05:06，4小时52分后）；Gemini 81% 剩余（采样 09-09 00:08；重置 2026-09-09 02:16，2小时2分后）\r\n周窗口：Claude / GPT 100% 剩余（采样 09-09 00:08；重置 2026-09-15 17:23，6天17小时9分后）；Gemini 69% 剩余（采样 09-09 00:08；重置 2026-09-11 02:46，2天2小时33分后）\r\nGemini Models 5h 满额样本外推：缺少对应本机用量\r\nGemini Models weekly 满额样本外推：样本消耗不足5%\r\nClaude and GPT models 5h 满额样本外推：需同周期两个快照\r\nClaude and GPT models weekly 满额样本外推：样本消耗不足5%\r\n本次统计范围没有可显示的 Antigravity token。\r\n\r\nCodex 额度与用量（ProLite）\r\n5 小时窗口：GPT-5.3 Spark 待同步（上次 100%）（采样 09-08 04:35；重置 2026-09-08 09:35，已重置）\r\n周窗口：GPT-5.3 Spark 99% 剩余（旧快照）（采样 09-08 04:35；重置 2026-09-13 13:57，4天13小时44分后）；Codex 主力模型 90% 剩余（采样 09-09 00:07；重置 2026-09-15 15:31，6天15小时18分后）\r\nCodex 主力模型 本轮订阅参考金额：—（已消耗 10%）\r\nCodex 主力模型 满额样本外推：样本消耗不足5%\r\nGPT-5.3 Spark 本轮订阅参考金额：—（已消耗 1%）\r\nGPT-5.3 Spark 满额样本外推：快照待更新\r\nInput（未命中）：213.24K；Cache Read：2.88M\r\nCache Creation：0；Output：12.44K\r\n订阅参考金额：—（含未定价用量）（范围 2026-09-09）\r\n\r\n界面刷新：2026-09-09 00:13:30\r\n订阅参考金额按固定基准计量，并非账单或可用余额；满额金额仅按本机样本外推。",
+    "quotas": [
+      {
+        "Snapshot": {
+          "Provider": "Codex",
+          "CapturedAt": "2026-09-07T20:35:45.967+00:00",
+          "ModelOrPoolId": "codex-spark-5h",
+          "DisplayLabel": "GPT-5.3 Spark (5小时额度)",
+          "RemainingFraction": 1,
+          "ResetAt": "2026-09-08T01:35:36+00:00",
+          "WindowKind": "5h",
+          "Source": "codex-session-rate-limits",
+          "PlanTier": "ProLite",
+          "HasValidFraction": true
+        },
+        "IsOffline": true
+      },
+      {
+        "Snapshot": {
+          "Provider": "Codex",
+          "CapturedAt": "2026-09-07T20:35:45.967+00:00",
+          "ModelOrPoolId": "codex-spark-weekly",
+          "DisplayLabel": "GPT-5.3 Spark (周额度)",
+          "RemainingFraction": 0.99,
+          "ResetAt": "2026-09-13T05:57:39+00:00",
+          "WindowKind": "weekly",
+          "Source": "codex-session-rate-limits",
+          "PlanTier": "ProLite",
+          "HasValidFraction": true
+        },
+        "IsOffline": true
+      },
+      {
+        "Snapshot": {
+          "Provider": "Codex",
+          "CapturedAt": "2026-09-08T16:07:42.97+00:00",
+          "ModelOrPoolId": "codex-weekly",
+          "DisplayLabel": "Codex 主力模型 (周额度)",
+          "RemainingFraction": 0.9,
+          "ResetAt": "2026-09-15T07:31:49+00:00",
+          "WindowKind": "weekly",
+          "Source": "codex-session-rate-limits",
+          "PlanTier": "ProLite",
+          "HasValidFraction": true
+        },
+        "IsOffline": false
+      },
+      {
+        "Snapshot": {
+          "Provider": "Antigravity",
+          "CapturedAt": "2026-09-08T16:08:22.1591125+00:00",
+          "ModelOrPoolId": "3p-5h",
+          "DisplayLabel": "Claude / GPT (5小时额度)",
+          "RemainingFraction": 1,
+          "ResetAt": "2026-09-08T21:06:11+00:00",
+          "WindowKind": "5h",
+          "Source": "antigravity-local",
+          "PlanTier": null,
+          "HasValidFraction": true
+        },
+        "IsOffline": false
+      },
+      {
+        "Snapshot": {
+          "Provider": "Antigravity",
+          "CapturedAt": "2026-09-08T16:08:22.1591125+00:00",
+          "ModelOrPoolId": "3p-weekly",
+          "DisplayLabel": "Claude / GPT (周额度)",
+          "RemainingFraction": 0.999904,
+          "ResetAt": "2026-09-15T09:23:04+00:00",
+          "WindowKind": "weekly",
+          "Source": "antigravity-local",
+          "PlanTier": null,
+          "HasValidFraction": true
+        },
+        "IsOffline": false
+      },
+      {
+        "Snapshot": {
+          "Provider": "Antigravity",
+          "CapturedAt": "2026-09-08T16:08:22.1591125+00:00",
+          "ModelOrPoolId": "gemini-5h",
+          "DisplayLabel": "Gemini (5小时额度)",
+          "RemainingFraction": 0.8081763,
+          "ResetAt": "2026-09-08T18:16:25+00:00",
+          "WindowKind": "5h",
+          "Source": "antigravity-local",
+          "PlanTier": null,
+          "HasValidFraction": true
+        },
+        "IsOffline": false
+      },
+      {
+        "Snapshot": {
+          "Provider": "Antigravity",
+          "CapturedAt": "2026-09-08T16:08:22.1591125+00:00",
+          "ModelOrPoolId": "gemini-weekly",
+          "DisplayLabel": "Gemini (周额度)",
+          "RemainingFraction": 0.6937709,
+          "ResetAt": "2026-09-10T18:46:48+00:00",
+          "WindowKind": "weekly",
+          "Source": "antigravity-local",
+          "PlanTier": null,
+          "HasValidFraction": true
+        },
+        "IsOffline": false
+      }
+    ],
+    "RangeDisplayOverride": "本次周额度（各模型池独立周期；09-06 13:57起）",
+    "InputTokens": 52118721,
+    "OutputTokens": 253107,
+    "CodexApiEquivalentUsd": null,
+    "CodexReserveApiEquivalentUsd": 0,
+    "reserveCycle": null,
+    "reserveModels": [],
+    "CodexWeeklyCycles": [
+      {
+        "CycleStart": "2026-09-08T07:31:49+00:00",
+        "ResetAt": "2026-09-15T07:31:49+00:00",
+        "RemainingFraction": 0.9,
+        "UsedFraction": 0.1,
+        "CycleCostUsd": null,
+        "EstimatedWeeklyCostUsd": null,
+        "CycleInputTokens": 43721302,
+        "CycleCachedTokens": 40417920,
+        "CycleCacheCreationTokens": 0,
+        "CycleOutputTokens": 186559,
+        "CostQuality": "Unavailable",
+        "PoolName": "Codex 主力模型",
+        "PoolCategory": "standard",
+        "EstimateNote": "样本消耗不足5%",
+        "NonCachedInputTokens": 3303382,
+        "TotalTokens": 43907861,
+        "CacheHitRate": 92.4444564802759
+      },
+      {
+        "CycleStart": "2026-09-06T05:57:39+00:00",
+        "ResetAt": "2026-09-13T05:57:39+00:00",
+        "RemainingFraction": 0.99,
+        "UsedFraction": 0.01,
+        "CycleCostUsd": null,
+        "EstimatedWeeklyCostUsd": null,
+        "CycleInputTokens": 8397419,
+        "CycleCachedTokens": 7938944,
+        "CycleCacheCreationTokens": 0,
+        "CycleOutputTokens": 66548,
+        "CostQuality": "Unavailable",
+        "PoolName": "GPT-5.3 Spark",
+        "PoolCategory": "spark",
+        "EstimateNote": "快照待更新",
+        "NonCachedInputTokens": 458475,
+        "TotalTokens": 8463967,
+        "CacheHitRate": 94.5402867238136
+      }
+    ],
+    "Warnings": [
+      "Codex 部分模型池缺少有效周周期，未纳入本次周统计。",
+      "gpt-5.3-codex-spark 未定价：未取得 Spark 独立参考基准",
+      "codex-auto-review 未定价：Auto-Review 底层模型及价格未经官方确认"
+    ]
+  },
+  "actual_ledger": {
+    "DuplicateEventCount": 0,
+    "CounterRewindCount": 13,
+    "RequestShapeUnknownCount": 3,
+    "SuppressedEventCount": 0,
+    "persistedInput": 8132025764,
+    "recomputedInput": 8132025764,
+    "actualTiers": [
+      {
+        "tier": null,
+        "input": 8132025764,
+        "count": 617
+      }
+    ],
+    "reserveDates": [
+      {
+        "LocalDate": "2026-08-27",
+        "InputTokens": 18656997,
+        "OutputTokens": 53759
+      },
+      {
+        "LocalDate": "2026-08-27",
+        "InputTokens": 81108006,
+        "OutputTokens": 166758
+      },
+      {
+        "LocalDate": "2026-08-27",
+        "InputTokens": 174107,
+        "OutputTokens": 485
+      },
+      {
+        "LocalDate": "2026-08-27",
+        "InputTokens": 1576419,
+        "OutputTokens": 8602
+      },
+      {
+        "LocalDate": "2026-08-27",
+        "InputTokens": 1387592,
+        "OutputTokens": 8261
+      },
+      {
+        "LocalDate": "2026-08-27",
+        "InputTokens": 151783,
+        "OutputTokens": 1767
+      },
+      {
+        "LocalDate": "2026-08-30",
+        "InputTokens": 85224454,
+        "OutputTokens": 234724
+      },
+      {
+        "LocalDate": "2026-08-30",
+        "InputTokens": 292007,
+        "OutputTokens": 3766
+      },
+      {
+        "LocalDate": "2026-08-31",
+        "InputTokens": 54315150,
+        "OutputTokens": 151860
+      },
+      {
+        "LocalDate": "2026-08-31",
+        "InputTokens": 78814,
+        "OutputTokens": 299
+      }
+    ],
+    "plain53": 0
+  },
+  "antigravity_live": [
+    {
+      "Provider": "Antigravity",
+      "CapturedAt": "2026-09-08T16:13:37.3038968+00:00",
+      "ModelOrPoolId": "gemini-weekly",
+      "DisplayLabel": "Gemini (周额度)",
+      "RemainingFraction": 0.6937709,
+      "ResetAt": "2026-09-10T18:46:48+00:00",
+      "WindowKind": "weekly",
+      "Source": "antigravity-local",
+      "PlanTier": null,
+      "HasValidFraction": true
+    },
+    {
+      "Provider": "Antigravity",
+      "CapturedAt": "2026-09-08T16:13:37.3038968+00:00",
+      "ModelOrPoolId": "gemini-5h",
+      "DisplayLabel": "Gemini (5小时额度)",
+      "RemainingFraction": 0.8081763,
+      "ResetAt": "2026-09-08T18:16:25+00:00",
+      "WindowKind": "5h",
+      "Source": "antigravity-local",
+      "PlanTier": null,
+      "HasValidFraction": true
+    },
+    {
+      "Provider": "Antigravity",
+      "CapturedAt": "2026-09-08T16:13:37.3038968+00:00",
+      "ModelOrPoolId": "3p-weekly",
+      "DisplayLabel": "Claude / GPT (周额度)",
+      "RemainingFraction": 0.999904,
+      "ResetAt": "2026-09-15T09:23:04+00:00",
+      "WindowKind": "weekly",
+      "Source": "antigravity-local",
+      "PlanTier": null,
+      "HasValidFraction": true
+    },
+    {
+      "Provider": "Antigravity",
+      "CapturedAt": "2026-09-08T16:13:37.3038968+00:00",
+      "ModelOrPoolId": "3p-5h",
+      "DisplayLabel": "Claude / GPT (5小时额度)",
+      "RemainingFraction": 1,
+      "ResetAt": "2026-09-08T21:12:41+00:00",
+      "WindowKind": "5h",
+      "Source": "antigravity-local",
+      "PlanTier": null,
+      "HasValidFraction": true
+    }
+  ]
+}

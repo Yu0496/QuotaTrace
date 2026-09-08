@@ -28,8 +28,24 @@ public sealed class CodexRateLimitTests
     [Fact]
     public void PopupShowsCodexQuotaWhenRateLimitsAreAvailable()
     {
-        var captured = new DateTimeOffset(2026, 8, 19, 10, 0, 0, TimeSpan.Zero);
-        var snapshot = new DashboardSnapshot
+        var captured = DateTimeOffset.UtcNow;
+        var snapshotPlus = new DashboardSnapshot
+        {
+            Quotas =
+            [
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, captured, "codex-primary", "Codex 5h", 0.75, captured.AddHours(2), "5h", "codex-session-rate-limits", "Plus"), false),
+                new QuotaView(new QuotaSnapshot(ProviderKind.Codex, captured, "codex-secondary", "Codex weekly", 0.90, captured.AddDays(3), "weekly", "codex-session-rate-limits", "Plus"), false)
+            ]
+        };
+
+        var textPlus = QuotaDisplayFormatter.BuildPopupText(snapshotPlus);
+
+        Assert.Contains("Codex 5h 75% 剩余", textPlus, StringComparison.Ordinal);
+        Assert.Contains("Codex weekly 90% 剩余", textPlus, StringComparison.Ordinal);
+        Assert.DoesNotContain("当前 session 未写入 rate_limits", textPlus, StringComparison.Ordinal);
+
+        // Explicit server windows are shown for every plan.
+        var snapshotPro = new DashboardSnapshot
         {
             Quotas =
             [
@@ -37,12 +53,9 @@ public sealed class CodexRateLimitTests
                 new QuotaView(new QuotaSnapshot(ProviderKind.Codex, captured, "codex-secondary", "Codex weekly", 0.90, captured.AddDays(3), "weekly", "codex-session-rate-limits", "Pro"), false)
             ]
         };
-
-        var text = QuotaDisplayFormatter.BuildPopupText(snapshot);
-
-        Assert.Contains("Codex 5h 75% 剩余", text, StringComparison.Ordinal);
-        Assert.Contains("Codex weekly 90% 剩余", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("当前 session 未写入 rate_limits", text, StringComparison.Ordinal);
+        var textPro = QuotaDisplayFormatter.BuildPopupText(snapshotPro);
+        Assert.Contains("5 小时窗口", textPro, StringComparison.Ordinal);
+        Assert.Contains("Codex weekly 90% 剩余", textPro, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -18,6 +18,9 @@ graph TD
     Coord --> AntiP[AntigravityProvider]
     Coord --> Price[PricingService]
     Coord --> Agg[UsageAggregator]
+    Agg --> Projector[QuotaProjector]
+    AntiP --> Pools[AntigravityQuotaEstimator]
+    Pools --> Projector
     Coord --> Repo[UsageRepository]
     Repo --> DB[(SQLite: usage.db)]
     Coord --> MemOpt[MemoryOptimizer]
@@ -31,7 +34,7 @@ graph TD
 | 项目 / 目录 | 输出类型 | 核心职责 |
 | :--- | :--- | :--- |
 | [`src/UsageTray/`](file:///F:/Project/QuotaStatistics/src/UsageTray) | WinExe (WinForms) | 主应用程序，包含托盘交互、高 DPI 界面、数据解析、SQLite 存储、计价引擎与调度。 |
-| [`tests/UsageTray.Tests/`](file:///F:/Project/QuotaStatistics/tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码、会话归一化、额度周期预估、列宽防覆盖等 113+ 项测试。 |
+| [`tests/UsageTray.Tests/`](file:///F:/Project/QuotaStatistics/tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码、会话归一化、额度周期预估、列宽防覆盖等 156 项测试。 |
 | [`tools/AntigravityStatusRecorder/`](file:///F:/Project/QuotaStatistics/tools/AntigravityStatusRecorder) | Exe (Console) | 独立控制台工具，读取官方 status-line stdin JSON 并记录到本地存储。 |
 | [`tools/CodexAudit/`](file:///F:/Project/QuotaStatistics/tools/CodexAudit) | Exe (Console) | 离线 Codex 审计与 CSV 导出工具。 |
 
@@ -48,7 +51,7 @@ graph TD
 | [`AppPaths`](file:///F:/Project/QuotaStatistics/src/UsageTray/App/AppPaths.cs) | `src/UsageTray/App/AppPaths.cs` | 解析 `%LOCALAPPDATA%\UsageTray` 下的数据库、配置、价格与日志绝对路径。 |
 | [`AppSettings`](file:///F:/Project/QuotaStatistics/src/UsageTray/App/AppSettings.cs) | `src/UsageTray/App/AppSettings.cs` | 定义用户配置模型及 `AppSettingsStore` JSON 读写，包含全量扫描周期与窗口尺寸记忆。 |
 | [`SingleInstance`](file:///F:/Project/QuotaStatistics/src/UsageTray/App/SingleInstance.cs) | `src/UsageTray/App/SingleInstance.cs` | 基于系统互斥体（Mutex）确保进程单实例运行。 |
-| [`StartupManager`](file:///F:/Project/QuotaStatistics/src/UsageTray/App/StartupManager.cs) | `src/UsageTray/App/StartupManager.cs` | 读写 Windows 注册表 `Run` 键，实现当前用户级开机自动启动。 |
+| [`StartupManager`](file:///F:/Project/QuotaStatistics/src/UsageTray/App/StartupManager.cs) | `src/UsageTray/App/StartupManager.cs` | 读写 Windows 注册表 `Run` 键，实现开机自启并提供标准交付产物路径规范化与自动修正同步机制。 |
 | [`CodexMaintenanceCli`](file:///F:/Project/QuotaStatistics/src/UsageTray/App/CodexMaintenanceCli.cs) | `src/UsageTray/App/CodexMaintenanceCli.cs` | 命令行维护入口，支持数据库备份、全量重建与归一化诊断。 |
 
 ### 2.2 核心领域模型 (`UsageTray.Core`)
@@ -59,8 +62,9 @@ graph TD
 | :--- | :--- | :--- |
 | [`ProviderKind`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/ProviderKind.cs) | `src/UsageTray/Core/ProviderKind.cs` | 提供商枚举（`Codex`、`Antigravity`）及其存储转换。 |
 | [`TokenUsage`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/TokenUsage.cs) | `src/UsageTray/Core/TokenUsage.cs` | 记录 Input、CacheRead、CacheWrite、Output、ThinkingOutput、长上下文等 Token 明细。 |
-| [`UsageBucket`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/UsageBucket.cs) | `src/UsageTray/Core/UsageBucket.cs` | 聚合维度的核心用量桶（Provider/Model/Project/Date），承载 Token 统计与 API 等值计算。 |
-| [`QuotaSnapshot`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/QuotaSnapshot.cs) | `src/UsageTray/Core/QuotaSnapshot.cs` | 配额快照模型，记录 5 小时与周配额比例、重置时间戳、过期状态（`IsResetPassed`）及乐观满额推断（`EffectiveRemainingFraction`）。 |
+| [`UsageBucket`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/UsageBucket.cs) | `src/UsageTray/Core/UsageBucket.cs` | 聚合维度的核心用量桶（Provider/Model/Project/Date），承载 Token 统计与订阅参考金额计算。 |
+| `CodexQuotaPools` | `src/UsageTray/Core/CodexQuotaPools.cs` | 集中识别标准、Spark/bengalfox、Reserve 模型池，供解析与周期查询复用。 |
+| [`QuotaSnapshot`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/QuotaSnapshot.cs) | `src/UsageTray/Core/QuotaSnapshot.cs` | 配额快照模型，记录 5 小时与周配额比例、重置时间戳、过期状态（`IsResetPassed`）及快照陈旧标记（`IsStale`）；过期有效剩余比例为 null（`EffectiveRemainingFraction`）。 |
 | [`TokenSpeedEstimate`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/TokenSpeedEstimate.cs) | `src/UsageTray/Core/TokenSpeedEstimate.cs` | 速率预估模型，记录未命中 Prefill、缓存读取与输出解码速度及样本数与格式化。 |
 
 | [`PricingRule`](file:///F:/Project/QuotaStatistics/src/UsageTray/Core/PricingRule.cs) | `src/UsageTray/Core/PricingRule.cs` | 单个模型的定价规则定义（输入、缓存读、缓存写、输出单价、长上下文阶梯及核验日期）。 |
@@ -76,17 +80,17 @@ graph TD
 | :--- | :--- | :--- |
 | [`UsageDatabase`](file:///F:/Project/QuotaStatistics/src/UsageTray/Data/UsageDatabase.cs) | `src/UsageTray/Data/UsageDatabase.cs` | SQLite 连接工厂与连接池管理，配置 `PRAGMA cache_size = -2000` 限制内存。 |
 | [`DatabaseMigrations`](file:///F:/Project/QuotaStatistics/src/UsageTray/Data/DatabaseMigrations.cs) | `src/UsageTray/Data/DatabaseMigrations.cs` | 数据库版本管理与 DDL 迁移（`sources`、`raw_snapshots`、`usage_buckets`、`quotas` 等表）。 |
-| [`UsageRepository`](file:///F:/Project/QuotaStatistics/src/UsageTray/Data/UsageRepository.cs) | `src/UsageTray/Data/UsageRepository.cs` | 提供高效的批量写入、增量查询、按模型池/周窗口筛选及已删除源清理。 |
+| [`UsageRepository`](file:///F:/Project/QuotaStatistics/src/UsageTray/Data/UsageRepository.cs) | `src/UsageTray/Data/UsageRepository.cs` | 提供高效的批量写入、增量查询、按模型池与窗口复合键（`${ModelOrPoolId}_${WindowKind}`）获取标准/Spark/Reserve最新快照（含 Reserve 动态活跃触发检测）、各池 Token 窗口隔离及已删除源清理。 |
 
 ### 2.4 定价与抓取体系 (`UsageTray.Pricing`)
 
-负责模型价格的匹配计算、长上下文阶梯判定、默认价格内嵌与官方页面热抓取。
+负责模型价格的匹配计算、长上下文阶梯判定、固定非促销参考基准内嵌、订阅倍率与安全迁移。
 
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`PricingService`](file:///F:/Project/QuotaStatistics/src/UsageTray/Pricing/PricingService.cs) | `src/UsageTray/Pricing/PricingService.cs` | 维护内存价格文档，提供通配符与别名精确匹配、模型阶梯加价计算与规则热升级。 |
 | [`PricingMatcher`](file:///F:/Project/QuotaStatistics/src/UsageTray/Pricing/PricingMatcher.cs) | `src/UsageTray/Pricing/PricingMatcher.cs` | 模型名称规范化、别名映射与模式匹配引擎。 |
-| [`PricingUpdateService`](file:///F:/Project/QuotaStatistics/src/UsageTray/Pricing/PricingUpdateService.cs) | `src/UsageTray/Pricing/PricingUpdateService.cs` | 访问 OpenAI 与 Google 官方 HTTPS 定价页面，解析最新价格并安全合并。 |
+| [`PricingUpdateService`](file:///F:/Project/QuotaStatistics/src/UsageTray/Pricing/PricingUpdateService.cs) | `src/UsageTray/Pricing/PricingUpdateService.cs` | 合并软件内置参考基准，保留自定义规则；不抓取 API 促销价覆盖订阅参考。 |
 
 ### 2.5 数据提供商 (`UsageTray.Providers`)
 
@@ -102,7 +106,7 @@ graph TD
 | [`AntigravityQuotaParser`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Antigravity/AntigravityQuotaParser.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaParser.cs` | 解析 `RetrieveUserQuotaSummary` 嵌套的 Protobuf/JSON 配额载荷。 |
 | [`AntigravityLocalApi`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Antigravity/AntigravityLocalApi.cs) | `src/UsageTray/Providers/Antigravity/AntigravityLocalApi.cs` | 与 loopback 本地 language_server 通信，发送 CSRF Token 获取实时配额。 |
 | [`AntigravityPortDiscovery`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Antigravity/AntigravityPortDiscovery.cs) | `src/UsageTray/Providers/Antigravity/AntigravityPortDiscovery.cs` | 基于进程 PID 毫秒级探测 language_server 动态绑定的 HTTP/HTTPS 端口。 |
-| [`AntigravityQuotaEstimator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs` | 按 Gemini 与 Claude 双模型池独立周期聚合 Token，推算周本轮金额与满额 API 价值。 |
+| [`AntigravityQuotaEstimator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs` | 按 Gemini 与 Claude 双模型池独立周期聚合 Token，推算周本轮金额与满额订阅参考价值。 |
 | [`AntigravityProjectResolver`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Antigravity/AntigravityProjectResolver.cs) | `src/UsageTray/Providers/Antigravity/AntigravityProjectResolver.cs` | 从 summary 数据库与 trajectory blob 中解析项目物理根路径。 |
 | [`AntigravityStatusRecorder`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Antigravity/AntigravityStatusRecorder.cs) | `src/UsageTray/Providers/Antigravity/AntigravityStatusRecorder.cs` | 官方 status-line stdin 增量处理器。 |
 
@@ -111,7 +115,7 @@ graph TD
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`CodexProvider`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexProvider.cs) | `src/UsageTray/Providers/Codex/CodexProvider.cs` | 管理 Codex 会话文件扫描、0 变更短路检查、增量/全量解析及快照归一化。 |
-| [`CodexJsonlParser`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexJsonlParser.cs) | `src/UsageTray/Providers/Codex/CodexJsonlParser.cs` | 逐行容错解析 session JSONL（ParserVersion 6），过滤新版 CLI 调试级 `token_usage_record`，绑定权威 `token_count`，提取 rate_limits 与 Token。 |
+| [`CodexJsonlParser`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexJsonlParser.cs) | `src/UsageTray/Providers/Codex/CodexJsonlParser.cs` | 逐行容错解析 session JSONL（ParserVersion 11），过滤新版 CLI 调试级 `token_usage_record`，绑定权威 `token_count`，独立提取并解耦 Spark 辅助模型配额池（`codex-spark-5h` 与 `codex-spark-weekly`）与主力通用额度（`codex-weekly`）。 |
 | [`CodexUsageNormalizer`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexUsageNormalizer.cs) | `src/UsageTray/Providers/Codex/CodexUsageNormalizer.cs` | 跨文件多分支会话归一化引擎，处理全局累计计数器差分、时间倒序重排与回退 Epoch。 |
 | [`CodexSessionLocator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexSessionLocator.cs) | `src/UsageTray/Providers/Codex/CodexSessionLocator.cs` | 发现 `CODEX_HOME` 及默认 `~/.codex/sessions` 下的活动与归档会话文件。 |
 
@@ -120,8 +124,9 @@ graph TD
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`RefreshCoordinator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/RefreshCoordinator.cs) | `src/UsageTray/Services/RefreshCoordinator.cs` | 刷新主调度器，协调并发锁、增量/全量扫描、价格更新与快照广播。 |
-| [`UsageAggregator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageAggregator.cs) | `src/UsageTray/Services/UsageAggregator.cs` | 聚合引擎，按日期区间/双额度周周期汇总 Token、计算 API 等值及缓存命中率。 |
-| [`UsageViews`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageViews.cs) | `src/UsageTray/Services/UsageViews.cs` | 视图数据模型，包含 `DashboardSnapshot`（支持双池 API 等值与双周周期）、`ModelUsageView`、`ProjectUsageView` 等。 |
+| `QuotaProjector` | `src/UsageTray/Services/QuotaProjection.cs` | Codex/Antigravity 共用的同周期快照差分外推，先隔离当前重置周期，再检查样本年龄、回升、最小下降与未定价用量。 |
+| [`UsageAggregator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageAggregator.cs) | `src/UsageTray/Services/UsageAggregator.cs` | 聚合引擎，按日期区间/双额度周周期汇总 Token、计算订阅参考金额及缓存命中率；将主力通用模型与 Spark 辅助模型彻底双通道解耦聚合，并结合 Reserve 活跃触发状态动态支持最多三通道周周期与满额推算。 |
+| [`UsageViews`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageViews.cs) | `src/UsageTray/Services/UsageViews.cs` | 视图数据模型，包含 `DashboardSnapshot`（支持分池订阅参考金额与双周周期列表 `CodexWeeklyCycles`）、`ModelUsageView`、`ProjectUsageView` 等。 |
 | [`MemoryOptimizer`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/MemoryOptimizer.cs) | `src/UsageTray/Services/MemoryOptimizer.cs` | 执行 LOH 压缩、GC 及 Windows 原生 `SetProcessWorkingSetSize` 深度回收常驻内存。 |
 | [`DiagnosticsService`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/DiagnosticsService.cs) | `src/UsageTray/Services/DiagnosticsService.cs` | 输出提供商状态、数据库统计与解析诊断报告。 |
 | [`ProjectService`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/ProjectService.cs) | `src/UsageTray/Services/ProjectService.cs` | 项目名称别名与路径美化服务。 |
@@ -133,14 +138,14 @@ graph TD
 | 类名 / 控件 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`TrayApplicationContext`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/TrayApplicationContext.cs) | `src/UsageTray/UI/TrayApplicationContext.cs` | 托盘主上下文，管理托盘图标、右键菜单、单击/双击防冲突计时器及定时刷新。 |
-| [`MainForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/MainForm.cs) | `src/UsageTray/UI/MainForm.cs` | 主仪表盘窗口，展示 API 等值卡片（分应用/分池）、趋势图表、模型表、项目表及额度面板。 |
-| [`QuotaPopupForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/QuotaPopupForm.cs) | `src/UsageTray/UI/QuotaPopupForm.cs` | 单击托盘弹出的高清自绘额度摘要面板，支持拖拽锁定与失焦防误关。 |
+| [`MainForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/MainForm.cs) | `src/UsageTray/UI/MainForm.cs` | 主仪表盘窗口，展示多通道订阅参考金额卡片（Codex 主力/Spark/Reserve 与 Antigravity Gemini/Claude 并列）、趋势图表、模型表、项目表及额度面板。 |
+| [`QuotaPopupForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/QuotaPopupForm.cs) | `src/UsageTray/UI/QuotaPopupForm.cs` | 单击托盘弹出的高清额度摘要窗口，直接宿主承载 `QuotaSummaryControl` 保证与主窗口 100% 同源同布，支持拖拽移动锁定、主动点击/Esc 关闭、失焦防误关及工作区限高滚动。 |
 | [`QuotaSummaryControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/QuotaSummaryControl.cs) | `src/UsageTray/UI/Controls/QuotaSummaryControl.cs` | 复用的额度摘要自绘控件（主窗口额度 Tab 与悬浮窗 100% 共用）。 |
 | [`DailyBarChartControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/DailyBarChartControl.cs) | `src/UsageTray/UI/Controls/DailyBarChartControl.cs` | 自绘每日用量柱状图，支持动态 DPI 刻度与图例排版。 |
 | [`SettingsForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/SettingsForm.cs) | `src/UsageTray/UI/SettingsForm.cs` | 可缩放的设置窗口，包含刷新间隔、每周全量扫描开关、价格更新与维护入口。 |
 | [`PricingViewerForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/PricingViewerForm.cs) | `src/UsageTray/UI/PricingViewerForm.cs` | 独立模型价格查看窗口，支持按提供商筛选与实时搜索。 |
 | [`DateRangeDialog`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/DateRangeDialog.cs) | `src/UsageTray/UI/DateRangeDialog.cs` | 自定义起止日期选择对话框。 |
-| [`QuotaDisplayFormatter`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/QuotaDisplayFormatter.cs) | `src/UsageTray/UI/QuotaDisplayFormatter.cs` | 托盘紧凑单行 Tooltip 格式化工具。 |
+| [`QuotaDisplayFormatter`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/QuotaDisplayFormatter.cs) | `src/UsageTray/UI/QuotaDisplayFormatter.cs` | 托盘紧凑单行 Tooltip 格式化工具，解耦主力模型周额度与 Spark 额度并列呈现。 |
 | [`TimeFormatter`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/TimeFormatter.cs) | `src/UsageTray/UI/TimeFormatter.cs` | 时间与重置倒计时格式化工具，生成“X天X小时X分后”相对时间。 |
 | [`AppIcon`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/AppIcon.cs) | `src/UsageTray/UI/AppIcon.cs` | 内嵌资源高清图标加载器及几何矢量兜底绘制。 |
 | [`WindowGeometryPersistence`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/WindowGeometryPersistence.cs) | `src/UsageTray/UI/WindowGeometryPersistence.cs` | 窗口尺寸与主页各表格栏位宽度自动持久化与恢复。 |
@@ -175,22 +180,22 @@ sequenceDiagram
     Coord->>UI: 触发 SnapshotChanged 事件更新界面
 ```
 
-### 3.2 计价与 API 等值计算公式
+### 3.2 订阅参考金额计算公式
 
 - **Sub2API 三段式输入口径**:
   $$\text{未命中输入 (Input)} = \text{TotalInput} - \text{CacheRead} - \text{CacheWrite}$$
 - **基础计费公式**:
-  $$\text{Cost} = \text{Input} \times P_{in} + \text{CacheRead} \times P_{cr} + \text{CacheWrite} \times P_{cw} + \text{Output} \times P_{out}$$
+  $$\text{Cost} = (\text{Input} \times P_{in} + \text{CacheRead} \times P_{cr} + \text{CacheWrite} \times P_{cw} + \text{Output} \times P_{out}) / 10^6$$
 - **长上下文阶梯判定**:
   单次 Request 命中阈值（如 Gemini Pro > 200K Tokens，GPT-6 / GPT-5.6 > 272K Tokens）时，按长上下文独立单价结算。
 - **满额预估价值推算**:
-  $$\text{EstimatedFullUsd} = \frac{\text{本轮周消耗金额}}{\text{已使用额度比例}}$$
+  $$\text{EstimatedFullUsd} = \frac{\text{两次快照间本机参考金额}}{\text{初始剩余比例} - \text{末次剩余比例}}$$
 
 ---
 
 ## 4. 维护与扩展准则
 
-1. **新增模型价格**: 修改 [`Pricing/default-pricing.json`](file:///F:/Project/QuotaStatistics/publish/Pricing/default-pricing.json) 并升级 `PricingService.DefaultDocumentVersion`。
+1. **新增模型价格**: 修改 [`Pricing/default-pricing.json`](file:///F:/Project/QuotaStatistics/src/UsageTray/Pricing/default-pricing.json) 并升级 `PricingService.DefaultDocumentVersion`。
 2. **数据库结构变更**: 在 [`DatabaseMigrations.cs`](file:///F:/Project/QuotaStatistics/src/UsageTray/Data/DatabaseMigrations.cs) 增加递增迁移脚本，切勿直接修改历史迁移步骤。
 3. **解析器升级**: 若修改了 Token 提取算法，递增对应 Provider 的 `ParserVersion`，使系统自动清理旧缓存并触发一次全量重新计算。
 4. **测试覆盖**: 任何涉及数据解析、计价或周窗口计算的代码修改，必须在 [`tests/UsageTray.Tests`](file:///F:/Project/QuotaStatistics/tests/UsageTray.Tests) 补充对应的单元测试。

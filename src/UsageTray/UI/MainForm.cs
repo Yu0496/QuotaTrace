@@ -186,7 +186,7 @@ public sealed class MainForm : Form
         _speedEstimateValue.AutoEllipsis = true;
 
         var cardTitleFont = new Font(Font, FontStyle.Regular);
-        var cardTitleHeight = TextRenderer.MeasureText("API 等值", cardTitleFont).Height + 6;
+        var cardTitleHeight = TextRenderer.MeasureText("订阅参考金额", cardTitleFont).Height + 6;
         var cardValueHeight = Math.Max(74, _inputValue.Font.Height * 3 + 20);
         var cardContentHeight = cardTitleHeight + cardValueHeight;
         var cardsHeight = cardContentHeight + 16;
@@ -201,7 +201,7 @@ public sealed class MainForm : Form
         cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20.66f));
         cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20.67f));
         cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20.67f));
-        cards.Controls.Add(Card("API 等值 (分应用)", apiValuePanel, null, cardTitleFont, cardTitleHeight, 0), 0, 0);
+        cards.Controls.Add(Card("订阅参考金额 (分应用)", apiValuePanel, null, cardTitleFont, cardTitleHeight, 0), 0, 0);
         cards.Controls.Add(Card("Input（未命中）", _inputValue, null, cardTitleFont, cardTitleHeight, 0), 1, 0);
         cards.Controls.Add(Card("Cache Read", _cachedValue, null, cardTitleFont, cardTitleHeight, 0), 2, 0);
         cards.Controls.Add(Card("Output", _outputValue, null, cardTitleFont, cardTitleHeight, 0), 3, 0);
@@ -273,12 +273,12 @@ public sealed class MainForm : Form
         _toolTip.SetToolTip(cacheMissLine, "Sub2API token 口径：Input=总输入-Cache Read-Cache Creation；Cache Read=缓存读取；Cache Creation=缓存创建；命中率=Cache Read / 总 Input；预估速率基于会话时间戳反推。");
 
 
-        var chartTitleHeight = TextRenderer.MeasureText("每日 API 等值", Font).Height + 10;
+        var chartTitleHeight = TextRenderer.MeasureText("每日 订阅参考金额", Font).Height + 10;
         var chartPlotHeight = Math.Max(150, TextRenderer.MeasureText("00-00", Font).Height + 126);
         _chart = new DailyBarChartControl { Dock = DockStyle.Fill, MinimumSize = new Size(0, chartPlotHeight), Margin = new Padding(0) };
         var chartTitle = new Label
         {
-            Text = "每日 API 等值",
+            Text = "每日 订阅参考金额",
             Dock = DockStyle.Top,
             Height = chartTitleHeight,
             Padding = new Padding(0, 5, 0, 0),
@@ -294,8 +294,8 @@ public sealed class MainForm : Form
         chartPanel.Controls.Add(_chart);
         chartPanel.Controls.Add(chartTitle);
 
-        _models = CreateGrid(["模型", "Provider", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "API 等值"], DefaultModelColumnWidths);
-        _projects = CreateGrid(["项目", "Provider", "Tokens", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "API 等值"], DefaultProjectColumnWidths);
+        _models = CreateGrid(["模型", "Provider", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "订阅参考金额"], DefaultModelColumnWidths);
+        _projects = CreateGrid(["项目", "Provider", "Tokens", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "订阅参考金额"], DefaultProjectColumnWidths);
         _models.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _projects.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _quotaControl = new QuotaSummaryControl { Dock = DockStyle.Fill, ShowHeader = false, ShowDismissHint = false, ShowFooterNote = true, BackColor = Color.White };
@@ -336,36 +336,57 @@ public sealed class MainForm : Form
         if (IsDisposed) return;
         if (InvokeRequired) { BeginInvoke(() => ApplySnapshot(snapshot)); return; }
         
-        var codexStdCost = snapshot.CodexStandardApiEquivalentUsd ?? snapshot.CodexApiEquivalentUsd ?? 0m;
-        var codexResCost = snapshot.CodexReserveApiEquivalentUsd ?? 0m;
-        var hasReserveActivity = codexResCost > 0 || snapshot.CodexReserveWeeklyCycle != null || snapshot.Quotas.Any(q => q.Snapshot.Provider == ProviderKind.Codex && UsageAggregator.IsReserveSnapshot(q.Snapshot));
-        _codexApiValue.Text = hasReserveActivity
-            ? $"Codex: ${codexStdCost:0.00} | ${codexResCost:0.00}"
-            : $"Codex: ${codexStdCost:0.00}";
-        var geminiCost = snapshot.AntigravityGeminiApiEquivalentUsd ?? 0m;
-        var claudeCost = snapshot.AntigravityClaudeApiEquivalentUsd ?? 0m;
-        _antigravityApiValue.Text = $"Antigravity: ${geminiCost:0.00} | ${claudeCost:0.00}";
+        var codexStdCost = snapshot.CodexStandardApiEquivalentUsd;
+        var codexSparkCost = snapshot.CodexSparkApiEquivalentUsd;
+        var codexResCost = snapshot.CodexReserveApiEquivalentUsd;
+
+        var hasSparkActivity = codexSparkCost > 0 || snapshot.CodexWeeklyCycles.Any(c => c.PoolCategory == "spark") || snapshot.Quotas.Any(q => q.Snapshot.Provider == ProviderKind.Codex && UsageAggregator.IsSparkSnapshot(q.Snapshot));
+        var hasReserveActivity = codexResCost > 0 || snapshot.CodexWeeklyCycles.Any(c => c.PoolCategory == "reserve") || snapshot.Quotas.Any(q => q.Snapshot.Provider == ProviderKind.Codex && UsageAggregator.IsReserveSnapshot(q.Snapshot));
+
+        if (hasSparkActivity && hasReserveActivity)
+            _codexApiValue.Text = $"Codex: {FormatCost(codexStdCost)} | {FormatCost(codexSparkCost)} | {FormatCost(codexResCost)}";
+        else if (hasSparkActivity)
+            _codexApiValue.Text = $"Codex: {FormatCost(codexStdCost)} | {FormatCost(codexSparkCost)}";
+        else if (hasReserveActivity)
+            _codexApiValue.Text = $"Codex: {FormatCost(codexStdCost)} | {FormatCost(codexResCost)}";
+        else
+            _codexApiValue.Text = $"Codex: {FormatCost(codexStdCost)}";
+
+        _toolTip.SetToolTip(_codexApiValue, $"Codex 主力: {FormatCost(codexStdCost)}" +
+            (hasSparkActivity ? $"\r\nGPT-5.3 Spark: {FormatCost(codexSparkCost)}" : "") +
+            (hasReserveActivity ? $"\r\nCodex Reserve: {FormatCost(codexResCost)}" : ""));
+
+        var geminiCost = snapshot.AntigravityGeminiApiEquivalentUsd;
+        var claudeCost = snapshot.AntigravityClaudeApiEquivalentUsd;
+        _antigravityApiValue.Text = $"Antigravity: {FormatCost(geminiCost)} | {FormatCost(claudeCost)}";
 
         if (snapshot.IsWeeklyCycleWindow)
         {
-            // Codex 周期
-            var stdCycle = snapshot.CodexWeeklyCycle;
-            var resCycle = snapshot.CodexReserveWeeklyCycle;
-            if (stdCycle is { ResetAt: not null } && resCycle is { ResetAt: not null })
-            {
-                var stdRel = TimeFormatter.FormatRelativeFuture(stdCycle.ResetAt.Value);
-                var resRel = TimeFormatter.FormatRelativeFuture(resCycle.ResetAt.Value);
-                _codexCycleNote.Text = $"标准: {stdCycle.CycleStart.ToLocalTime():MM-dd HH:mm}~{stdCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{stdRel}） | Reserve: {resCycle.CycleStart.ToLocalTime():MM-dd HH:mm}~{resCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{resRel}）";
-            }
-            else if (stdCycle is { ResetAt: not null })
+            // Codex 多通道周期 (Standard / Spark / Reserve)
+            var stdCycle = snapshot.CodexWeeklyCycles.FirstOrDefault(c => c.PoolCategory == "standard") ?? snapshot.CodexWeeklyCycle;
+            var sparkCycle = snapshot.CodexWeeklyCycles.FirstOrDefault(c => c.PoolCategory == "spark");
+            var resCycle = snapshot.CodexWeeklyCycles.FirstOrDefault(c => c.PoolCategory == "reserve") ?? snapshot.CodexReserveWeeklyCycle;
+
+            var cycleParts = new List<string>();
+            if (stdCycle is { ResetAt: not null })
             {
                 var rel = TimeFormatter.FormatRelativeFuture(stdCycle.ResetAt.Value);
-                _codexCycleNote.Text = $"周期：{stdCycle.CycleStart.ToLocalTime():yyyy-MM-dd HH:mm} ~ {stdCycle.ResetAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}（{rel}）";
+                cycleParts.Add($"主力: {stdCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{rel}）");
             }
-            else if (resCycle is { ResetAt: not null })
+            if (sparkCycle is { ResetAt: not null })
+            {
+                var rel = TimeFormatter.FormatRelativeFuture(sparkCycle.ResetAt.Value);
+                cycleParts.Add($"Spark: {sparkCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{rel}）");
+            }
+            if (resCycle is { ResetAt: not null })
             {
                 var rel = TimeFormatter.FormatRelativeFuture(resCycle.ResetAt.Value);
-                _codexCycleNote.Text = $"Reserve周期：{resCycle.CycleStart.ToLocalTime():yyyy-MM-dd HH:mm} ~ {resCycle.ResetAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}（{rel}）";
+                cycleParts.Add($"Reserve: {resCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{rel}）");
+            }
+
+            if (cycleParts.Count > 0)
+            {
+                _codexCycleNote.Text = $"周期：" + string.Join(" | ", cycleParts);
             }
             else
             {
@@ -379,7 +400,7 @@ public sealed class MainForm : Form
                 }
                 else
                 {
-                    _codexCycleNote.Text = "周期：暂无周重置时间（按近 7 天）";
+                    _codexCycleNote.Text = "周期：待同步（未纳入本次周统计）";
                 }
             }
 
@@ -602,7 +623,7 @@ public sealed class MainForm : Form
         ["缓存命中率"] = 212,
         ["预估速率"] = 680,
         ["Output"] = 260,
-        ["API 等值"] = 155
+        ["订阅参考金额"] = 155
     };
 
     private static readonly Dictionary<string, int> DefaultProjectColumnWidths = new(StringComparer.OrdinalIgnoreCase)
@@ -615,7 +636,7 @@ public sealed class MainForm : Form
         ["缓存命中率"] = 216,
         ["预估速率"] = 565,
         ["Output"] = 185,
-        ["API 等值"] = 178
+        ["订阅参考金额"] = 178
     };
 
     public Dictionary<string, int> GetModelColumnWidths() => GetColumnWidths(_models);
@@ -662,7 +683,7 @@ public sealed class MainForm : Form
         var cellFont = new Font(Font, FontStyle.Regular);
         var headerFont = new Font(Font, FontStyle.Bold);
         var cellTextHeight = TextRenderer.MeasureText("模型", cellFont).Height;
-        var headerTextHeight = TextRenderer.MeasureText("API 等值", headerFont).Height;
+        var headerTextHeight = TextRenderer.MeasureText("订阅参考金额", headerFont).Height;
         var cellPadding = new Padding(4, 4, 4, 4);
         var grid = new DataGridView
         {

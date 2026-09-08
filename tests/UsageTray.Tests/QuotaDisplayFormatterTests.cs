@@ -11,7 +11,7 @@ public sealed class QuotaDisplayFormatterTests
     [Fact]
     public void PopupDisplaysFiveHourAndWeeklyQuotaWithResetTimes()
     {
-        var captured = new DateTimeOffset(2026, 8, 19, 10, 0, 0, TimeSpan.Zero);
+        var captured = DateTimeOffset.UtcNow;
         var snapshot = new DashboardSnapshot
         {
             Quotas =
