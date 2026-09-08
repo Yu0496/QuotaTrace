@@ -19,6 +19,7 @@ public sealed class AppSettings
     public DateTimeOffset? LastFullScanUtc { get; set; }
     public Dictionary<string, int> ModelColumnWidths { get; set; } = new();
     public Dictionary<string, int> ProjectColumnWidths { get; set; } = new();
+    public Dictionary<string, int> CodexHistoryColumnWidths { get; set; } = new();
 
     public void Normalize()
     {
@@ -35,6 +36,7 @@ public sealed class AppSettings
         SettingsWindowHeight = NormalizeWindowDimension(SettingsWindowHeight, 460, 3000);
         ModelColumnWidths = NormalizeColumnWidths(ModelColumnWidths);
         ProjectColumnWidths = NormalizeColumnWidths(ProjectColumnWidths);
+        CodexHistoryColumnWidths = NormalizeColumnWidths(CodexHistoryColumnWidths);
     }
 
     private static Dictionary<string, int> NormalizeColumnWidths(Dictionary<string, int>? widths)

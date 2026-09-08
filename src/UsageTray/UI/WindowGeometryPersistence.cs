@@ -10,7 +10,7 @@ internal static class WindowGeometryPersistence
         if (settings.MainWindowWidth is int width && settings.MainWindowHeight is int height)
             form.ClientSize = new Size(width, height);
 
-        form.RestoreColumnWidths(settings.ModelColumnWidths, settings.ProjectColumnWidths);
+        form.RestoreColumnWidths(settings.ModelColumnWidths, settings.ProjectColumnWidths, settings.CodexHistoryColumnWidths);
 
         var debounceTimer = new System.Windows.Forms.Timer { Interval = 500 };
         debounceTimer.Tick += (_, _) =>
@@ -61,6 +61,7 @@ internal static class WindowGeometryPersistence
 
         var modelWidths = form.GetModelColumnWidths();
         var projectWidths = form.GetProjectColumnWidths();
+        var historyWidths = form.GetCodexHistoryColumnWidths();
         var isNormal = form.WindowState == FormWindowState.Normal;
         var clientWidth = isNormal && form.ClientSize.Width > 0 ? (int?)form.ClientSize.Width : null;
         var clientHeight = isNormal && form.ClientSize.Height > 0 ? (int?)form.ClientSize.Height : null;
@@ -71,6 +72,7 @@ internal static class WindowGeometryPersistence
             if (clientHeight.HasValue) settings.MainWindowHeight = clientHeight.Value;
             if (modelWidths.Count > 0) settings.ModelColumnWidths = modelWidths;
             if (projectWidths.Count > 0) settings.ProjectColumnWidths = projectWidths;
+            if (historyWidths.Count > 0) settings.CodexHistoryColumnWidths = historyWidths;
         });
     }
 }

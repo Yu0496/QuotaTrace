@@ -406,21 +406,18 @@ public sealed class UsageRepository
             .ToList();
     }
 
-    public IReadOnlyList<UsageBucket> GetCodexUsageInUtcWindow(DateTimeOffset startUtc, DateTimeOffset? endUtc = null)
+    public IReadOnlyList<CodexEventAudit> GetNormalizedCodexEvents()
     {
         var snapshots = GetCodexSnapshots();
         if (snapshots.Count == 0) return [];
+        return new CodexUsageNormalizer().Normalize(snapshots).Events;
+    }
 
-        var normalized = new CodexUsageNormalizer().Normalize(snapshots);
-        var filteredAudits = normalized.Events
-            .Where(a => a.CapturedAt >= startUtc && (!endUtc.HasValue || a.CapturedAt < endUtc.Value))
-            .ToList();
-
-        if (filteredAudits.Count == 0) return [];
-
+    public static IReadOnlyList<UsageBucket> ConvertAuditsToBuckets(IEnumerable<CodexEventAudit> audits)
+    {
         var aggregate = new Dictionary<(DateOnly Date, string ProjectKey, string Model, string Tier), (long Input, long Cached, long CacheWrite, long Output, int Requests, bool CacheAvailable, int LongRequests, long LongInput, long LongCached, long LongWrite, long LongOutput, int Uncertain)>();
 
-        foreach (var audit in filteredAudits)
+        foreach (var audit in audits)
         {
             var date = DateOnly.FromDateTime(audit.CapturedAt.ToLocalTime().DateTime);
             var projectKey = audit.ProjectKey ?? string.Empty;
@@ -460,6 +457,16 @@ public sealed class UsageRepository
                 val.CacheWrite, costQuality, pair.Key.Tier, val.LongRequests, val.Uncertain,
                 val.LongInput, val.LongCached, val.LongWrite, val.LongOutput, val.CacheAvailable);
         }).ToList();
+    }
+
+    public IReadOnlyList<UsageBucket> GetCodexUsageInUtcWindow(DateTimeOffset startUtc, DateTimeOffset? endUtc = null)
+    {
+        var events = GetNormalizedCodexEvents();
+        if (events.Count == 0) return [];
+
+        var filteredAudits = events
+            .Where(a => a.CapturedAt >= startUtc && (!endUtc.HasValue || a.CapturedAt < endUtc.Value));
+        return ConvertAuditsToBuckets(filteredAudits);
     }
 
     public IReadOnlyList<UsageBucket> GetCodexUsageInPoolWindows(

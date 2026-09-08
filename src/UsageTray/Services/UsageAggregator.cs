@@ -119,6 +119,7 @@ public sealed class UsageAggregator
         if (codexWeeklyCycle != null) codexWeeklyCycles.Add(codexWeeklyCycle);
         if (codexSparkCycle != null) codexWeeklyCycles.Add(codexSparkCycle);
         if (codexReserveCycle != null) codexWeeklyCycles.Add(codexReserveCycle);
+        var codexHistoricalCycles = BuildCodexHistoricalCycles();
         var antigravityEstimates = BuildAntigravityEstimates(quotas);
 
         return new DashboardSnapshot
@@ -148,6 +149,7 @@ public sealed class UsageAggregator
             CodexSparkWeeklyCycle = codexSparkCycle,
             CodexReserveWeeklyCycle = codexReserveCycle,
             CodexWeeklyCycles = codexWeeklyCycles,
+            CodexHistoricalCycles = codexHistoricalCycles,
             AntigravityEstimates = antigravityEstimates,
             SpeedEstimate = speedEstimate,
             Daily = daily,
@@ -264,6 +266,208 @@ public sealed class UsageAggregator
             cost.Quality,
             poolName,
             poolCategory, projection.Note);
+    }
+
+    public IReadOnlyList<CodexHistoricalCycleView> BuildCodexHistoricalCycles(int maxCycles = 30)
+    {
+        try
+        {
+            var rawSnapshots = _repository.GetQuotaSnapshots(ProviderKind.Codex);
+            if (rawSnapshots.Count == 0) return [];
+
+            var weeklySnapshots = rawSnapshots
+                .Where(s => s.WindowKind.Equals("weekly", StringComparison.OrdinalIgnoreCase) && s.ResetAt.HasValue)
+                .ToList();
+
+            if (weeklySnapshots.Count == 0) return [];
+
+            var normalizedEvents = _repository.GetNormalizedCodexEvents();
+            var now = DateTimeOffset.UtcNow;
+            var result = new List<CodexHistoricalCycleView>();
+            var pools = new[] { "standard", "spark", "reserve" };
+
+            foreach (var pool in pools)
+            {
+                var poolSnapshots = weeklySnapshots.Where(s =>
+                {
+                    if (pool == "reserve") return IsReserveSnapshot(s);
+                    if (pool == "spark") return IsSparkSnapshot(s);
+                    return !IsReserveSnapshot(s) && !IsSparkSnapshot(s);
+                })
+                .OrderBy(s => s.CapturedAt)
+                .ThenBy(s => s.ResetAt!.Value)
+                .ToList();
+
+                if (poolSnapshots.Count == 0) continue;
+
+                var poolName = pool switch
+                {
+                    "spark" => "GPT-5.3 Spark",
+                    "reserve" => "Codex Reserve",
+                    _ => "Codex 主力模型"
+                };
+
+                // 1. 消除几秒至数分钟的 API 网关与时钟抖动：时间差距在 2 小时以内的 ResetAt 聚合为一个真实周期
+                var rawClusters = new List<(DateTimeOffset ResetAt, List<QuotaSnapshot> Snapshots)>();
+                foreach (var s in poolSnapshots)
+                {
+                    var sReset = s.ResetAt!.Value;
+                    if (rawClusters.Count == 0)
+                    {
+                        rawClusters.Add((sReset, [s]));
+                    }
+                    else
+                    {
+                        var lastIdx = rawClusters.Count - 1;
+                        var lastReset = rawClusters[lastIdx].ResetAt;
+                        if (Math.Abs((sReset - lastReset).TotalHours) < 2.0)
+                        {
+                            rawClusters[lastIdx].Snapshots.Add(s);
+                            if (sReset > lastReset)
+                            {
+                                rawClusters[lastIdx] = (sReset, rawClusters[lastIdx].Snapshots);
+                            }
+                        }
+                        else
+                        {
+                            rawClusters.Add((sReset, [s]));
+                        }
+                    }
+                }
+
+                for (int i = 0; i < rawClusters.Count; i++)
+                {
+                    var (resetAt, snapshotsInCycle) = rawClusters[i];
+                    var firstCaptured = snapshotsInCycle.First().CapturedAt;
+                    var lastCaptured = snapshotsInCycle.Last().CapturedAt;
+
+                    // 核心准则 1：对于同一模型池，只有时序最新的最后一个周期且 ResetAt 处于未来时，才是唯一的“进行中”
+                    bool isLatest = (i == rawClusters.Count - 1);
+                    bool isActive = isLatest && (resetAt > now);
+
+                    // 核心准则 2：推算 cycleStart
+                    // 默认起始时间按 resetAt 倒推 7 天（若首个快照更早则取首个快照）
+                    var defaultStart = firstCaptured < resetAt.AddDays(-7) ? firstCaptured : resetAt.AddDays(-7);
+                    var cycleStart = defaultStart;
+
+                    if (i > 0)
+                    {
+                        var prevReset = rawClusters[i - 1].ResetAt;
+                        // 只有当前一周期原定重置时间确实发生在本周期首个快照之前（或微小 6 小时内）且间隔合理（0.5~8天），才作为连续衔接起点
+                        if (prevReset <= firstCaptured + TimeSpan.FromHours(6))
+                        {
+                            var gapDays = (resetAt - prevReset).TotalDays;
+                            if (gapDays >= 0.5 && gapDays <= 8.0)
+                            {
+                                cycleStart = prevReset;
+                            }
+                        }
+                        // 若 prevReset > firstCaptured，说明前一周期是被提前重置截断的，本周期起点不能采用未来的 prevReset，保持 defaultStart
+                    }
+
+                    // 核心准则 3：推算 actualEnd
+                    // 若下一个周期的起始快照在当前周期 scheduled resetAt 之前（提前重置，差距超过 6 小时），当前周期的实际结束时间为新周期的起始时刻
+                    var actualEnd = resetAt;
+                    if (i < rawClusters.Count - 1)
+                    {
+                        var nextFirstCap = rawClusters[i + 1].Snapshots[0].CapturedAt;
+                        if (nextFirstCap < resetAt - TimeSpan.FromHours(6))
+                        {
+                            var nextReset = rawClusters[i + 1].ResetAt;
+                            var nextCalculatedStart = nextFirstCap < nextReset.AddDays(-7) ? nextFirstCap : nextReset.AddDays(-7);
+                            actualEnd = nextCalculatedStart < nextFirstCap ? nextCalculatedStart : nextFirstCap;
+                        }
+                    }
+
+                    var duration = actualEnd - cycleStart;
+                    if (duration.TotalSeconds < 0)
+                    {
+                        duration = resetAt - cycleStart;
+                        actualEnd = resetAt;
+                    }
+
+                    var validFractions = snapshotsInCycle.Where(s => s.RemainingFraction.HasValue).Select(s => s.RemainingFraction!.Value).ToList();
+                    var startRem = snapshotsInCycle.First().RemainingFraction;
+                    var endRem = snapshotsInCycle.Last().RemainingFraction;
+                    var minRem = validFractions.Count > 0 ? (double?)validFractions.Min() : null;
+
+                    double? consumed = null;
+                    if (startRem.HasValue && minRem.HasValue)
+                    {
+                        consumed = Math.Clamp(Math.Round(Math.Max(0.0, startRem.Value - minRem.Value), 4), 0.0, 1.0);
+                    }
+
+                    var windowEnd = isActive ? now : actualEnd;
+                    var cycleAudits = normalizedEvents.Where(a =>
+                    {
+                        if (a.CapturedAt < cycleStart || a.CapturedAt >= windowEnd) return false;
+                        if (pool == "reserve") return IsCodexReserveModel(a.ModelId);
+                        if (pool == "spark") return IsCodexSparkModel(a.ModelId);
+                        return !IsCodexReserveModel(a.ModelId) && !IsCodexSparkModel(a.ModelId);
+                    });
+
+                    var buckets = UsageRepository.ConvertAuditsToBuckets(cycleAudits);
+                    var cost = _pricing.CalculateAggregate(buckets);
+
+                    decimal? fullValue = null;
+                    string? estimateNote = null;
+                    if (snapshotsInCycle.Count >= 2 && minRem.HasValue && startRem.HasValue && (startRem.Value - minRem.Value) >= 0.05)
+                    {
+                        var latestInCycle = snapshotsInCycle.Last();
+                        var proj = QuotaProjector.Estimate(latestInCycle, snapshotsInCycle, (s, e) =>
+                        {
+                            var sAudits = normalizedEvents.Where(a =>
+                            {
+                                if (a.CapturedAt < s || a.CapturedAt >= e) return false;
+                                if (pool == "reserve") return IsCodexReserveModel(a.ModelId);
+                                if (pool == "spark") return IsCodexSparkModel(a.ModelId);
+                                return !IsCodexReserveModel(a.ModelId) && !IsCodexSparkModel(a.ModelId);
+                            });
+                            var sBuckets = UsageRepository.ConvertAuditsToBuckets(sAudits);
+                            return _pricing.CalculateAggregate(sBuckets).PricedCostUsd;
+                        }, now: latestInCycle.CapturedAt);
+
+                        fullValue = proj.FullValue;
+                        estimateNote = proj.Note;
+                    }
+
+                    result.Add(new CodexHistoricalCycleView(
+                        pool,
+                        poolName,
+                        cycleStart,
+                        resetAt,
+                        duration,
+                        isActive,
+                        startRem,
+                        endRem,
+                        minRem,
+                        consumed,
+                        snapshotsInCycle.Count,
+                        cost.PricedCostUsd ?? (buckets.Count == 0 ? 0m : null),
+                        fullValue,
+                        buckets.Sum(b => b.InputTokens),
+                        buckets.Sum(b => b.CachedInputTokens),
+                        buckets.Sum(b => b.CacheWriteInputTokens),
+                        buckets.Sum(b => b.OutputTokens),
+                        cost.Quality,
+                        estimateNote,
+                        firstCaptured,
+                        lastCaptured,
+                        actualEnd
+                    ));
+                }
+            }
+
+            return result
+                .OrderByDescending(c => c.ResetAt)
+                .ThenBy(c => c.PoolCategory switch { "standard" => 0, "spark" => 1, _ => 2 })
+                .Take(maxCycles)
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     public static bool IsCodexReserveModel(string? modelId) => CodexQuotaPools.IsReserveModel(modelId);

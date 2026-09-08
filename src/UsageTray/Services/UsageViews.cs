@@ -48,6 +48,36 @@ public sealed record CodexCycleUsageView(
     public double CacheHitRate => CycleInputTokens > 0 ? (double)CycleCachedTokens / CycleInputTokens * 100.0 : 0.0;
 }
 
+public sealed record CodexHistoricalCycleView(
+    string PoolCategory,
+    string PoolName,
+    DateTimeOffset CycleStart,
+    DateTimeOffset ResetAt,
+    TimeSpan Duration,
+    bool IsActive,
+    double? StartRemainingFraction,
+    double? EndRemainingFraction,
+    double? MinRemainingFraction,
+    double? ConsumedFraction,
+    int SnapshotCount,
+    decimal? CycleCostUsd,
+    decimal? EstimatedWeeklyCostUsd,
+    long CycleInputTokens,
+    long CycleCachedTokens,
+    long CycleCacheCreationTokens,
+    long CycleOutputTokens,
+    CostQuality CostQuality,
+    string? EstimateNote = null,
+    DateTimeOffset? FirstCapturedAt = null,
+    DateTimeOffset? LastCapturedAt = null,
+    DateTimeOffset? ActualEnd = null)
+{
+    public string PoolDisplayName => PoolName;
+    public long NonCachedInputTokens => Math.Max(0, CycleInputTokens - CycleCachedTokens - CycleCacheCreationTokens);
+    public long TotalTokens => NonCachedInputTokens + CycleCachedTokens + CycleCacheCreationTokens + CycleOutputTokens;
+    public double CacheHitRate => CycleInputTokens > 0 ? (double)CycleCachedTokens / CycleInputTokens * 100.0 : 0.0;
+}
+
 public sealed record DashboardSnapshot
 {
     public DateRange Range { get; init; } = DateRange.Today();
@@ -81,6 +111,7 @@ public sealed record DashboardSnapshot
     public CodexCycleUsageView? CodexSparkWeeklyCycle { get; init; }
     public CodexCycleUsageView? CodexReserveWeeklyCycle { get; init; }
     public IReadOnlyList<CodexCycleUsageView> CodexWeeklyCycles { get; init; } = [];
+    public IReadOnlyList<CodexHistoricalCycleView> CodexHistoricalCycles { get; init; } = [];
     public IReadOnlyList<AntigravityQuotaEstimate> AntigravityEstimates { get; init; } = [];
     public TokenSpeedEstimate? SpeedEstimate { get; init; }
     public IReadOnlyList<DailyUsageView> Daily { get; init; } = [];

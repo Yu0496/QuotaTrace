@@ -29,6 +29,7 @@ public sealed class MainForm : Form
     private readonly DataGridView _projects;
     private readonly DailyBarChartControl _chart;
     private readonly QuotaSummaryControl _quotaControl;
+    private readonly CodexHistoryControl _codexHistory;
     private DateRange _customRange;
     private int _previousRangeIndex;
     private bool _ignoreRangeSelection;
@@ -299,11 +300,15 @@ public sealed class MainForm : Form
         _models.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _projects.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _quotaControl = new QuotaSummaryControl { Dock = DockStyle.Fill, ShowHeader = false, ShowDismissHint = false, ShowFooterNote = true, BackColor = Color.White };
+        _codexHistory = new CodexHistoryControl { Dock = DockStyle.Fill };
+        _codexHistory.ColumnWidthsChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
+
         var tabs = new TabControl { Dock = DockStyle.Fill, Margin = new Padding(12, 0, 12, 0) };
         var modelPage = new TabPage("按模型"); modelPage.Controls.Add(_models);
         var projectPage = new TabPage("按项目"); projectPage.Controls.Add(_projects);
         var quotaPage = new TabPage("额度"); quotaPage.Controls.Add(_quotaControl);
-        tabs.TabPages.AddRange([modelPage, projectPage, quotaPage]);
+        var codexHistoryPage = new TabPage("Codex 周历史"); codexHistoryPage.Controls.Add(_codexHistory);
+        tabs.TabPages.AddRange([modelPage, projectPage, quotaPage, codexHistoryPage]);
 
         var statusHeight = Math.Max(34, Font.Height + 16);
         _status = new Label
@@ -467,6 +472,7 @@ public sealed class MainForm : Form
         }
 
         _quotaControl.SetSnapshot(snapshot);
+        _codexHistory.SetCycles(snapshot.CodexHistoricalCycles);
 
         var warningText = snapshot.Warnings.Count == 0 ? string.Empty : string.Join("；", snapshot.Warnings.Take(3));
         var rangeText = !string.IsNullOrWhiteSpace(snapshot.RangeDisplayOverride)
@@ -641,14 +647,16 @@ public sealed class MainForm : Form
 
     public Dictionary<string, int> GetModelColumnWidths() => GetColumnWidths(_models);
     public Dictionary<string, int> GetProjectColumnWidths() => GetColumnWidths(_projects);
+    public Dictionary<string, int> GetCodexHistoryColumnWidths() => _codexHistory.GetColumnWidths();
 
-    public void RestoreColumnWidths(Dictionary<string, int>? modelWidths, Dictionary<string, int>? projectWidths)
+    public void RestoreColumnWidths(Dictionary<string, int>? modelWidths, Dictionary<string, int>? projectWidths, Dictionary<string, int>? codexHistoryWidths = null)
     {
         _isRestoringColumns = true;
         try
         {
             ApplyColumnWidths(_models, modelWidths ?? DefaultModelColumnWidths);
             ApplyColumnWidths(_projects, projectWidths ?? DefaultProjectColumnWidths);
+            _codexHistory.ApplyColumnWidths(codexHistoryWidths);
         }
         finally
         {

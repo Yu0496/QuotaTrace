@@ -34,7 +34,7 @@ graph TD
 | 项目 / 目录 | 输出类型 | 核心职责 |
 | :--- | :--- | :--- |
 | [`src/UsageTray/`](file:///F:/Project/QuotaStatistics/src/UsageTray) | WinExe (WinForms) | 主应用程序，包含托盘交互、高 DPI 界面、数据解析、SQLite 存储、计价引擎与调度。 |
-| [`tests/UsageTray.Tests/`](file:///F:/Project/QuotaStatistics/tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码、会话归一化、额度周期预估、列宽防覆盖等 156 项测试。 |
+| [`tests/UsageTray.Tests/`](file:///F:/Project/QuotaStatistics/tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码、会话归一化、额度周期预估、Codex 周历史重构、抖动聚合与提前重置防分裂等 162 项测试。 |
 | [`tools/AntigravityStatusRecorder/`](file:///F:/Project/QuotaStatistics/tools/AntigravityStatusRecorder) | Exe (Console) | 独立控制台工具，读取官方 status-line stdin JSON 并记录到本地存储。 |
 | [`tools/CodexAudit/`](file:///F:/Project/QuotaStatistics/tools/CodexAudit) | Exe (Console) | 离线 Codex 审计与 CSV 导出工具。 |
 
@@ -141,6 +141,7 @@ graph TD
 | [`MainForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/MainForm.cs) | `src/UsageTray/UI/MainForm.cs` | 主仪表盘窗口，展示多通道订阅参考金额卡片（Codex 主力/Spark/Reserve 与 Antigravity Gemini/Claude 并列）、趋势图表、模型表、项目表及额度面板。 |
 | [`QuotaPopupForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/QuotaPopupForm.cs) | `src/UsageTray/UI/QuotaPopupForm.cs` | 单击托盘弹出的高清额度摘要窗口，直接宿主承载 `QuotaSummaryControl` 保证与主窗口 100% 同源同布，支持拖拽移动锁定、主动点击/Esc 关闭、失焦防误关及工作区限高滚动。 |
 | [`QuotaSummaryControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/QuotaSummaryControl.cs) | `src/UsageTray/UI/Controls/QuotaSummaryControl.cs` | 复用的额度摘要自绘控件（主窗口额度 Tab 与悬浮窗 100% 共用）。 |
+| [`CodexHistoryControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/CodexHistoryControl.cs) | `src/UsageTray/UI/Controls/CodexHistoryControl.cs` | 独立的 Codex 周历史主面板页面控件，展示过去数次区间的周额度（非固定 7 天动态判定、进行中/已重置状态高亮、额度变化、订阅参考金额、满额预估及底部 Token 明细）。 |
 | [`DailyBarChartControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/DailyBarChartControl.cs) | `src/UsageTray/UI/Controls/DailyBarChartControl.cs` | 自绘每日用量柱状图，支持动态 DPI 刻度与图例排版。 |
 | [`SettingsForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/SettingsForm.cs) | `src/UsageTray/UI/SettingsForm.cs` | 可缩放的设置窗口，包含刷新间隔、每周全量扫描开关、价格更新与维护入口。 |
 | [`PricingViewerForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/PricingViewerForm.cs) | `src/UsageTray/UI/PricingViewerForm.cs` | 独立模型价格查看窗口，支持按提供商筛选与实时搜索。 |
