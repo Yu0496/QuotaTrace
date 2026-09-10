@@ -11,11 +11,21 @@ public sealed record DailyUsageView(DateOnly Date, long InputTokens, long Cached
 }
 
 public sealed record ModelUsageView(string ModelId, ProviderKind Provider, long InputTokens, long CachedTokens, long CacheCreationTokens,
-    long OutputTokens, decimal? ApiEquivalentUsd, long UnpricedTokens, CostQuality CostQuality, TokenSpeedEstimate? SpeedEstimate = null)
+    long OutputTokens, decimal? ApiEquivalentUsd, long UnpricedTokens, CostQuality CostQuality, TokenSpeedEstimate? SpeedEstimate = null,
+    decimal? EstimatedWeeklyCostUsd = null, string? EstimateNote = null, string? EstimateDetail = null)
 {
     public long NonCachedInputTokens => Math.Max(0, InputTokens - CachedTokens - CacheCreationTokens);
     public double CacheHitRate => InputTokens > 0 ? (double)CachedTokens / InputTokens * 100.0 : 0.0;
 }
+
+public sealed record ModelQuotaProjectionView(
+    string ModelId,
+    decimal EstimatedWeeklyCostUsd,
+    double ConsumedFraction,
+    decimal IntervalCostUsd,
+    string EstimateNote,
+    string DetailText,
+    bool IsFromCurrentCycle);
 
 public sealed record ProjectUsageView(string ProjectKey, string DisplayName, ProviderKind Provider, long Tokens,
     long InputTokens, long CachedTokens, long CacheCreationTokens, long OutputTokens, decimal? ApiEquivalentUsd,
@@ -41,7 +51,8 @@ public sealed record CodexCycleUsageView(
     CostQuality CostQuality,
     string PoolName = "标准额度",
     string PoolCategory = "standard",
-    string? EstimateNote = null)
+    string? EstimateNote = null,
+    IReadOnlyList<ModelQuotaProjectionView>? ModelProjections = null)
 {
     public long NonCachedInputTokens => Math.Max(0, CycleInputTokens - CycleCachedTokens - CycleCacheCreationTokens);
     public long TotalTokens => NonCachedInputTokens + CycleCachedTokens + CycleCacheCreationTokens + CycleOutputTokens;
@@ -70,12 +81,18 @@ public sealed record CodexHistoricalCycleView(
     string? EstimateNote = null,
     DateTimeOffset? FirstCapturedAt = null,
     DateTimeOffset? LastCapturedAt = null,
-    DateTimeOffset? ActualEnd = null)
+    DateTimeOffset? ActualEnd = null,
+    IReadOnlyList<ModelQuotaProjectionView>? ModelProjections = null,
+    double? BaselineRemainingFraction = 1.0,
+    double? FirstCapturedRemainingFraction = null)
 {
     public string PoolDisplayName => PoolName;
     public long NonCachedInputTokens => Math.Max(0, CycleInputTokens - CycleCachedTokens - CycleCacheCreationTokens);
     public long TotalTokens => NonCachedInputTokens + CycleCachedTokens + CycleCacheCreationTokens + CycleOutputTokens;
     public double CacheHitRate => CycleInputTokens > 0 ? (double)CycleCachedTokens / CycleInputTokens * 100.0 : 0.0;
+    public double? FullCycleConsumedFraction => MinRemainingFraction.HasValue
+        ? Math.Clamp(Math.Round(Math.Max(0.0, 1.0 - MinRemainingFraction.Value), 4), 0.0, 1.0)
+        : ConsumedFraction;
 }
 
 public sealed record DashboardSnapshot
@@ -118,6 +135,7 @@ public sealed record DashboardSnapshot
     public IReadOnlyList<ModelUsageView> Models { get; init; } = [];
     public IReadOnlyList<ProjectUsageView> Projects { get; init; } = [];
     public IReadOnlyList<QuotaView> Quotas { get; init; } = [];
+    public IReadOnlyList<ModelQuotaProjectionView> CodexModelProjections { get; init; } = [];
     public IReadOnlyList<string> Warnings { get; init; } = [];
     public DateTimeOffset RefreshedAt { get; init; }
 }

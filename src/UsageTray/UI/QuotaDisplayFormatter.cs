@@ -162,7 +162,9 @@ public static class QuotaDisplayFormatter
 
         foreach (var est in snapshot.AntigravityEstimates ?? [])
         {
-            var value = est.EstimatedFullQuotaUsd.HasValue ? $"约 ${est.EstimatedFullQuotaUsd:0.00}（仅本机样本外推）" : est.CalculationDetails ?? "样本不足";
+            var isStale = est.CalculationDetails == "快照待更新";
+            var badge = isStale ? "（待更新）" : "（仅本机样本外推）";
+            var value = est.EstimatedFullQuotaUsd.HasValue ? $"约 ${est.EstimatedFullQuotaUsd:0.00}{badge}" : est.CalculationDetails ?? "样本不足";
             lines.Add($"{est.DisplayName} {est.WindowKind} 满额样本外推：{value}");
         }
 
@@ -235,7 +237,9 @@ public static class QuotaDisplayFormatter
         {
             var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : "未知";
             var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
-            var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : cycle.EstimateNote ?? "样本不足";
+            var isStale = cycle.EstimateNote == "快照待更新";
+            var badge = isStale ? "（待更新）" : "";
+            var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}{badge}" : cycle.EstimateNote ?? "样本不足";
             var prefix = codexCycles.Count > 1 ? $"{cycle.PoolName} " : string.Empty;
             lines.Add($"{prefix}本轮订阅参考金额：{cycleCostText}（已消耗 {usedText}）");
             lines.Add($"{prefix}满额样本外推：{estCostText}");

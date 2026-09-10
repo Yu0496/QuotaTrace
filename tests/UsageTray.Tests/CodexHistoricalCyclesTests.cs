@@ -243,4 +243,104 @@ public sealed class CodexHistoricalCyclesTests
             Assert.True(pastCycle.ActualEnd <= cycle2Start.AddHours(1));
         }
     }
+
+    [Fact]
+    public void CodexHistoryControl_RendersModelProjectionsColumnAndDetail()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var resetAt = now.AddDays(4);
+        var cycleStart = resetAt.AddDays(-7);
+
+        var modelProjs = new List<ModelQuotaProjectionView>
+        {
+            new("gpt-6-astra", 601.20m, 0.17, 60.25m, "实测", "基于 17% 消耗推算", true),
+            new("gpt-5.6-sol", 1610.50m, 0.0, 0m, "历史同套餐样本", "继承自历史样本", false)
+        };
+
+        var cycle = new CodexHistoricalCycleView(
+            "standard",
+            "Codex 主力模型",
+            cycleStart,
+            resetAt,
+            TimeSpan.FromDays(7),
+            true,
+            1.0,
+            0.83,
+            0.83,
+            0.17,
+            10,
+            60.25m,
+            601.20m,
+            100_000,
+            20_000,
+            5_000,
+            10_000,
+            CostQuality.ExactTokenSplit,
+            "仅本机样本外推",
+            cycleStart,
+            now,
+            null,
+            modelProjs
+        );
+
+        using var control = new CodexHistoryControl();
+        control.SetCycles([cycle]);
+
+        // 验证列包含模型独立测算
+        Assert.True(control.GetDefaultScaledColumnWidths().ContainsKey("模型独立测算"));
+    }
+
+    [Fact]
+    public void CodexJsonlParser_PreservesIntermediateSnapshots_AndAggregatesWith100PercentBaseline()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repository) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var resetAt = now.AddDays(7);
+            var resetEpoch = resetAt.ToUnixTimeSeconds();
+
+            var sessionFile = workspace.File("session_multi_snap.jsonl");
+            var lines = new[]
+            {
+                $"{{\"timestamp\":\"{now.AddHours(-10):O}\",\"payload\":{{\"type\":\"token_count\",\"info\":{{\"total_token_usage\":{{\"input_tokens\":100,\"output_tokens\":20}}}}}},\"rate_limits\":{{\"limit_id\":\"codex\",\"primary\":{{\"window_minutes\":300,\"used_percent\":0.0,\"resets_at\":{resetEpoch}}},\"secondary\":{{\"window_minutes\":10080,\"used_percent\":0.0,\"resets_at\":{resetEpoch}}}}}}}",
+                $"{{\"timestamp\":\"{now.AddHours(-6):O}\",\"payload\":{{\"type\":\"token_count\",\"info\":{{\"total_token_usage\":{{\"input_tokens\":200,\"output_tokens\":40}}}}}},\"rate_limits\":{{\"limit_id\":\"codex\",\"primary\":{{\"window_minutes\":300,\"used_percent\":10.0,\"resets_at\":{resetEpoch}}},\"secondary\":{{\"window_minutes\":10080,\"used_percent\":19.0,\"resets_at\":{resetEpoch}}}}}}}",
+                $"{{\"timestamp\":\"{now.AddHours(-1):O}\",\"payload\":{{\"type\":\"token_count\",\"info\":{{\"total_token_usage\":{{\"input_tokens\":500,\"output_tokens\":100}}}}}},\"rate_limits\":{{\"limit_id\":\"codex\",\"primary\":{{\"window_minutes\":300,\"used_percent\":80.0,\"resets_at\":{resetEpoch}}},\"secondary\":{{\"window_minutes\":10080,\"used_percent\":94.0,\"resets_at\":{resetEpoch}}}}}}}"
+            };
+            File.WriteAllLines(sessionFile, lines);
+
+            var parser = new CodexJsonlParser();
+            var parseResult = parser.ParseFile(sessionFile);
+
+            // 1. 验证单会话中多个去重配额快照均被完整保留，未被覆盖丢弃
+            var weeklyQuotas = parseResult.Quotas.Where(q => q.WindowKind == "weekly").ToList();
+            Assert.Equal(3, weeklyQuotas.Count);
+            Assert.Equal(1.0, weeklyQuotas[0].RemainingFraction!.Value, 2);
+            Assert.Equal(0.81, weeklyQuotas[1].RemainingFraction!.Value, 2);
+            Assert.Equal(0.06, weeklyQuotas[2].RemainingFraction!.Value, 2);
+
+            // 2. 存入仓库并验证聚合器周期构建
+            repository.AddQuotaSnapshots(parseResult.Quotas);
+            var pricing = new PricingService(workspace.File("pricing.json"), new PricingDocument(1, DateOnly.FromDateTime(now.DateTime), []));
+            var aggregator = new UsageAggregator(repository, pricing);
+            var cycles = aggregator.BuildCodexHistoricalCycles();
+
+            Assert.Single(cycles);
+            var cycle = cycles[0];
+            Assert.Equal(1.0, cycle.StartRemainingFraction!.Value, 2);
+            Assert.Equal(0.06, cycle.MinRemainingFraction!.Value, 2);
+            Assert.Equal(0.94, cycle.FullCycleConsumedFraction!.Value, 2);
+
+            // 3. 验证 UI 渲染控件中的额度变化显示为 100% -> 6%，已消耗显示为 94%
+            using var control = new CodexHistoryControl();
+            control.SetCycles(cycles);
+            var grid = control.Controls.OfType<DataGridView>().Single();
+            Assert.Equal(1, grid.Rows.Count);
+            var row = grid.Rows[0];
+            Assert.Equal("100% → 6%", row.Cells["额度变化"].Value);
+            Assert.Equal("94%", row.Cells["已消耗"].Value);
+            Assert.Contains("100%", row.Cells["额度变化"].ToolTipText);
+        }
+    }
 }

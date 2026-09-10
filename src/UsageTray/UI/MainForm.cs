@@ -295,7 +295,7 @@ public sealed class MainForm : Form
         chartPanel.Controls.Add(_chart);
         chartPanel.Controls.Add(chartTitle);
 
-        _models = CreateGrid(["模型", "Provider", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "订阅参考金额"], DefaultModelColumnWidths);
+        _models = CreateGrid(["模型", "Provider", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "订阅参考金额", "推算周满额"], DefaultModelColumnWidths);
         _projects = CreateGrid(["项目", "Provider", "Tokens", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "订阅参考金额"], DefaultProjectColumnWidths);
         _models.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _projects.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
@@ -458,8 +458,18 @@ public sealed class MainForm : Form
         {
             var hitRate = row.InputTokens > 0 ? $"{row.CacheHitRate:F2}%" : "0.00%";
             var speedText = row.SpeedEstimate?.HasData == true ? row.SpeedEstimate.ToShortDisplayString() : "-";
-            _models.Rows.Add(row.ModelId, row.Provider.ToStorageString(), FormatTokens(row.NonCachedInputTokens),
-                FormatTokens(row.CachedTokens), hitRate, speedText, FormatTokens(row.OutputTokens), FormatCost(row.ApiEquivalentUsd));
+            var estWeeklyText = FormatCost(row.EstimatedWeeklyCostUsd);
+            var rowIndex = _models.Rows.Add(row.ModelId, row.Provider.ToStorageString(), FormatTokens(row.NonCachedInputTokens),
+                FormatTokens(row.CachedTokens), hitRate, speedText, FormatTokens(row.OutputTokens), FormatCost(row.ApiEquivalentUsd), estWeeklyText);
+
+            if (!string.IsNullOrEmpty(row.EstimateDetail))
+            {
+                _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = row.EstimateDetail;
+            }
+            else if (row.Provider == ProviderKind.Codex && !row.EstimatedWeeklyCostUsd.HasValue)
+            {
+                _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = "该模型暂无足够独立消耗样本测算周总额。";
+            }
         }
 
         _projects.Rows.Clear();
@@ -629,7 +639,8 @@ public sealed class MainForm : Form
         ["缓存命中率"] = 212,
         ["预估速率"] = 680,
         ["Output"] = 260,
-        ["订阅参考金额"] = 155
+        ["订阅参考金额"] = 155,
+        ["推算周满额"] = 155
     };
 
     private static readonly Dictionary<string, int> DefaultProjectColumnWidths = new(StringComparer.OrdinalIgnoreCase)

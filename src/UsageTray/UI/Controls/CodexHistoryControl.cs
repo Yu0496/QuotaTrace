@@ -15,6 +15,7 @@ public sealed class CodexHistoryControl : UserControl
     private readonly Label _detailPeriodLabel;
     private readonly Label _detailTokenLabel;
     private readonly Label _detailCostLabel;
+    private readonly Label _detailModelLabel;
     private readonly FlowLayoutPanel _topBar;
 
     private IReadOnlyList<CodexHistoricalCycleView> _allCycles = [];
@@ -32,6 +33,7 @@ public sealed class CodexHistoryControl : UserControl
         ["已消耗"] = 95,
         ["订阅参考金额"] = 135,
         ["满额预估"] = 145,
+        ["模型独立测算"] = 180,
         ["总Tokens"] = 120,
         ["快照数"] = 90
     };
@@ -118,10 +120,18 @@ public sealed class CodexHistoryControl : UserControl
             ForeColor = Color.FromArgb(71, 85, 105),
             Text = "—"
         };
+        _detailModelLabel = new Label
+        {
+            AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.FromArgb(13, 148, 136),
+            Text = "—"
+        };
 
         _detailPanel.Controls.Add(_detailPeriodLabel);
         _detailPanel.Controls.Add(_detailTokenLabel);
         _detailPanel.Controls.Add(_detailCostLabel);
+        _detailPanel.Controls.Add(_detailModelLabel);
         _detailPanel.Resize += (_, _) => LayoutDetailLabels();
 
         // 中间 DataGridView 列表
@@ -171,8 +181,9 @@ public sealed class CodexHistoryControl : UserControl
         _detailPeriodLabel.Font = boldFont;
         _detailTokenLabel.Font = baseFont;
         _detailCostLabel.Font = baseFont;
+        _detailModelLabel.Font = baseFont;
 
-        _detailPanel.Height = lineH * 3 + (int)(20 * scale);
+        _detailPanel.Height = lineH * 4 + (int)(24 * scale);
         LayoutDetailLabels();
 
         var headerTextH = TextRenderer.MeasureText("订阅参考金额", boldFont).Height;
@@ -200,11 +211,12 @@ public sealed class CodexHistoryControl : UserControl
         var padX = (int)(12 * scale);
         var padY = (int)(8 * scale);
         var width = Math.Max(100, _detailPanel.ClientSize.Width - padX * 2);
-        var lineH = Math.Max(22, (_detailPanel.ClientSize.Height - padY * 2) / 3);
+        var lineH = Math.Max(22, (_detailPanel.ClientSize.Height - padY * 2) / 4);
 
         _detailPeriodLabel.SetBounds(padX, padY, width, lineH);
         _detailTokenLabel.SetBounds(padX, padY + lineH, width, lineH);
         _detailCostLabel.SetBounds(padX, padY + lineH * 2, width, lineH);
+        _detailModelLabel.SetBounds(padX, padY + lineH * 3, width, lineH);
     }
 
     private DataGridView CreateGrid()
@@ -267,6 +279,7 @@ public sealed class CodexHistoryControl : UserControl
             ("已消耗", "已消耗", DataGridViewContentAlignment.MiddleRight),
             ("订阅参考金额", "订阅参考金额", DataGridViewContentAlignment.MiddleRight),
             ("满额预估", "满额预估", DataGridViewContentAlignment.MiddleRight),
+            ("模型独立测算", "模型独立测算", DataGridViewContentAlignment.MiddleLeft),
             ("总Tokens", "总 Tokens", DataGridViewContentAlignment.MiddleRight),
             ("快照数", "快照数", DataGridViewContentAlignment.MiddleRight)
         };
@@ -345,20 +358,26 @@ public sealed class CodexHistoryControl : UserControl
                 var rangeText = $"{cycle.CycleStart.ToLocalTime():yyyy-MM-dd HH:mm} ~ {rangeEnd.ToLocalTime():MM-dd HH:mm}";
                 var durationText = FormatDuration(cycle.Duration);
 
-                var startStr = cycle.StartRemainingFraction.HasValue ? $"{cycle.StartRemainingFraction.Value * 100:0.#}%" : "—";
                 var minStr = cycle.MinRemainingFraction.HasValue ? $"{cycle.MinRemainingFraction.Value * 100:0.#}%" : "—";
-                var remChangeText = (cycle.StartRemainingFraction.HasValue || cycle.MinRemainingFraction.HasValue)
-                    ? $"{startStr} → {minStr}"
-                    : "—";
+                var remChangeText = cycle.MinRemainingFraction.HasValue
+                    ? $"100% → {minStr}"
+                    : (cycle.StartRemainingFraction.HasValue ? $"{cycle.StartRemainingFraction.Value * 100:0.#}% → —" : "—");
 
-                var consumedText = cycle.ConsumedFraction.HasValue
-                    ? $"{cycle.ConsumedFraction.Value * 100:0.#}%"
+                var consumedVal = cycle.FullCycleConsumedFraction ?? cycle.ConsumedFraction;
+                var consumedText = consumedVal.HasValue
+                    ? $"{consumedVal.Value * 100:0.#}%"
                     : "—";
 
                 var costText = cycle.CycleCostUsd.HasValue ? $"${cycle.CycleCostUsd.Value:F2}" : "—";
                 var fullEstText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:F2}" : "—";
                 var tokensText = FormatTokens(cycle.TotalTokens);
                 var snapCountText = $"{cycle.SnapshotCount} 次";
+
+                var modelEstText = "—";
+                if (cycle.ModelProjections is { Count: > 0 })
+                {
+                    modelEstText = string.Join(" | ", cycle.ModelProjections.Select(p => $"{ShortenModel(p.ModelId)}: 约${p.EstimatedWeeklyCostUsd:F0}"));
+                }
 
                 row.Cells["状态"].Value = statusText;
                 row.Cells["模型池"].Value = poolText;
@@ -368,8 +387,35 @@ public sealed class CodexHistoryControl : UserControl
                 row.Cells["已消耗"].Value = consumedText;
                 row.Cells["订阅参考金额"].Value = costText;
                 row.Cells["满额预估"].Value = fullEstText;
+                row.Cells["模型独立测算"].Value = modelEstText;
                 row.Cells["总Tokens"].Value = tokensText;
                 row.Cells["快照数"].Value = snapCountText;
+
+                if (cycle.StartRemainingFraction.HasValue && cycle.StartRemainingFraction.Value < 0.995 && cycle.MinRemainingFraction.HasValue)
+                {
+                    row.Cells["额度变化"].ToolTipText = $"周期标准额度: 100%\r\n首次采样快照: {cycle.StartRemainingFraction.Value * 100:0.#}%\r\n周期最低剩余: {minStr}\r\n周期实际消耗: {consumedText}";
+                }
+                else if (cycle.MinRemainingFraction.HasValue)
+                {
+                    row.Cells["额度变化"].ToolTipText = $"周期标准额度: 100%\r\n周期最低剩余: {minStr}\r\n周期实际消耗: {consumedText}";
+                }
+
+                if (cycle.ModelProjections is { Count: > 0 })
+                {
+                    var tipLines = new List<string> { "【各模型独立测算体系】" };
+                    foreach (var mp in cycle.ModelProjections)
+                    {
+                        var source = mp.IsFromCurrentCycle ? $"本周期实测 (消耗 {mp.ConsumedFraction * 100:0.#}%)" : "历史同套餐基准";
+                        tipLines.Add($"• {mp.ModelId}: 约 ${mp.EstimatedWeeklyCostUsd:F2} ({source})");
+                        if (mp.IntervalCostUsd > 0)
+                        {
+                            tipLines.Add($"  本周期产生参考金额: ${mp.IntervalCostUsd:F2}");
+                        }
+                    }
+                    var tip = string.Join(Environment.NewLine, tipLines);
+                    row.Cells["模型独立测算"].ToolTipText = tip;
+                    row.Cells["满额预估"].ToolTipText = $"综合预估: {fullEstText}\r\n" + tip;
+                }
 
                 if (cycle.IsActive)
                 {
@@ -392,6 +438,7 @@ public sealed class CodexHistoryControl : UserControl
                 _detailPeriodLabel.Text = "当前筛选条件下无历史周期记录";
                 _detailTokenLabel.Text = "—";
                 _detailCostLabel.Text = "—";
+                _detailModelLabel.Text = "—";
             }
         }
         finally
@@ -428,6 +475,29 @@ public sealed class CodexHistoryControl : UserControl
         var fullStr = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:F2}" : "—";
         var noteStr = !string.IsNullOrWhiteSpace(cycle.EstimateNote) ? $" ({cycle.EstimateNote})" : "";
         _detailCostLabel.Text = $"订阅参考金额: {costStr} | 周满额样本预估: {fullStr}{noteStr}";
+
+        if (cycle.ModelProjections is { Count: > 0 })
+        {
+            var parts = cycle.ModelProjections.Select(p =>
+                $"{p.ModelId} 约 ${p.EstimatedWeeklyCostUsd:F2} ({(p.IsFromCurrentCycle ? $"实测{p.ConsumedFraction * 100:0.#}%" : "历史基准")})");
+            _detailModelLabel.Text = $"模型独立测算: {string.Join(" | ", parts)}";
+        }
+        else if (cycle.PoolCategory == "standard")
+        {
+            _detailModelLabel.Text = "模型独立测算: 暂无足够独立模型样本";
+        }
+        else
+        {
+            _detailModelLabel.Text = "模型独立测算: 单一模型池（与综合预估一致）";
+        }
+    }
+
+    private static string ShortenModel(string model)
+    {
+        if (model.StartsWith("gpt-6-", StringComparison.OrdinalIgnoreCase)) return model[6..];
+        if (model.StartsWith("gpt-5.", StringComparison.OrdinalIgnoreCase) && model.Length > 8) return model[8..];
+        if (model.StartsWith("gpt-", StringComparison.OrdinalIgnoreCase)) return model[4..];
+        return model;
     }
 
     private static string FormatDuration(TimeSpan d)

@@ -183,10 +183,14 @@ public sealed class QuotaSummaryControl : UserControl
         {
             y += 2;
             y += _boldFont.Height + 3; // "周订阅统计与预估 (本轮 7 天窗口)"
-            foreach (var _ in codexCycles)
+            foreach (var cycle in codexCycles)
             {
                 y += _regularFont.Height + 3; // 本轮参考金额
                 y += _regularFont.Height + 4; // 满额样本外推
+                if (!ShowHeader && cycle.ModelProjections is { Count: > 0 })
+                {
+                    y += (_regularFont.Height + 4) * cycle.ModelProjections.Count;
+                }
             }
         }
 
@@ -331,8 +335,12 @@ public sealed class QuotaSummaryControl : UserControl
                 var estCostText = est.EstimatedFullQuotaUsd.HasValue ? $"约 ${est.EstimatedFullQuotaUsd.Value:0.00}" : est.CalculationDetails ?? "样本不足";
                 var resetNote = est.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(est.ResetAt.Value)}）" : string.Empty;
 
+                var isStale = est.CalculationDetails == "快照待更新";
+                var estBadge = est.EstimatedFullQuotaUsd.HasValue
+                    ? (isStale ? "（待更新）" : "（仅本机样本）")
+                    : string.Empty;
                 DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 本轮参考金额", cycleCostText, $"（已消耗 {usedText}）", Color.FromArgb(37, 99, 235));
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 满额样本外推", estCostText, est.EstimatedFullQuotaUsd.HasValue ? "（仅本机样本）" : string.Empty, Color.FromArgb(5, 150, 105));
+                DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 满额样本外推", estCostText, estBadge, Color.FromArgb(5, 150, 105));
             }
         }
 
@@ -349,8 +357,7 @@ public sealed class QuotaSummaryControl : UserControl
             .Select(s => s.PlanTier)
             .FirstOrDefault()
             ?? codexSnapshots
-            .Where(s => !string.IsNullOrWhiteSpace(s.PlanTier))
-            .OrderByDescending(s => s.CapturedAt)
+            .Where(s => !UsageAggregator.IsReserveSnapshot(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
             .Select(s => s.PlanTier)
             .FirstOrDefault();
 
@@ -401,9 +408,22 @@ public sealed class QuotaSummaryControl : UserControl
                 var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : cycle.EstimateNote ?? "样本不足";
                 var codexResetNote = cycle.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(cycle.ResetAt.Value)}）" : string.Empty;
                 var poolPrefix = codexCycles.Count > 1 ? $"{cycle.PoolName} " : string.Empty;
+                var isStale = cycle.EstimateNote == "快照待更新";
+                var estBadge = cycle.EstimatedWeeklyCostUsd.HasValue
+                    ? (isStale ? "（待更新）" : "（仅本机样本）")
+                    : string.Empty;
 
                 DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}本轮参考金额", cycleCostText, $"（已消耗 {usedText}）", Color.FromArgb(37, 99, 235));
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}满额样本外推", estCostText, cycle.EstimatedWeeklyCostUsd.HasValue ? "（仅本机样本）" : string.Empty, Color.FromArgb(5, 150, 105));
+                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}满额样本外推", estCostText, estBadge, Color.FromArgb(5, 150, 105));
+
+                if (!ShowHeader && cycle.ModelProjections is { Count: > 0 })
+                {
+                    foreach (var mp in cycle.ModelProjections)
+                    {
+                        var note = mp.IsFromCurrentCycle ? (isStale ? "（实测·待更新）" : "（本周实测）") : "（历史样本）";
+                        DrawKeyValueHighlight(g, padX + 28, ref y, $"├─ 按 {mp.ModelId} 测算", $"约 ${mp.EstimatedWeeklyCostUsd:0.00}", note, Color.FromArgb(13, 148, 136));
+                    }
+                }
             }
         }
 

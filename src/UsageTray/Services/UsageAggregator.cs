@@ -78,6 +78,11 @@ public sealed class UsageAggregator
 
         var (speedEstimate, modelSpeeds, projectSpeeds) = _repository.GetDetailedSpeedEstimates(range, provider, windowStartUtc, windowEndUtc);
 
+        var codexHistoricalCycles = BuildCodexHistoricalCycles();
+        var (codexWeeklyCycle, codexSparkCycle, codexReserveCycle) = BuildCodexWeeklyCycles(quotas, warnings, codexHistoricalCycles);
+        var codexModelProjections = codexWeeklyCycle?.ModelProjections ?? [];
+        var modelProjDict = codexModelProjections.ToDictionary(p => p.ModelId, StringComparer.OrdinalIgnoreCase);
+
         var aggregate = _pricing.CalculateAggregate(buckets);
         foreach (var warning in aggregate.Warnings) warnings.Add(warning);
         var daily = buckets.GroupBy(bucket => bucket.LocalDate).OrderBy(group => group.Key)
@@ -86,7 +91,8 @@ public sealed class UsageAggregator
             .OrderByDescending(group => group.Sum(item => item.DisplayedTotalTokens))
             .Select(group => {
                 modelSpeeds.TryGetValue((group.Key.Provider, group.Key.Model), out var mSpeed);
-                return BuildModel(group.Key.Provider, group.Key.Model, group, warnings, mSpeed);
+                modelProjDict.TryGetValue(group.Key.Model, out var mProj);
+                return BuildModel(group.Key.Provider, group.Key.Model, group, warnings, mSpeed, mProj);
             }).ToList();
         var projects = buckets.GroupBy(bucket => new { bucket.Provider, Key = ProjectResolver.KeyOrUnclassified(bucket.ProjectKey) })
             .OrderByDescending(group => group.Sum(item => item.DisplayedTotalTokens))
@@ -114,12 +120,10 @@ public sealed class UsageAggregator
         var agClaudeBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) != "gemini").ToList();
         var agClaudeCost = agClaudeBuckets.Count > 0 ? _pricing.CalculateAggregate(agClaudeBuckets).PricedCostUsd : 0m;
 
-        var (codexWeeklyCycle, codexSparkCycle, codexReserveCycle) = BuildCodexWeeklyCycles(quotas, warnings);
         var codexWeeklyCycles = new List<CodexCycleUsageView>();
         if (codexWeeklyCycle != null) codexWeeklyCycles.Add(codexWeeklyCycle);
         if (codexSparkCycle != null) codexWeeklyCycles.Add(codexSparkCycle);
         if (codexReserveCycle != null) codexWeeklyCycles.Add(codexReserveCycle);
-        var codexHistoricalCycles = BuildCodexHistoricalCycles();
         var antigravityEstimates = BuildAntigravityEstimates(quotas);
 
         return new DashboardSnapshot
@@ -156,6 +160,7 @@ public sealed class UsageAggregator
             Models = models,
             Projects = projects,
             Quotas = quotas,
+            CodexModelProjections = codexModelProjections,
             Warnings = warnings.ToList(),
             RefreshedAt = DateTimeOffset.Now
         };
@@ -183,7 +188,8 @@ public sealed class UsageAggregator
         }
     }
 
-    private (CodexCycleUsageView? Standard, CodexCycleUsageView? Spark, CodexCycleUsageView? Reserve) BuildCodexWeeklyCycles(IReadOnlyList<QuotaView> quotas, HashSet<string> warnings)
+    private (CodexCycleUsageView? Standard, CodexCycleUsageView? Spark, CodexCycleUsageView? Reserve) BuildCodexWeeklyCycles(
+        IReadOnlyList<QuotaView> quotas, HashSet<string> warnings, IReadOnlyList<CodexHistoricalCycleView>? historicalCycles = null)
     {
         var standardQuota = quotas
             .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsWeekly(q.Snapshot) && !IsReserveSnapshot(q.Snapshot) && !IsSparkSnapshot(q.Snapshot))
@@ -203,14 +209,15 @@ public sealed class UsageAggregator
             .OrderByDescending(q => q.CapturedAt)
             .FirstOrDefault();
 
-        var standardCycle = standardQuota != null ? BuildSingleCodexCycle(standardQuota, "standard", warnings) : null;
-        var sparkCycle = sparkQuota != null ? BuildSingleCodexCycle(sparkQuota, "spark", warnings) : null;
-        var reserveCycle = reserveQuota != null ? BuildSingleCodexCycle(reserveQuota, "reserve", warnings) : null;
+        var standardCycle = standardQuota != null ? BuildSingleCodexCycle(standardQuota, "standard", warnings, historicalCycles) : null;
+        var sparkCycle = sparkQuota != null ? BuildSingleCodexCycle(sparkQuota, "spark", warnings, historicalCycles) : null;
+        var reserveCycle = reserveQuota != null ? BuildSingleCodexCycle(reserveQuota, "reserve", warnings, historicalCycles) : null;
 
         return (standardCycle, sparkCycle, reserveCycle);
     }
 
-    private CodexCycleUsageView? BuildSingleCodexCycle(QuotaSnapshot weeklyQuota, string poolCategory, HashSet<string> warnings)
+    private CodexCycleUsageView? BuildSingleCodexCycle(
+        QuotaSnapshot weeklyQuota, string poolCategory, HashSet<string> warnings, IReadOnlyList<CodexHistoricalCycleView>? historicalCycles = null)
     {
         if (!weeklyQuota.ResetAt.HasValue || weeklyQuota.IsResetPassed()) return null;
 
@@ -245,6 +252,47 @@ public sealed class UsageAggregator
             return _pricing.CalculateAggregate(sample).PricedCostUsd;
         });
 
+        IReadOnlyList<ModelQuotaProjectionView>? modelProjections = null;
+        if (poolCategory == "standard")
+        {
+            var allCodexSnapshots = _repository.GetQuotaSnapshots(ProviderKind.Codex);
+            var codexEvents = _repository.GetNormalizedCodexEvents();
+            modelProjections = QuotaProjector.EstimateModelProjections(
+                weeklyQuota,
+                allCodexSnapshots,
+                (start, end) =>
+                {
+                    var sAudits = codexEvents.Where(a => a.CapturedAt >= start && a.CapturedAt < end && !IsCodexReserveModel(a.ModelId) && !IsCodexSparkModel(a.ModelId)).ToList();
+                    if (sAudits.Count == 0) return new Dictionary<string, decimal>();
+                    var sBuckets = UsageRepository.ConvertAuditsToBuckets(sAudits);
+                    var dict = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var g in sBuckets.GroupBy(b => b.ModelId ?? "Unknown"))
+                    {
+                        var p = _pricing.CalculateAggregate(g.ToList()).PricedCostUsd;
+                        if (p.HasValue && p.Value > 0) dict[g.Key] = p.Value;
+                    }
+                    return dict;
+                },
+                allHistoricalSnapshots: allCodexSnapshots);
+        }
+
+        var estWeeklyCost = projection.FullValue;
+        var estNote = projection.Note;
+
+        if (!estWeeklyCost.HasValue && historicalCycles != null)
+        {
+            var prev = historicalCycles.FirstOrDefault(c => c.PoolCategory == poolCategory && !c.IsActive && c.EstimatedWeeklyCostUsd.HasValue);
+            if (prev != null)
+            {
+                estWeeklyCost = prev.EstimatedWeeklyCostUsd;
+                estNote = "快照待更新";
+                if (modelProjections == null || modelProjections.Count == 0)
+                {
+                    modelProjections = prev.ModelProjections?.Select(p => p with { IsFromCurrentCycle = false }).ToList();
+                }
+            }
+        }
+
         var poolName = poolCategory switch
         {
             "reserve" => "Codex Reserve",
@@ -258,14 +306,16 @@ public sealed class UsageAggregator
             remaining,
             usedFraction,
             cost.PricedCostUsd ?? (buckets.Count == 0 ? 0m : null),
-            projection.FullValue,
+            estWeeklyCost,
             buckets.Sum(b => b.InputTokens),
             buckets.Sum(b => b.CachedInputTokens),
             buckets.Sum(b => b.CacheWriteInputTokens),
             buckets.Sum(b => b.OutputTokens),
             cost.Quality,
             poolName,
-            poolCategory, projection.Note);
+            poolCategory,
+            estNote,
+            modelProjections);
     }
 
     public IReadOnlyList<CodexHistoricalCycleView> BuildCodexHistoricalCycles(int maxCycles = 30)
@@ -294,8 +344,8 @@ public sealed class UsageAggregator
                     if (pool == "spark") return IsSparkSnapshot(s);
                     return !IsReserveSnapshot(s) && !IsSparkSnapshot(s);
                 })
-                .OrderBy(s => s.CapturedAt)
-                .ThenBy(s => s.ResetAt!.Value)
+                .OrderBy(s => s.ResetAt!.Value)
+                .ThenBy(s => s.CapturedAt)
                 .ToList();
 
                 if (poolSnapshots.Count == 0) continue;
@@ -307,7 +357,7 @@ public sealed class UsageAggregator
                     _ => "Codex 主力模型"
                 };
 
-                // 1. 消除几秒至数分钟的 API 网关与时钟抖动：时间差距在 2 小时以内的 ResetAt 聚合为一个真实周期
+                // 1. 消除 API 网关与时钟微小抖动，避免多会话并发交替导致周期被虚假拆碎：以 12 小时为容差按 ResetAt 聚合为一个真实周期
                 var rawClusters = new List<(DateTimeOffset ResetAt, List<QuotaSnapshot> Snapshots)>();
                 foreach (var s in poolSnapshots)
                 {
@@ -320,7 +370,7 @@ public sealed class UsageAggregator
                     {
                         var lastIdx = rawClusters.Count - 1;
                         var lastReset = rawClusters[lastIdx].ResetAt;
-                        if (Math.Abs((sReset - lastReset).TotalHours) < 2.0)
+                        if (Math.Abs((sReset - lastReset).TotalHours) < 12.0)
                         {
                             rawClusters[lastIdx].Snapshots.Add(s);
                             if (sReset > lastReset)
@@ -338,6 +388,7 @@ public sealed class UsageAggregator
                 for (int i = 0; i < rawClusters.Count; i++)
                 {
                     var (resetAt, snapshotsInCycle) = rawClusters[i];
+                    snapshotsInCycle.Sort((a, b) => a.CapturedAt.CompareTo(b.CapturedAt));
                     var firstCaptured = snapshotsInCycle.First().CapturedAt;
                     var lastCaptured = snapshotsInCycle.Last().CapturedAt;
 
@@ -411,6 +462,8 @@ public sealed class UsageAggregator
 
                     decimal? fullValue = null;
                     string? estimateNote = null;
+                    IReadOnlyList<ModelQuotaProjectionView>? modelProjections = null;
+
                     if (snapshotsInCycle.Count >= 2 && minRem.HasValue && startRem.HasValue && (startRem.Value - minRem.Value) >= 0.05)
                     {
                         var latestInCycle = snapshotsInCycle.Last();
@@ -429,6 +482,29 @@ public sealed class UsageAggregator
 
                         fullValue = proj.FullValue;
                         estimateNote = proj.Note;
+                    }
+
+                    if (pool == "standard" && snapshotsInCycle.Count >= 1)
+                    {
+                        var latestInCycle = snapshotsInCycle.Last();
+                        modelProjections = QuotaProjector.EstimateModelProjections(
+                            latestInCycle,
+                            snapshotsInCycle,
+                            (s, e) =>
+                            {
+                                var sAudits = normalizedEvents.Where(a => a.CapturedAt >= s && a.CapturedAt < e && !IsCodexReserveModel(a.ModelId) && !IsCodexSparkModel(a.ModelId)).ToList();
+                                if (sAudits.Count == 0) return new Dictionary<string, decimal>();
+                                var sBuckets = UsageRepository.ConvertAuditsToBuckets(sAudits);
+                                var dict = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                                foreach (var g in sBuckets.GroupBy(b => b.ModelId ?? "Unknown"))
+                                {
+                                    var p = _pricing.CalculateAggregate(g.ToList()).PricedCostUsd;
+                                    if (p.HasValue && p.Value > 0) dict[g.Key] = p.Value;
+                                }
+                                return dict;
+                            },
+                            allHistoricalSnapshots: rawSnapshots,
+                            now: latestInCycle.CapturedAt);
                     }
 
                     result.Add(new CodexHistoricalCycleView(
@@ -453,7 +529,10 @@ public sealed class UsageAggregator
                         estimateNote,
                         firstCaptured,
                         lastCaptured,
-                        actualEnd
+                        actualEnd,
+                        modelProjections,
+                        1.0,
+                        startRem
                     ));
                 }
             }
@@ -507,14 +586,15 @@ public sealed class UsageAggregator
             cost.UnpricedTokens, cost.Quality);
     }
 
-    private ModelUsageView BuildModel(ProviderKind provider, string model, IEnumerable<UsageBucket> buckets, HashSet<string> warnings, TokenSpeedEstimate? speedEstimate = null)
+    private ModelUsageView BuildModel(ProviderKind provider, string model, IEnumerable<UsageBucket> buckets, HashSet<string> warnings, TokenSpeedEstimate? speedEstimate = null, ModelQuotaProjectionView? projection = null)
     {
         var list = buckets.ToList();
         var cost = _pricing.CalculateAggregate(list);
         foreach (var warning in cost.Warnings) warnings.Add(warning);
         return new ModelUsageView(model, provider, list.Sum(item => item.InputTokens), list.Sum(item => item.CachedInputTokens),
             list.Sum(item => item.CacheWriteInputTokens), list.Sum(item => item.OutputTokens), cost.PricedCostUsd,
-            cost.UnpricedTokens, cost.Quality, speedEstimate);
+            cost.UnpricedTokens, cost.Quality, speedEstimate,
+            projection?.EstimatedWeeklyCostUsd, projection?.EstimateNote, projection?.DetailText);
     }
 
     private ProjectUsageView BuildProject(ProviderKind provider, string projectKey, IEnumerable<UsageBucket> buckets, HashSet<string> warnings, TokenSpeedEstimate? speedEstimate = null)

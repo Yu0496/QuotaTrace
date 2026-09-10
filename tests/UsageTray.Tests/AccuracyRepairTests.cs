@@ -137,7 +137,9 @@ public sealed class AccuracyRepairTests
         Assert.Null(QuotaProjector.Estimate(latest, [baseline with { RemainingFraction = .71 }], (_, _) => 2m).FullValue);
         Assert.Null(QuotaProjector.Estimate(latest, [baseline], (_, _) => null).FullValue);
         Assert.Null(QuotaProjector.Estimate(latest, [baseline], (_, _) => 0m).FullValue);
-        Assert.Null(QuotaProjector.Estimate(latest, [baseline], (_, _) => 2m, now.AddMinutes(16)).FullValue);
+        var staleResult = QuotaProjector.Estimate(latest, [baseline], (_, _) => 2m, now.AddMinutes(16));
+        Assert.Equal(20m, staleResult.FullValue);
+        Assert.Equal("快照待更新", staleResult.Note);
         var recharge = baseline with { CapturedAt = now.AddHours(-1), RemainingFraction = .72 };
         var depleted = baseline with { CapturedAt = now.AddMinutes(-90), RemainingFraction = .5 };
         Assert.Null(QuotaProjector.Estimate(latest, [baseline, depleted, recharge], (_, _) => 2m).FullValue);

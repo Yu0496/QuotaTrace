@@ -34,7 +34,7 @@ graph TD
 | 项目 / 目录 | 输出类型 | 核心职责 |
 | :--- | :--- | :--- |
 | [`src/UsageTray/`](file:///F:/Project/QuotaStatistics/src/UsageTray) | WinExe (WinForms) | 主应用程序，包含托盘交互、高 DPI 界面、数据解析、SQLite 存储、计价引擎与调度。 |
-| [`tests/UsageTray.Tests/`](file:///F:/Project/QuotaStatistics/tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码、会话归一化、额度周期预估、Codex 周历史重构、抖动聚合与提前重置防分裂等 162 项测试。 |
+| [`tests/UsageTray.Tests/`](file:///F:/Project/QuotaStatistics/tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码、会话归一化、额度周期预估、Codex 周历史重构、抖动聚合与提前重置防分裂、分模型独立测算、锚点切片用量防丢失、跨设备断层样本过滤及周历史集成等 170 项测试。 |
 | [`tools/AntigravityStatusRecorder/`](file:///F:/Project/QuotaStatistics/tools/AntigravityStatusRecorder) | Exe (Console) | 独立控制台工具，读取官方 status-line stdin JSON 并记录到本地存储。 |
 | [`tools/CodexAudit/`](file:///F:/Project/QuotaStatistics/tools/CodexAudit) | Exe (Console) | 离线 Codex 审计与 CSV 导出工具。 |
 
@@ -115,7 +115,7 @@ graph TD
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`CodexProvider`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexProvider.cs) | `src/UsageTray/Providers/Codex/CodexProvider.cs` | 管理 Codex 会话文件扫描、0 变更短路检查、增量/全量解析及快照归一化。 |
-| [`CodexJsonlParser`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexJsonlParser.cs) | `src/UsageTray/Providers/Codex/CodexJsonlParser.cs` | 逐行容错解析 session JSONL（ParserVersion 11），过滤新版 CLI 调试级 `token_usage_record`，绑定权威 `token_count`，独立提取并解耦 Spark 辅助模型配额池（`codex-spark-5h` 与 `codex-spark-weekly`）与主力通用额度（`codex-weekly`）。 |
+| [`CodexJsonlParser`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexJsonlParser.cs) | `src/UsageTray/Providers/Codex/CodexJsonlParser.cs` | 逐行容错解析 session JSONL（ParserVersion 12），过滤新版 CLI 调试级 `token_usage_record`，绑定权威 `token_count`，独立提取并解耦 Spark 辅助模型配额池（`codex-spark-5h` 与 `codex-spark-weekly`）与主力通用额度（`codex-weekly`）；采用变动增量采集与去重保留单文件内完整的时序配额快照，彻底杜绝单文件末行覆盖导致中间快照丢失。 |
 | [`CodexUsageNormalizer`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexUsageNormalizer.cs) | `src/UsageTray/Providers/Codex/CodexUsageNormalizer.cs` | 跨文件多分支会话归一化引擎，处理全局累计计数器差分、时间倒序重排与回退 Epoch。 |
 | [`CodexSessionLocator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Providers/Codex/CodexSessionLocator.cs) | `src/UsageTray/Providers/Codex/CodexSessionLocator.cs` | 发现 `CODEX_HOME` 及默认 `~/.codex/sessions` 下的活动与归档会话文件。 |
 
@@ -124,9 +124,9 @@ graph TD
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`RefreshCoordinator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/RefreshCoordinator.cs) | `src/UsageTray/Services/RefreshCoordinator.cs` | 刷新主调度器，协调并发锁、增量/全量扫描、价格更新与快照广播。 |
-| `QuotaProjector` | `src/UsageTray/Services/QuotaProjection.cs` | Codex/Antigravity 共用的同周期快照差分外推，先隔离当前重置周期，再检查样本年龄、回升、最小下降与未定价用量。 |
-| [`UsageAggregator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageAggregator.cs) | `src/UsageTray/Services/UsageAggregator.cs` | 聚合引擎，按日期区间/双额度周周期汇总 Token、计算订阅参考金额及缓存命中率；将主力通用模型与 Spark 辅助模型彻底双通道解耦聚合，并结合 Reserve 活跃触发状态动态支持最多三通道周周期与满额推算。 |
-| [`UsageViews`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageViews.cs) | `src/UsageTray/Services/UsageViews.cs` | 视图数据模型，包含 `DashboardSnapshot`（支持分池订阅参考金额与双周周期列表 `CodexWeeklyCycles`）、`ModelUsageView`、`ProjectUsageView` 等。 |
+| `QuotaProjector` | `src/UsageTray/Services/QuotaProjection.cs` | Codex/Antigravity 共用的同周期快照差分外推（快照陈旧时平滑保留金额并标记“快照待更新”）；并提供 `EstimateModelProjections` 基于额度变动锚点驱动的微区间切片归因与多模型测算算法（防止中间快照额度未变导致 Token 漏计，识别主导模型、差分外推各模型周满额价值与历史同套餐回溯兜底）。 |
+| [`UsageAggregator`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageAggregator.cs) | `src/UsageTray/Services/UsageAggregator.cs` | 聚合引擎，按日期区间/双额度周周期汇总 Token、计算订阅参考金额及缓存命中率；将主力通用模型与 Spark 辅助模型彻底双通道解耦聚合，并结合 Reserve 活跃触发状态动态支持最多三通道周周期与满额推算；构建周历史周期时按 `ResetAt` 12 小时容差聚类消除并发会话交替导致的虚假分裂，并建立 100% 完整额度周期基准；调度主力池分模型测算并分发至视图模型；为历史周周期切片计算独立分模型测算并在当前周期不足 5% 时平滑继承。 |
+| [`UsageViews`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/UsageViews.cs) | `src/UsageTray/Services/UsageViews.cs` | 视图数据模型，包含 `DashboardSnapshot`（支持分池订阅参考金额、双周周期列表 `CodexWeeklyCycles` 与分模型周满额测算 `CodexModelProjections`）、`ModelUsageView`（携带单模型推算周满额）、`ModelQuotaProjectionView` 及 `CodexHistoricalCycleView`（包含 `ModelProjections` 分模型测算列表、100% 周期额度基准与全周期消耗比例）等。 |
 | [`MemoryOptimizer`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/MemoryOptimizer.cs) | `src/UsageTray/Services/MemoryOptimizer.cs` | 执行 LOH 压缩、GC 及 Windows 原生 `SetProcessWorkingSetSize` 深度回收常驻内存。 |
 | [`DiagnosticsService`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/DiagnosticsService.cs) | `src/UsageTray/Services/DiagnosticsService.cs` | 输出提供商状态、数据库统计与解析诊断报告。 |
 | [`ProjectService`](file:///F:/Project/QuotaStatistics/src/UsageTray/Services/ProjectService.cs) | `src/UsageTray/Services/ProjectService.cs` | 项目名称别名与路径美化服务。 |
@@ -138,10 +138,10 @@ graph TD
 | 类名 / 控件 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`TrayApplicationContext`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/TrayApplicationContext.cs) | `src/UsageTray/UI/TrayApplicationContext.cs` | 托盘主上下文，管理托盘图标、右键菜单、单击/双击防冲突计时器及定时刷新。 |
-| [`MainForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/MainForm.cs) | `src/UsageTray/UI/MainForm.cs` | 主仪表盘窗口，展示多通道订阅参考金额卡片（Codex 主力/Spark/Reserve 与 Antigravity Gemini/Claude 并列）、趋势图表、模型表、项目表及额度面板。 |
+| [`MainForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/MainForm.cs) | `src/UsageTray/UI/MainForm.cs` | 主仪表盘窗口，展示多通道订阅参考金额卡片（Codex 主力/Spark/Reserve 与 Antigravity Gemini/Claude 并列）、趋势图表、模型表（含各模型「推算周满额」列与悬浮说明 Tooltip）、项目表及额度面板。 |
 | [`QuotaPopupForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/QuotaPopupForm.cs) | `src/UsageTray/UI/QuotaPopupForm.cs` | 单击托盘弹出的高清额度摘要窗口，直接宿主承载 `QuotaSummaryControl` 保证与主窗口 100% 同源同布，支持拖拽移动锁定、主动点击/Esc 关闭、失焦防误关及工作区限高滚动。 |
-| [`QuotaSummaryControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/QuotaSummaryControl.cs) | `src/UsageTray/UI/Controls/QuotaSummaryControl.cs` | 复用的额度摘要自绘控件（主窗口额度 Tab 与悬浮窗 100% 共用）。 |
-| [`CodexHistoryControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/CodexHistoryControl.cs) | `src/UsageTray/UI/Controls/CodexHistoryControl.cs` | 独立的 Codex 周历史主面板页面控件，展示过去数次区间的周额度（非固定 7 天动态判定、进行中/已重置状态高亮、额度变化、订阅参考金额、满额预估及底部 Token 明细）。 |
+| [`QuotaSummaryControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/QuotaSummaryControl.cs) | `src/UsageTray/UI/Controls/QuotaSummaryControl.cs` | 复用的额度摘要自绘控件（主窗口额度 Tab 与悬浮窗共用；主窗口额度 Tab 下在主力池满额预估后额外展开各模型独立测算分支树；快照陈旧时平滑显示测算金额并标记“（待更新）”）。 |
+| [`CodexHistoryControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/CodexHistoryControl.cs) | `src/UsageTray/UI/Controls/CodexHistoryControl.cs` | 独立的 Codex 周历史主面板页面控件，展示过去数次区间的周额度（非固定 7 天动态判定、进行中/已重置状态高亮、标准 100% 基准额度变化 `100% → {minRem:P0}`、订阅参考金额、满额预估、第 9 列「模型独立测算」及 4 行底部明细面板）。 |
 | [`DailyBarChartControl`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/Controls/DailyBarChartControl.cs) | `src/UsageTray/UI/Controls/DailyBarChartControl.cs` | 自绘每日用量柱状图，支持动态 DPI 刻度与图例排版。 |
 | [`SettingsForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/SettingsForm.cs) | `src/UsageTray/UI/SettingsForm.cs` | 可缩放的设置窗口，包含刷新间隔、每周全量扫描开关、价格更新与维护入口。 |
 | [`PricingViewerForm`](file:///F:/Project/QuotaStatistics/src/UsageTray/UI/PricingViewerForm.cs) | `src/UsageTray/UI/PricingViewerForm.cs` | 独立模型价格查看窗口，支持按提供商筛选与实时搜索。 |

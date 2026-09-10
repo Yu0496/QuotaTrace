@@ -6,7 +6,7 @@ namespace UsageTray.Providers.Codex;
 
 public sealed class CodexJsonlParser
 {
-    public const int ParserVersion = 11;
+    public const int ParserVersion = 12;
 
     private static readonly string[] InputNames = ["input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "input", "total_input_tokens", "totalInputTokens"];
     private static readonly string[] CachedNames = ["cached_input_tokens", "cachedInputTokens", "cache_read_input_tokens", "cacheReadInputTokens", "cached", "cache_read"];
@@ -22,6 +22,8 @@ public sealed class CodexJsonlParser
     {
         var snapshots = new List<CodexTokenSnapshot>();
         var latestQuotas = new Dictionary<string, (DateTimeOffset Time, QuotaSnapshot Snapshot)>(StringComparer.OrdinalIgnoreCase);
+        var allQuotas = new List<QuotaSnapshot>();
+        var lastSeenQuotas = new Dictionary<string, (double? Remaining, DateTimeOffset? ResetAt, DateTimeOffset CapturedAt)>(StringComparer.OrdinalIgnoreCase);
         var warnings = new List<string>();
         string? sessionId = null;
         string? projectPath = null;
@@ -59,10 +61,29 @@ public sealed class CodexJsonlParser
                     {
                         foreach (var kvp in extractedQuotas)
                         {
-                            var quotaKey = $"{kvp.Value.ModelOrPoolId}_{kvp.Value.WindowKind}";
+                            var snap = kvp.Value;
+                            var quotaKey = $"{snap.ModelOrPoolId}_{snap.WindowKind}";
                             if (!latestQuotas.TryGetValue(quotaKey, out var existing) || timestamp >= existing.Time)
                             {
-                                latestQuotas[quotaKey] = (timestamp, kvp.Value);
+                                latestQuotas[quotaKey] = (timestamp, snap);
+                            }
+
+                            // 保留关键时序快照：首见快照、额度变化 >= 0.5%、重置时刻改变或时间跨度 >= 2小时
+                            if (!lastSeenQuotas.TryGetValue(quotaKey, out var prev))
+                            {
+                                allQuotas.Add(snap);
+                                lastSeenQuotas[quotaKey] = (snap.RemainingFraction, snap.ResetAt, snap.CapturedAt);
+                            }
+                            else
+                            {
+                                var remChanged = Math.Abs((snap.RemainingFraction ?? 0.0) - (prev.Remaining ?? 0.0)) >= 0.005;
+                                var resetChanged = snap.ResetAt != prev.ResetAt;
+                                var timePassed = (snap.CapturedAt - prev.CapturedAt).TotalHours >= 2.0;
+                                if (remChanged || resetChanged || timePassed)
+                                {
+                                    allQuotas.Add(snap);
+                                    lastSeenQuotas[quotaKey] = (snap.RemainingFraction, snap.ResetAt, snap.CapturedAt);
+                                }
                             }
                         }
                     }
@@ -87,10 +108,21 @@ public sealed class CodexJsonlParser
             warnings.Add($"无法读取 Codex 文件：{path}（{exception.Message}）");
         }
 
+        // 确保会话文件最后一行的最新配额快照必然被收录
+        foreach (var (key, (time, snap)) in latestQuotas)
+        {
+            if (lastSeenQuotas.TryGetValue(key, out var seen) && seen.CapturedAt != time)
+            {
+                allQuotas.Add(snap);
+            }
+        }
+
         var normalized = _normalizer.Normalize(snapshots);
         warnings.AddRange(normalized.Warnings);
         warningCount += normalized.Warnings.Count;
-        var quotaList = latestQuotas.Values.Select(v => v.Snapshot).OrderBy(item => item.ModelOrPoolId).ThenBy(item => item.WindowKind).ToList();
+        var quotaList = allQuotas.Count > 0
+            ? allQuotas.OrderBy(item => item.ModelOrPoolId).ThenBy(item => item.WindowKind).ThenBy(item => item.CapturedAt).ToList()
+            : latestQuotas.Values.Select(v => v.Snapshot).OrderBy(item => item.ModelOrPoolId).ThenBy(item => item.WindowKind).ToList();
         return new CodexParseResult(normalized.Buckets, sessionId, ProjectResolver.Normalize(projectPath), lastModel,
             warningCount, snapshots.Count > 0, coverageStart, warnings,
             quotaList, snapshots, normalized);
