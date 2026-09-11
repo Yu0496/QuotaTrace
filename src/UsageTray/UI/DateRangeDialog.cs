@@ -1,3 +1,4 @@
+using UsageTray.App;
 using UsageTray.Core;
 
 namespace UsageTray.UI;
@@ -15,13 +16,13 @@ public sealed class DateRangeDialog : Form
         AutoScaleDimensions = new SizeF(96F, 96F);
         Font = new Font("Segoe UI", 9F);
         Icon = AppIcon.Create();
-        Text = "选择日期范围";
+        Text = I18n.T("选择日期范围", "Select Date Range");
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
 
-        var textHeight = TextRenderer.MeasureText("开始日期", Font).Height;
+        var textHeight = TextRenderer.MeasureText(I18n.T("开始日期", "Start Date"), Font).Height;
         var controlHeight = Math.Max(34, textHeight + 12);
         var pickerWidth = Math.Max(145, TextRenderer.MeasureText("2026-08-19", Font).Width + 34);
         _from = CreatePicker(initialRange.From, pickerWidth, controlHeight);
@@ -29,23 +30,23 @@ public sealed class DateRangeDialog : Form
 
         var title = new Label
         {
-            Text = "选择要查看的本地日期范围",
+            Text = I18n.T("选择要查看的本地日期范围", "Select local date range to inspect"),
             AutoSize = true,
             Font = new Font(Font, FontStyle.Bold),
             Margin = new Padding(0, 0, 0, 8)
         };
-        var fromLabel = new Label { Text = "开始日期", AutoSize = true, TextAlign = ContentAlignment.MiddleLeft };
-        var toLabel = new Label { Text = "结束日期", AutoSize = true, TextAlign = ContentAlignment.MiddleLeft };
+        var fromLabel = new Label { Text = I18n.T("开始日期", "Start Date"), AutoSize = true, TextAlign = ContentAlignment.MiddleLeft };
+        var toLabel = new Label { Text = I18n.T("结束日期", "End Date"), AutoSize = true, TextAlign = ContentAlignment.MiddleLeft };
         var saveButton = new Button
         {
-            Text = "应用",
+            Text = I18n.T("应用", "Apply"),
             AutoSize = true,
             MinimumSize = new Size(76, controlHeight),
             Padding = new Padding(10, 2, 10, 2)
         };
         var cancelButton = new Button
         {
-            Text = "取消",
+            Text = I18n.T("取消", "Cancel"),
             DialogResult = DialogResult.Cancel,
             AutoSize = true,
             MinimumSize = new Size(76, controlHeight),
@@ -99,21 +100,21 @@ public sealed class DateRangeDialog : Form
         CustomFormat = "yyyy-MM-dd",
         Width = width,
         Height = height,
-        Value = date.ToDateTime(TimeOnly.MinValue),
-        Margin = new Padding(0)
+        Value = date.ToDateTime(TimeOnly.MinValue)
     };
 
     private void SaveRange()
     {
         var from = DateOnly.FromDateTime(_from.Value.Date);
         var to = DateOnly.FromDateTime(_to.Value.Date);
-        if (to < from)
+        if (from > to)
         {
-            MessageBox.Show(this, "结束日期不能早于开始日期。", "日期范围", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, I18n.T("开始日期不能晚于结束日期。", "Start date cannot be later than end date."), "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         SelectedRange = new DateRange(from, to);
         DialogResult = DialogResult.OK;
+        Close();
     }
 }

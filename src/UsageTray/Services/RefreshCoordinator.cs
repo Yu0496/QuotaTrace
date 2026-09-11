@@ -19,6 +19,7 @@ public sealed class RefreshCoordinator : IDisposable
 
     public DashboardSnapshot CurrentSnapshot { get; private set; }
     public PricingService Pricing => _pricing;
+    public AppSettings Settings => _settings;
     public event EventHandler<DashboardSnapshot>? SnapshotChanged;
 
     public RefreshCoordinator(IReadOnlyList<IUsageProvider> providers, AppSettingsStore settingsStore,
@@ -45,6 +46,9 @@ public sealed class RefreshCoordinator : IDisposable
             var warnings = new List<string>();
             foreach (var provider in _providers)
             {
+                if (provider.Kind == ProviderKind.Codex && !_settings.EnableCodex) continue;
+                if (provider.Kind == ProviderKind.Antigravity && !_settings.EnableAntigravity) continue;
+
                 try
                 {
                     var result = await provider.RefreshAsync(new RefreshContext(_settings, _repository, _pricing, forceFullScan), cancellationToken);
@@ -101,6 +105,9 @@ public sealed class RefreshCoordinator : IDisposable
         {
             current.StartWithWindows = settings.StartWithWindows;
             current.StartHidden = settings.StartHidden;
+            current.EnableCodex = settings.EnableCodex;
+            current.EnableAntigravity = settings.EnableAntigravity;
+            current.Language = settings.Language;
             current.RefreshSeconds = settings.RefreshSeconds;
             current.DataRetentionDays = settings.DataRetentionDays;
             current.ExtraCodexRoots = settings.ExtraCodexRoots;

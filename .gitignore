@@ -1,9 +1,35 @@
+# Build and Output
 **/bin/
 **/obj/
+publish/
+TestResults/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
 *.user
+*.userosscache
 *.suo
+*.userprefs
+*.DotSettings.user
+
+# Database & Lock files
 *.db
 *.db-shm
 *.db-wal
-.vs/
-publish/
+*.sqlite
+*.sqlite3
+
+# Logs & Diagnostics
+*.log
+*.tmp
+*.crash
+*.dump
+
+# Local / Private Artifacts and Audits
+其他/
+*.csv
+scratch/
+docs/videos/
+*.mp4

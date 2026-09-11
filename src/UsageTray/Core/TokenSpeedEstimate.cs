@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using UsageTray.App;
 
 namespace UsageTray.Core;
 
@@ -28,17 +29,17 @@ public sealed record TokenSpeedEstimate(
 
         if (UncachedPrefillTokensPerSecond.HasValue && UncachedPrefillTokensPerSecond.Value > 0)
         {
-            parts.Add($"未命中 ~{FormatRate(UncachedPrefillTokensPerSecond.Value)}/s");
+            parts.Add(I18n.Format("未命中 ~{0}/s", "Uncached ~{0}/s", FormatRate(UncachedPrefillTokensPerSecond.Value)));
         }
 
         if (CacheReadTokensPerSecond.HasValue && CacheReadTokensPerSecond.Value > 0)
         {
-            parts.Add($"命中 ~{FormatRate(CacheReadTokensPerSecond.Value)}/s");
+            parts.Add(I18n.Format("命中 ~{0}/s", "Hit ~{0}/s", FormatRate(CacheReadTokensPerSecond.Value)));
         }
 
         if (OutputTokensPerSecond.HasValue && OutputTokensPerSecond.Value > 0)
         {
-            parts.Add($"输出 ~{FormatRate(OutputTokensPerSecond.Value)}/s");
+            parts.Add(I18n.Format("输出 ~{0}/s", "Output ~{0}/s", FormatRate(OutputTokensPerSecond.Value)));
         }
 
         return parts.Count > 0 ? string.Join(" · ", parts) : "-";

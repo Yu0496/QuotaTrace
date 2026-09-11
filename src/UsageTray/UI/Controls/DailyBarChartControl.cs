@@ -11,7 +11,7 @@ public sealed class DailyBarChartControl : Control
     {
         DoubleBuffered = true;
         BackColor = Color.White;
-        MinimumSize = new Size(0, 150);
+        MinimumSize = new Size(0, 50);
     }
 
     public void SetData(IReadOnlyList<DailyUsageView> items)

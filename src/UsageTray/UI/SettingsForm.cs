@@ -8,6 +8,9 @@ public sealed class SettingsForm : Form
     private readonly AppSettingsStore _settingsStore;
     private readonly RefreshCoordinator _coordinator;
     private readonly StartupManager _startupManager;
+    private readonly ComboBox _languageCombo;
+    private readonly CheckBox _enableCodex;
+    private readonly CheckBox _enableAntigravity;
     private readonly CheckBox _startup;
     private readonly NumericUpDown _refresh;
     private readonly NumericUpDown _retention;
@@ -23,20 +26,55 @@ public sealed class SettingsForm : Form
         AutoScaleMode = AutoScaleMode.Font;
         Font = new Font("Segoe UI", 9F);
         Icon = AppIcon.Create();
-        Text = "UsageTray 设置";
+        Text = I18n.T("QuotaTrace 设置", "QuotaTrace Settings");
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         MinimizeBox = false;
 
-        var textHeight = TextRenderer.MeasureText("刷新间隔（秒）", Font).Height;
+        var textHeight = TextRenderer.MeasureText(I18n.T("刷新间隔（秒）", "Refresh Interval (Seconds)"), Font).Height;
         var controlHeight = Math.Max(28, textHeight + 8);
         var buttonHeight = Math.Max(30, textHeight + 10);
         var numericWidth = Math.Max(90, TextRenderer.MeasureText("0000", Font).Width + 40);
 
+        _languageCombo = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = Math.Max(220, (int)(220 * (DeviceDpi / 96f))),
+            Height = controlHeight,
+            Margin = new Padding(0, 2, 0, 8)
+        };
+        _languageCombo.Items.AddRange([
+            I18n.T("自动 (跟随系统) / Auto", "Auto (System) / 自动"),
+            "简体中文 (Simplified Chinese)",
+            "English"
+        ]);
+        _languageCombo.SelectedIndex = settings.Language?.ToLowerInvariant() switch
+        {
+            "zh-cn" or "zh" => 1,
+            "en-us" or "en" => 2,
+            _ => 0
+        };
+
+        _enableCodex = new CheckBox
+        {
+            Text = I18n.T("启用 OpenAI Codex 监测", "Enable OpenAI Codex Monitoring"),
+            Checked = settings.EnableCodex,
+            AutoSize = true,
+            Margin = new Padding(0, 4, 0, 4)
+        };
+
+        _enableAntigravity = new CheckBox
+        {
+            Text = I18n.T("启用 Google Antigravity 监测", "Enable Google Antigravity Monitoring"),
+            Checked = settings.EnableAntigravity,
+            AutoSize = true,
+            Margin = new Padding(0, 4, 0, 8)
+        };
+
         _startup = new CheckBox
         {
-            Text = "开机启动",
+            Text = I18n.T("开机启动", "Start with Windows"),
             Checked = settings.StartWithWindows,
             AutoSize = true,
             Margin = new Padding(0, 4, 0, 8)
@@ -72,7 +110,7 @@ public sealed class SettingsForm : Form
 
         var title = new Label
         {
-            Text = "常规配置",
+            Text = I18n.T("常规配置", "General Settings"),
             AutoSize = true,
             Font = new Font(Font, FontStyle.Bold),
             Margin = new Padding(0, 0, 0, 6)
@@ -80,7 +118,7 @@ public sealed class SettingsForm : Form
 
         var pricingTitle = new Label
         {
-            Text = "模型定价",
+            Text = I18n.T("模型定价", "Model Pricing"),
             AutoSize = true,
             Font = new Font(Font, FontStyle.Bold),
             Margin = new Padding(0, 12, 0, 6)
@@ -88,7 +126,7 @@ public sealed class SettingsForm : Form
 
         var viewPricingButton = new Button
         {
-            Text = "查看当前所有模型价格",
+            Text = I18n.T("查看当前所有模型价格", "View Current Model Prices"),
             AutoSize = true,
             Height = buttonHeight,
             Padding = new Padding(10, 2, 10, 2),
@@ -102,7 +140,7 @@ public sealed class SettingsForm : Form
 
         var pricingButton = new Button
         {
-            Text = "更新内置参考基准",
+            Text = I18n.T("更新内置参考基准", "Update Built-in Benchmarks"),
             AutoSize = true,
             Height = buttonHeight,
             Padding = new Padding(10, 2, 10, 2),
@@ -118,15 +156,18 @@ public sealed class SettingsForm : Form
                 var result = await _coordinator.UpdatePricingAsync();
                 if (IsDisposed || Disposing || !IsHandleCreated) return;
                 var message = result.UpdatedCount > 0
-                    ? $"已更新内置参考基准，共 {result.UpdatedCount} 条价格规则（{result.FetchedAt.ToLocalTime():HH:mm:ss}）。"
-                    : "已使用当前软件内置基准，自定义规则保留。";
-                if (result.Warnings.Count > 0) message += $"{Environment.NewLine}提示：{result.Warnings[0]}";
-                MessageBox.Show(this, message, "UsageTray", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    ? I18n.Format(
+                        "已更新内置参考基准，共 {0} 条价格规则（{1:HH:mm:ss}）。",
+                        "Updated built-in benchmarks, {0} rules total ({1:HH:mm:ss}).",
+                        result.UpdatedCount, result.FetchedAt.ToLocalTime())
+                    : I18n.T("已使用当前软件内置基准，自定义规则保留。", "Already using current built-in benchmarks, custom rules preserved.");
+                if (result.Warnings.Count > 0) message += $"{Environment.NewLine}{I18n.T("提示：", "Note: ")}{result.Warnings[0]}";
+                MessageBox.Show(this, message, "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception exception)
             {
                 if (IsDisposed || Disposing || !IsHandleCreated) return;
-                MessageBox.Show(this, $"获取价格失败：{exception.Message}", "UsageTray", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, I18n.Format("获取价格失败：{0}", "Failed to update pricing: {0}", exception.Message), "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally
             {
@@ -147,7 +188,9 @@ public sealed class SettingsForm : Form
 
         var pricingNote = new Label
         {
-            Text = "• 可查看 Antigravity 与 Codex 各模型的输入、缓存读写、输出单价及长上下文规则。\r\n• 点击“更新内置参考基准”可合并软件附带的已核对基准；不会用 API 促销价覆盖订阅参考口径。",
+            Text = I18n.T(
+                "• 可查看 Antigravity 与 Codex 各模型的输入、缓存读写、输出单价及长上下文规则。\r\n• 点击“更新内置参考基准”可合并软件附带的已核对基准；不会用 API 促销价覆盖订阅参考口径。",
+                "• View input, cache read/write, output rates and long-context rules for Antigravity and Codex.\r\n• Click 'Update Built-in Benchmarks' to merge verified benchmarks; API promotional prices will not overwrite subscription benchmarks."),
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
             Margin = new Padding(0, 4, 0, 10)
@@ -155,7 +198,7 @@ public sealed class SettingsForm : Form
 
         var reviewNoteTitle = new Label
         {
-            Text = "Reserve / Auto-Review 计量说明",
+            Text = I18n.T("Reserve / Auto-Review 计量说明", "Reserve / Auto-Review Pricing Notes"),
             AutoSize = true,
             Font = new Font(Font, FontStyle.Bold),
             Margin = new Padding(0, 10, 0, 4)
@@ -163,8 +206,9 @@ public sealed class SettingsForm : Form
 
         var reviewNote = new Label
         {
-            Text = "• Reserve 与 Auto-Review 按用户约定使用 GPT-5.6 Luna 参考价：输入 $0.2 / 缓存读取 $0.02 / 缓存创建 $0.25 / 输出 $1.2（每百万 Token）；长上下文及 Fast 档位同 Luna。\r\n• 这是本软件的参考计量约定，底层模型身份及官方实际扣减仍存在不确定性。Spark 维持未定价。\r\n• 本软件统计订阅消耗参考价值：Token × 非促销基准价；Codex Fast 采用订阅倍率。金额并非实际扣费或订阅余额。\r\n• 额度来自官方快照；满额参考金额只能基于同周期本机用量样本外推，其他设备、云端任务及缺失日志都会影响结果。",
-
+            Text = I18n.T(
+                "• Reserve 与 Auto-Review 按约定使用 GPT-5.6 Luna 参考价：输入 $0.2 / 缓存读取 $0.02 / 缓存创建 $0.25 / 输出 $1.2（每百万 Token）；长上下文及 Fast 档位同 Luna。\r\n• 这是本软件的参考计量约定，底层模型身份及官方实际扣减仍存在不确定性。Spark 维持未定价。\r\n• 本软件统计订阅消耗参考价值：Token × 非促销基准价；Codex Fast 采用订阅倍率。金额并非实际扣费或订阅余额。\r\n• 额度来自官方快照；满额参考金额只能基于同周期本机用量样本外推，其他设备、云端任务及缺失日志都会影响结果。",
+                "• Reserve and Auto-Review use GPT-5.6 Luna benchmark: Input $0.2 / CacheRead $0.02 / CacheCreation $0.25 / Output $1.2 per 1M tokens.\r\n• This is a local benchmark convention; underlying models and official consumption carry uncertainty. Spark remains unpriced.\r\n• Subscription reference values reflect estimated equivalent worth, not actual bills or account balances.\r\n• Quotas reflect official snapshots; full projections are estimated solely from local samples."),
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
             Margin = new Padding(0, 4, 0, 10)
@@ -172,7 +216,7 @@ public sealed class SettingsForm : Form
 
         var speedNoteTitle = new Label
         {
-            Text = "速率反推原理说明",
+            Text = I18n.T("速率反推原理说明", "Speed Estimation Methodology"),
             AutoSize = true,
             Font = new Font(Font, FontStyle.Bold),
             Margin = new Padding(0, 10, 0, 4)
@@ -180,7 +224,9 @@ public sealed class SettingsForm : Form
 
         var speedNote = new Label
         {
-            Text = "• 统计机制：基于本地会话记录中每个 Turn 的时间戳差分与 Token 增量反推。\r\n• 未命中 Prefill 速度：针对未命中输入，计算冷启动 Prompt 矩阵计算吞吐。\r\n• 命中 Prefill 速度：针对命中缓存的输入，计算 KV Cache 检索与加载吞吐。\r\n• 输出速度：计算模型自回归逐字生成（含思考过程与正文）的平均速率。\r\n• 局限性说明：该指标为客户端视角端到端估算，包含了网络 RTT、TLS 握手、云端排队调度及客户端写入缓冲等非模型计算耗时，因此数值不一定绝对准确且通常低于服务端的纯硬件物理速度，仅供性能参考与趋势对比。",
+            Text = I18n.T(
+                "• 统计机制：基于本地会话记录中每个 Turn 的时间戳差分与 Token 增量反推。\r\n• 未命中 Prefill 速度：针对未命中输入，计算冷启动 Prompt 矩阵计算吞吐。\r\n• 命中 Prefill 速度：针对命中缓存的输入，计算 KV Cache 检索与加载吞吐。\r\n• 输出速度：计算模型自回归逐字生成（含思考过程与正文）的平均速率。\r\n• 局限性说明：该指标为客户端视角端到端估算，包含了网络 RTT、TLS 握手、云端排队调度及客户端写入缓冲等非模型计算耗时，因此数值不一定绝对准确且通常低于服务端的纯硬件物理速度，仅供性能参考与趋势对比。",
+                "• Method: Derived from turn-by-turn timestamp differences and token deltas in local session records.\r\n• Uncached Prefill Speed: Cold prompt matrix throughput.\r\n• Cached Prefill Speed: KV Cache retrieval throughput.\r\n• Output Speed: Autoregressive decoding rate (including reasoning and text).\r\n• Limitations: End-to-end client-side estimate that includes network RTT, TLS, and buffering; provided for trend and performance comparisons."),
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
             Margin = new Padding(0, 4, 0, 10)
@@ -188,11 +234,14 @@ public sealed class SettingsForm : Form
 
         var lastScanText = settings.LastFullScanUtc.HasValue
             ? settings.LastFullScanUtc.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-            : "尚未执行（将自动调度）";
+            : I18n.T("尚未执行（将自动调度）", "Not yet executed (will auto-schedule)");
 
         var note = new Label
         {
-            Text = $"• 普通刷新只处理新增或发生变化的文件；程序启动时默认增量扫描，每 7 天自动执行一次全量校准。\r\n• 上次全量扫描时间：{lastScanText}。\r\n• 如需重新解析全部历史记录，请点击下方的“全量重新读取”。",
+            Text = I18n.Format(
+                "• 普通刷新只处理新增或发生变化的文件；程序启动时默认增量扫描，每 7 天自动执行一次全量校准。\r\n• 上次全量扫描时间：{0}。\r\n• 如需重新解析全部历史记录，请点击下方的“全量重新读取”。",
+                "• Normal refresh only inspects modified files; full calibration runs automatically every 7 days.\r\n• Last full scan: {0}.\r\n• Click 'Perform Full Scan' below to re-parse all local records.",
+                lastScanText),
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
             Margin = new Padding(0, 8, 0, 6)
@@ -200,42 +249,53 @@ public sealed class SettingsForm : Form
 
         var saveButton = new Button
         {
-            Text = "保存",
-            DialogResult = DialogResult.OK,
-            Width = Math.Max(80, TextRenderer.MeasureText("保存", Font).Width + 28),
+            Text = I18n.T("保存", "Save"),
+            Width = Math.Max(80, TextRenderer.MeasureText(I18n.T("保存", "Save"), Font).Width + 28),
             Height = buttonHeight
         };
         var cancelButton = new Button
         {
-            Text = "取消",
+            Text = I18n.T("取消", "Cancel"),
             DialogResult = DialogResult.Cancel,
-            Width = Math.Max(80, TextRenderer.MeasureText("取消", Font).Width + 28),
+            Width = Math.Max(80, TextRenderer.MeasureText(I18n.T("取消", "Cancel"), Font).Width + 28),
             Height = buttonHeight
         };
         var fullScanButton = new Button
         {
-            Text = "全量重新读取",
-            Width = Math.Max(120, TextRenderer.MeasureText("全量重新读取", Font).Width + 24),
+            Text = I18n.T("全量重新读取", "Perform Full Scan"),
+            Width = Math.Max(120, TextRenderer.MeasureText(I18n.T("全量重新读取", "Perform Full Scan"), Font).Width + 24),
             Height = buttonHeight
         };
 
-        saveButton.Click += (_, _) => SaveSettings();
+        saveButton.Click += (_, _) =>
+        {
+            if (SaveSettings())
+            {
+                DialogResult = DialogResult.OK;
+                Close();
+            }
+        };
+
         fullScanButton.Click += async (_, _) =>
         {
             if (!fullScanButton.Enabled) return;
-            SaveSettings();
+            if (!SaveSettings()) return;
             fullScanButton.Enabled = false;
             try
             {
                 await _coordinator.RefreshAsync(true);
                 if (IsDisposed || Disposing || !IsHandleCreated) return;
-                note.Text = $"• 普通刷新只处理新增或发生变化的文件；程序启动时默认增量扫描，每 7 天自动执行一次全量校准。\r\n• 上次全量扫描时间：{DateTime.Now:yyyy-MM-dd HH:mm}。\r\n• 如需重新解析全部历史记录，请点击下方的“全量重新读取”。";
-                MessageBox.Show(this, "全量重新读取完成。之后的自动刷新会继续使用增量模式。", "UsageTray", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                var curScan = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+                note.Text = I18n.Format(
+                    "• 普通刷新只处理新增或发生变化的文件；程序启动时默认增量扫描，每 7 天自动执行一次全量校准。\r\n• 上次全量扫描时间：{0}。\r\n• 如需重新解析全部历史记录，请点击下方的“全量重新读取”。",
+                    "• Normal refresh only inspects modified files; full calibration runs automatically every 7 days.\r\n• Last full scan: {0}.\r\n• Click 'Perform Full Scan' below to re-parse all local records.",
+                    curScan);
+                MessageBox.Show(this, I18n.T("全量重新读取完成。之后的自动刷新会继续使用增量模式。", "Full scan completed. Automatic refreshes will continue in incremental mode."), "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception exception)
             {
                 if (IsDisposed || Disposing || !IsHandleCreated) return;
-                MessageBox.Show(this, $"全量重新读取失败：{exception.Message}", "UsageTray", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, I18n.Format("全量重新读取失败：{0}", "Full scan failed: {0}", exception.Message), "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally
             {
@@ -243,7 +303,6 @@ public sealed class SettingsForm : Form
             }
         };
 
-        // 底部固定操作栏
         var bottomPanel = new Panel
         {
             Dock = DockStyle.Bottom,
@@ -276,23 +335,24 @@ public sealed class SettingsForm : Form
         bottomPanel.Controls.Add(leftActions);
         bottomPanel.Controls.Add(rightActions);
 
-        // Numeric fields panel
+        // General settings table
         var numericTable = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
             ColumnCount = 2,
-            RowCount = 2,
+            RowCount = 3,
             AutoSize = true,
             Margin = new Padding(0, 0, 0, 8)
         };
         numericTable.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         numericTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        numericTable.Controls.Add(CreateLabel("刷新间隔（秒）："), 0, 0);
-        numericTable.Controls.Add(_refresh, 1, 0);
-        numericTable.Controls.Add(CreateLabel("数据保留天数："), 0, 1);
-        numericTable.Controls.Add(_retention, 1, 1);
+        numericTable.Controls.Add(CreateLabel(I18n.T("语言 / Language：", "Language / 语言：")), 0, 0);
+        numericTable.Controls.Add(_languageCombo, 1, 0);
+        numericTable.Controls.Add(CreateLabel(I18n.T("刷新间隔（秒）：", "Refresh Interval (Sec):")), 0, 1);
+        numericTable.Controls.Add(_refresh, 1, 1);
+        numericTable.Controls.Add(CreateLabel(I18n.T("数据保留天数：", "Retention (Days):")), 0, 2);
+        numericTable.Controls.Add(_retention, 1, 2);
 
-        // 可滚动的设置内容容器
         var contentPanel = new Panel
         {
             Dock = DockStyle.Fill,
@@ -305,39 +365,45 @@ public sealed class SettingsForm : Form
         {
             Dock = DockStyle.Top,
             ColumnCount = 1,
-            RowCount = 13,
+            RowCount = 16,
             AutoSize = true,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
             BackColor = SystemColors.Control
         };
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // title
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // startup
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // numericTable
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // extraLabel
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 85)); // extraRoots
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // pricingTitle
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // pricingButtonsPanel
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // pricingNote
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // reviewNoteTitle
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // reviewNote
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // speedNoteTitle
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // speedNote
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // note
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 0: title
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 1: provider label
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 2: enableCodex
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 3: enableAntigravity
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 4: startup
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 5: numericTable
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 6: extraLabel
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 85)); // 7: extraRoots
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 8: pricingTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 9: pricingButtonsPanel
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 10: pricingNote
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 11: reviewNoteTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 12: reviewNote
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 13: speedNoteTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 14: speedNote
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 15: note
 
         mainPanel.Controls.Add(title, 0, 0);
-        mainPanel.Controls.Add(_startup, 0, 1);
-        mainPanel.Controls.Add(numericTable, 0, 2);
-        mainPanel.Controls.Add(CreateLabel("额外 Codex sessions 目录（每行一个）："), 0, 3);
-        mainPanel.Controls.Add(_extraRoots, 0, 4);
-        mainPanel.Controls.Add(pricingTitle, 0, 5);
-        mainPanel.Controls.Add(pricingButtonsPanel, 0, 6);
-        mainPanel.Controls.Add(pricingNote, 0, 7);
-        mainPanel.Controls.Add(reviewNoteTitle, 0, 8);
-        mainPanel.Controls.Add(reviewNote, 0, 9);
-        mainPanel.Controls.Add(speedNoteTitle, 0, 10);
-        mainPanel.Controls.Add(speedNote, 0, 11);
-        mainPanel.Controls.Add(note, 0, 12);
+        mainPanel.Controls.Add(CreateLabel(I18n.T("监测提供商 (至少开启一项)：", "Monitored Providers (Enable at least one):")), 0, 1);
+        mainPanel.Controls.Add(_enableCodex, 0, 2);
+        mainPanel.Controls.Add(_enableAntigravity, 0, 3);
+        mainPanel.Controls.Add(_startup, 0, 4);
+        mainPanel.Controls.Add(numericTable, 0, 5);
+        mainPanel.Controls.Add(CreateLabel(I18n.T("额外 Codex sessions 目录（每行一个）：", "Extra Codex sessions directories (one per line):")), 0, 6);
+        mainPanel.Controls.Add(_extraRoots, 0, 7);
+        mainPanel.Controls.Add(pricingTitle, 0, 8);
+        mainPanel.Controls.Add(pricingButtonsPanel, 0, 9);
+        mainPanel.Controls.Add(pricingNote, 0, 10);
+        mainPanel.Controls.Add(reviewNoteTitle, 0, 11);
+        mainPanel.Controls.Add(reviewNote, 0, 12);
+        mainPanel.Controls.Add(speedNoteTitle, 0, 13);
+        mainPanel.Controls.Add(speedNote, 0, 14);
+        mainPanel.Controls.Add(note, 0, 15);
 
         contentPanel.Controls.Add(mainPanel);
 
@@ -389,9 +455,25 @@ public sealed class SettingsForm : Form
         Margin = new Padding(0, 4, 8, 4)
     };
 
-    private void SaveSettings()
+    private bool SaveSettings()
     {
+        if (!_enableCodex.Checked && !_enableAntigravity.Checked)
+        {
+            MessageBox.Show(this,
+                I18n.T("必须至少勾选一个监控提供商（Codex 或 Antigravity）。", "At least one provider must be enabled (Codex or Antigravity)."),
+                "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+
         var settings = _settingsStore.Load();
+        settings.EnableCodex = _enableCodex.Checked;
+        settings.EnableAntigravity = _enableAntigravity.Checked;
+        settings.Language = _languageCombo.SelectedIndex switch
+        {
+            1 => "zh-CN",
+            2 => "en-US",
+            _ => "auto"
+        };
         settings.StartWithWindows = _startup.Checked;
         settings.RefreshSeconds = (int)_refresh.Value;
         settings.DataRetentionDays = (int)_retention.Value;
@@ -402,8 +484,8 @@ public sealed class SettingsForm : Form
             settings.SettingsWindowHeight = ClientSize.Height;
         }
         try { _startupManager.SetEnabled(settings.StartWithWindows); } catch { }
+        I18n.SetLanguage(settings.Language);
         _coordinator.UpdateSettings(settings);
+        return true;
     }
 }
-
-

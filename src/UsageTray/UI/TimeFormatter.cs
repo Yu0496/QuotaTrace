@@ -1,4 +1,6 @@
-﻿namespace UsageTray.UI;
+using UsageTray.App;
+
+namespace UsageTray.UI;
 
 public static class TimeFormatter
 {
@@ -12,7 +14,7 @@ public static class TimeFormatter
 
         if (diff <= TimeSpan.Zero)
         {
-            return diff.TotalHours < -1 ? "已重置" : "即将重置";
+            return diff.TotalHours < -1 ? I18n.T("已重置", "Reset") : I18n.T("即将重置", "Resetting soon");
         }
 
         var days = diff.Days;
@@ -22,27 +24,27 @@ public static class TimeFormatter
         if (days > 0)
         {
             if (hours > 0 && minutes > 0)
-                return $"{days}天{hours}小时{minutes}分后";
+                return I18n.Format("{0}天{1}小时{2}分后", "{0}d {1}h {2}m left", days, hours, minutes);
             if (hours > 0)
-                return $"{days}天{hours}小时后";
+                return I18n.Format("{0}天{1}小时后", "{0}d {1}h left", days, hours);
             if (minutes > 0)
-                return $"{days}天{minutes}分后";
-            return $"{days}天后";
+                return I18n.Format("{0}天{1}分后", "{0}d {1}m left", days, minutes);
+            return I18n.Format("{0}天后", "{0}d left", days);
         }
 
         if (hours > 0)
         {
             if (minutes > 0)
-                return $"{hours}小时{minutes}分后";
-            return $"{hours}小时后";
+                return I18n.Format("{0}小时{1}分后", "{0}h {1}m left", hours, minutes);
+            return I18n.Format("{0}小时后", "{0}h left", hours);
         }
 
         if (minutes > 0)
         {
-            return $"{minutes}分后";
+            return I18n.Format("{0}分后", "{0}m left", minutes);
         }
 
-        return "不到1分钟后";
+        return I18n.T("不到1分钟后", "< 1m left");
     }
 
     /// <summary>
@@ -50,10 +52,11 @@ public static class TimeFormatter
     /// </summary>
     public static string FormatResetWithRelative(DateTimeOffset? resetAt, string dateFormat = "MM-dd HH:mm", DateTimeOffset? now = null)
     {
-        if (!resetAt.HasValue) return "未知";
+        if (!resetAt.HasValue) return I18n.T("未知", "Unknown");
         var local = resetAt.Value.ToLocalTime();
         var dateStr = local.ToString(dateFormat);
         var relStr = FormatRelativeFuture(resetAt.Value, now);
-        return string.IsNullOrEmpty(relStr) ? dateStr : $"{dateStr}，{relStr}";
+        var sep = I18n.T("，", ", ");
+        return string.IsNullOrEmpty(relStr) ? dateStr : $"{dateStr}{sep}{relStr}";
     }
 }

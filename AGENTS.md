@@ -5,4 +5,4 @@
 处理开发、调试或审查任务前，先阅读位于根目录的 `CODE_INDEX.md`（系统代码总框架与模块索引）快速定位，但仍以实际源码为准。涉及模块结构、职责、路径或关键调用关系变化时同步修改该文档。
 
 ## 自动本地发布
-每次完成代码修改与功能验证后，必须自动执行 Release 发布（`dotnet publish -c Release`，当前环境使用 `& "C:\Users\xiong\.dotnet8\dotnet.exe" publish -c Release`），确保本地交付产物目录（`publish`）始终保持最新。
+每次完成代码修改与功能验证后，必须自动执行 Release 发布（`dotnet publish -c Release`，当前环境可使用 `& "$env:USERPROFILE\.dotnet8\dotnet.exe" publish -c Release`），确保本地交付产物目录（`publish`）始终保持最新。

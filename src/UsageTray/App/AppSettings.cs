@@ -7,6 +7,9 @@ public sealed class AppSettings
 {
     public bool StartWithWindows { get; set; }
     public bool StartHidden { get; set; } = true;
+    public bool EnableCodex { get; set; } = true;
+    public bool EnableAntigravity { get; set; } = true;
+    public string Language { get; set; } = "auto";
     public int RefreshSeconds { get; set; } = 90;
     public int DataRetentionDays { get; set; } = 90;
     public List<string> ExtraCodexRoots { get; set; } = [];
@@ -23,6 +26,17 @@ public sealed class AppSettings
 
     public void Normalize()
     {
+        if (!EnableCodex && !EnableAntigravity)
+        {
+            EnableCodex = true;
+            EnableAntigravity = true;
+        }
+        Language = Language?.Trim().ToLowerInvariant() switch
+        {
+            "zh" or "zh-cn" or "zh-hans" => "zh-CN",
+            "en" or "en-us" => "en-US",
+            _ => "auto"
+        };
         RefreshSeconds = RefreshSeconds is 60 or 90 or 120 or 300 ? RefreshSeconds : 90;
         DataRetentionDays = Math.Clamp(DataRetentionDays, 7, 3650);
         ExtraCodexRoots = ExtraCodexRoots

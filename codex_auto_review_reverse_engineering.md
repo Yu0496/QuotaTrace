@@ -179,7 +179,7 @@ $$\text{Implied Multiplier} = \frac{\text{Observed Quota Residual}}{\text{Predic
 
 ---
 
-## 9. AI Usage Tray 落地配置建议
+## 9. QuotaTrace 落地配置建议
 
 基于逆推数据，给出如下可以直接写入系统的建议：
 

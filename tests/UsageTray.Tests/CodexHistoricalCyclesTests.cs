@@ -115,7 +115,7 @@ public sealed class CodexHistoricalCyclesTests
     [Fact]
     public void CodexHistoryControl_AppliesDataAndFiltersCorrectly()
     {
-        var control = new CodexHistoryControl();
+        using var control = new CodexHistoryControl();
         var now = DateTimeOffset.UtcNow;
         var cycles = new List<CodexHistoricalCycleView>
         {
@@ -154,8 +154,8 @@ public sealed class CodexHistoricalCyclesTests
         control.DrawToBitmap(bmp, new Rectangle(0, 0, 1000, 500));
         Assert.NotNull(bmp);
 
-        var scratchDir = @"C:\Users\xiong\.gemini\antigravity\brain\131a4c07-6f64-4a62-88ae-4bec3e837180\scratch";
-        if (Directory.Exists(scratchDir))
+        var scratchDir = Environment.GetEnvironmentVariable("TEST_PREVIEW_DIR");
+        if (!string.IsNullOrWhiteSpace(scratchDir) && Directory.Exists(scratchDir))
         {
             bmp.Save(Path.Combine(scratchDir, "codex_history_ui_preview.png"), System.Drawing.Imaging.ImageFormat.Png);
         }

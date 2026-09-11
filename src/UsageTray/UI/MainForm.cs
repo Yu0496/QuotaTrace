@@ -11,6 +11,8 @@ public sealed class MainForm : Form
     private readonly AppSettingsStore _settingsStore;
     private readonly ComboBox _providerCombo;
     private readonly ComboBox _rangeCombo;
+    private readonly Button _refreshButton;
+    private readonly Button _settingsButton;
     private readonly Label _codexApiValue;
     private readonly Label _codexCycleNote;
     private readonly Label _antigravityApiValue;
@@ -23,6 +25,13 @@ public sealed class MainForm : Form
     private readonly Label _cacheCreationValue;
     private readonly Label _cacheHitRateValue;
     private readonly Label _speedEstimateValue;
+    private readonly Label _uncachedInputLabel;
+    private readonly Label _cacheCreationLabel;
+    private readonly Label _cacheHitRateLabel;
+    private readonly Label _speedEstimateLabel;
+    private readonly Label _chartTitle;
+    private readonly Label _providerFieldLabel;
+    private readonly Label _rangeFieldLabel;
     private readonly Label _status;
     private readonly ToolTip _toolTip;
     private readonly DataGridView _models;
@@ -30,9 +39,16 @@ public sealed class MainForm : Form
     private readonly DailyBarChartControl _chart;
     private readonly QuotaSummaryControl _quotaControl;
     private readonly CodexHistoryControl _codexHistory;
+    private readonly TabControl _tabs;
+    private readonly TabPage _modelPage;
+    private readonly TabPage _projectPage;
+    private readonly TabPage _quotaPage;
+    private readonly TabPage _codexHistoryPage;
     private DateRange _customRange;
     private int _previousRangeIndex;
     private bool _ignoreRangeSelection;
+    private bool _isInitializing = true;
+    private int _loadSequence;
 
     public MainForm(RefreshCoordinator coordinator, AppSettingsStore settingsStore)
     {
@@ -40,17 +56,18 @@ public sealed class MainForm : Form
         _settingsStore = settingsStore;
         _customRange = DateRange.LastDays(7);
         _previousRangeIndex = 4;
+        DoubleBuffered = true;
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);
         Font = new Font("Segoe UI", 9F);
         Icon = AppIcon.Create();
-        Text = "AI Usage Tray";
+        Text = "QuotaTrace";
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(780, 560);
         MinimumSize = new Size(740, 500);
         FormClosing += (_, e) => { e.Cancel = true; Hide(); };
 
-        var textHeight = TextRenderer.MeasureText("刷新", Font).Height;
+        var textHeight = TextRenderer.MeasureText(I18n.T("刷新", "Refresh"), Font).Height;
         var buttonHeight = Math.Max(34, textHeight + 12);
         var topHeight = buttonHeight + 18;
         var controlVerticalOffset = Math.Max(0, (buttonHeight - textHeight) / 2);
@@ -58,51 +75,54 @@ public sealed class MainForm : Form
         _providerCombo = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = Math.Max(95, TextRenderer.MeasureText("Antigravity", Font).Width + 36),
+            Width = Math.Max(110, TextRenderer.MeasureText("Antigravity", Font).Width + 36),
             Height = buttonHeight,
             Margin = new Padding(0, 0, 8, 0)
         };
-        _providerCombo.Items.AddRange(["全部", "Codex", "Antigravity"]);
-        _providerCombo.SelectedIndex = 0;
+
         _rangeCombo = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = Math.Max(130, TextRenderer.MeasureText("本次周额度", Font).Width + 36),
+            Width = Math.Max(150, TextRenderer.MeasureText(I18n.T("本次周额度", "Current Weekly Cycle"), Font).Width + 36),
             Height = buttonHeight,
             Margin = new Padding(0, 0, 8, 0)
         };
-        _rangeCombo.Items.AddRange(["今天", "7天", "30天", "本月", "本次周额度", "全部", "自定义…"]);
-        _rangeCombo.SelectedIndex = 4;
 
-        var refresh = new Button
+        _refreshButton = new Button
         {
-            Text = "刷新",
-            Width = Math.Max(64, TextRenderer.MeasureText("刷新", Font).Width + 24),
+            Text = I18n.T("刷新", "Refresh"),
+            Width = Math.Max(64, TextRenderer.MeasureText(I18n.T("刷新", "Refresh"), Font).Width + 24),
             Height = buttonHeight,
             Margin = new Padding(0, 0, 6, 0),
             AutoSize = false,
             Padding = new Padding(8, 2, 8, 2)
         };
-        refresh.Click += async (_, _) => await RefreshViewAsync(false);
-        var settingsButton = new Button
+        _refreshButton.Click += async (_, _) => await RefreshViewAsync(false);
+
+        _settingsButton = new Button
         {
-            Text = "设置",
-            Width = Math.Max(64, TextRenderer.MeasureText("设置", Font).Width + 24),
+            Text = I18n.T("设置", "Settings"),
+            Width = Math.Max(64, TextRenderer.MeasureText(I18n.T("设置", "Settings"), Font).Width + 24),
             Height = buttonHeight,
             Margin = new Padding(0),
             AutoSize = false,
             Padding = new Padding(8, 2, 8, 2)
         };
-        settingsButton.Click += (_, _) =>
+        _settingsButton.Click += (_, _) =>
         {
             using var form = new SettingsForm(_settingsStore, _coordinator);
             form.ShowDialog(this);
+            RefreshProviderAndRangeOptions();
+            ApplyCurrentSelection();
         };
+
         _toolTip = new ToolTip();
-        _toolTip.SetToolTip(refresh, "增量刷新：仅重新解析新增或发生变化的本地记录。程序启动时会自动全量读取一次；全量重读请到设置中执行。");
-        _toolTip.SetToolTip(_rangeCombo, "选择自定义…后填写开始日期和结束日期，按本地日历统计。");
+
         _providerCombo.SelectedIndexChanged += (_, _) => ApplyCurrentSelection();
         _rangeCombo.SelectedIndexChanged += (_, _) => HandleRangeSelectionChanged();
+
+        _providerFieldLabel = FieldLabel(I18n.T("提供商", "Provider"), controlVerticalOffset);
+        _rangeFieldLabel = FieldLabel(I18n.T("日期", "Date"), controlVerticalOffset);
 
         var top = new FlowLayoutPanel
         {
@@ -113,9 +133,9 @@ public sealed class MainForm : Form
             FlowDirection = FlowDirection.LeftToRight
         };
         top.Controls.AddRange([
-            FieldLabel("Provider", controlVerticalOffset), _providerCombo,
-            FieldLabel("日期", controlVerticalOffset), _rangeCombo,
-            refresh, settingsButton
+            _providerFieldLabel, _providerCombo,
+            _rangeFieldLabel, _rangeCombo,
+            _refreshButton, _settingsButton
         ]);
 
         var noteFont = new Font(Font.FontFamily, 8.5F, FontStyle.Regular);
@@ -132,7 +152,7 @@ public sealed class MainForm : Form
         };
         _codexCycleNote = new Label
         {
-            Text = "周期：—",
+            Text = I18n.T("周期：—", "Cycle: —"),
             Dock = DockStyle.Fill,
             AutoSize = false,
             AutoEllipsis = true,
@@ -152,7 +172,7 @@ public sealed class MainForm : Form
         };
         _antigravityCycleNote = new Label
         {
-            Text = "周期：—",
+            Text = I18n.T("周期：—", "Cycle: —"),
             Dock = DockStyle.Fill,
             AutoSize = false,
             AutoEllipsis = true,
@@ -181,13 +201,23 @@ public sealed class MainForm : Form
         _inputValue = MetricLabel();
         _cachedValue = MetricLabel();
         _outputValue = MetricLabel();
+        _uncachedInputValue = InlineMetricLabel();
         _cacheCreationValue = InlineMetricLabel();
         _cacheHitRateValue = InlineMetricLabel();
-        _speedEstimateValue = InlineMetricLabel();
-        _speedEstimateValue.AutoEllipsis = true;
+        _speedEstimateValue = new Label
+        {
+            Text = "—",
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = Font,
+            ForeColor = Color.FromArgb(30, 41, 59),
+            Padding = new Padding(2, 0, 0, 0)
+        };
 
         var cardTitleFont = new Font(Font, FontStyle.Regular);
-        var cardTitleHeight = TextRenderer.MeasureText("订阅参考金额", cardTitleFont).Height + 6;
+        var cardTitleHeight = TextRenderer.MeasureText(I18n.T("订阅参考金额", "Sub Ref Value"), cardTitleFont).Height + 6;
         var cardValueHeight = Math.Max(74, _inputValue.Font.Height * 3 + 20);
         var cardContentHeight = cardTitleHeight + cardValueHeight;
         var cardsHeight = cardContentHeight + 16;
@@ -202,113 +232,113 @@ public sealed class MainForm : Form
         cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20.66f));
         cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20.67f));
         cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20.67f));
-        cards.Controls.Add(Card("订阅参考金额 (分应用)", apiValuePanel, null, cardTitleFont, cardTitleHeight, 0), 0, 0);
-        cards.Controls.Add(Card("Input（未命中）", _inputValue, null, cardTitleFont, cardTitleHeight, 0), 1, 0);
+        cards.Controls.Add(Card(I18n.T("订阅参考金额 (分应用)", "Sub Ref Value (By App)"), apiValuePanel, null, cardTitleFont, cardTitleHeight, 0), 0, 0);
+        cards.Controls.Add(Card(I18n.T("Input（未命中）", "Input (Uncached)"), _inputValue, null, cardTitleFont, cardTitleHeight, 0), 1, 0);
         cards.Controls.Add(Card("Cache Read", _cachedValue, null, cardTitleFont, cardTitleHeight, 0), 2, 0);
         cards.Controls.Add(Card("Output", _outputValue, null, cardTitleFont, cardTitleHeight, 0), 3, 0);
 
-
-
-        var cacheMissHeight = Math.Max(32, Font.Height + 14);
+        var cacheMissHeight = Math.Max(38, Font.Height + 20);
         var cacheMissLine = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 8,
             RowCount = 1,
-            Padding = new Padding(12, 2, 12, 2)
+            Padding = new Padding(12, 3, 12, 3)
         };
         cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18f));
         cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18f));
         cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 14f));
         cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        cacheMissLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-        cacheMissLine.Controls.Add(new Label
+        _uncachedInputLabel = new Label
         {
-            Text = "未命中：",
+            Text = I18n.T("未命中：", "Uncached: "),
             AutoSize = true,
             Anchor = AnchorStyles.Left,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.DimGray
-        }, 0, 0);
-        _uncachedInputValue = InlineMetricLabel();
+        };
+        cacheMissLine.Controls.Add(_uncachedInputLabel, 0, 0);
         cacheMissLine.Controls.Add(_uncachedInputValue, 1, 0);
 
-        cacheMissLine.Controls.Add(new Label
+        _cacheCreationLabel = new Label
         {
-            Text = "缓存创建：",
+            Text = I18n.T("缓存创建：", "Cache Creation: "),
             AutoSize = true,
             Anchor = AnchorStyles.Left,
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.DimGray,
-            Padding = new Padding(6, 0, 0, 0)
-        }, 2, 0);
-        _cacheCreationValue = InlineMetricLabel();
+            ForeColor = Color.DimGray
+        };
+        cacheMissLine.Controls.Add(_cacheCreationLabel, 2, 0);
         cacheMissLine.Controls.Add(_cacheCreationValue, 3, 0);
 
-        cacheMissLine.Controls.Add(new Label
+        _cacheHitRateLabel = new Label
         {
-            Text = "命中率：",
+            Text = I18n.T("命中率：", "Hit Rate: "),
             AutoSize = true,
             Anchor = AnchorStyles.Left,
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.DimGray,
-            Padding = new Padding(6, 0, 0, 0)
-        }, 4, 0);
+            ForeColor = Color.DimGray
+        };
+        cacheMissLine.Controls.Add(_cacheHitRateLabel, 4, 0);
         cacheMissLine.Controls.Add(_cacheHitRateValue, 5, 0);
 
-        cacheMissLine.Controls.Add(new Label
+        _speedEstimateLabel = new Label
         {
-            Text = "预估速率：",
+            Text = I18n.T("预估速率：", "Est. Speed: "),
             AutoSize = true,
             Anchor = AnchorStyles.Left,
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.DimGray,
-            Padding = new Padding(8, 0, 0, 0)
-        }, 6, 0);
+            ForeColor = Color.DimGray
+        };
+        cacheMissLine.Controls.Add(_speedEstimateLabel, 6, 0);
+        _speedEstimateValue.Dock = DockStyle.Fill;
         cacheMissLine.Controls.Add(_speedEstimateValue, 7, 0);
 
-        _toolTip.SetToolTip(cacheMissLine, "Sub2API token 口径：Input=总输入-Cache Read-Cache Creation；Cache Read=缓存读取；Cache Creation=缓存创建；命中率=Cache Read / 总 Input；预估速率基于会话时间戳反推。");
-
-
-        var chartTitleHeight = TextRenderer.MeasureText("每日 订阅参考金额", Font).Height + 10;
-        var chartPlotHeight = Math.Max(150, TextRenderer.MeasureText("00-00", Font).Height + 126);
+        var chartTitleHeight = TextRenderer.MeasureText(I18n.T("每日 订阅参考金额", "Daily Sub Ref Value"), Font).Height + 10;
+        var chartPlotHeight = Math.Max(65, TextRenderer.MeasureText("00-00", Font).Height + 48);
         _chart = new DailyBarChartControl { Dock = DockStyle.Fill, MinimumSize = new Size(0, chartPlotHeight), Margin = new Padding(0) };
-        var chartTitle = new Label
+        _chartTitle = new Label
         {
-            Text = "每日 订阅参考金额",
-            Dock = DockStyle.Top,
+            Text = I18n.T("每日 订阅参考金额", "Daily Sub Ref Value"),
+            Dock = DockStyle.Fill,
             Height = chartTitleHeight,
-            Padding = new Padding(0, 5, 0, 0),
+            Padding = new Padding(0, 4, 0, 2),
             Font = new Font(Font, FontStyle.Bold),
-            AutoEllipsis = true
+            AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft
         };
-        var chartPanel = new Panel
+        var chartPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(12, 0, 12, 8),
-            MinimumSize = new Size(0, chartTitleHeight + chartPlotHeight + 8)
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(12, 4, 12, 8),
+            Margin = new Padding(0)
         };
-        chartPanel.Controls.Add(_chart);
-        chartPanel.Controls.Add(chartTitle);
+        chartPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, chartTitleHeight + 6));
+        chartPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        chartPanel.Controls.Add(_chartTitle, 0, 0);
+        chartPanel.Controls.Add(_chart, 0, 1);
 
-        _models = CreateGrid(["模型", "Provider", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "订阅参考金额", "推算周满额"], DefaultModelColumnWidths);
-        _projects = CreateGrid(["项目", "Provider", "Tokens", "Input（未命中）", "Cache Read", "缓存命中率", "预估速率", "Output", "订阅参考金额"], DefaultProjectColumnWidths);
+        _models = CreateGrid(ModelColumns, DefaultModelColumnWidths);
+        _projects = CreateGrid(ProjectColumns, DefaultProjectColumnWidths);
         _models.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _projects.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _quotaControl = new QuotaSummaryControl { Dock = DockStyle.Fill, ShowHeader = false, ShowDismissHint = false, ShowFooterNote = true, BackColor = Color.White };
         _codexHistory = new CodexHistoryControl { Dock = DockStyle.Fill };
         _codexHistory.ColumnWidthsChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
 
-        var tabs = new TabControl { Dock = DockStyle.Fill, Margin = new Padding(12, 0, 12, 0) };
-        var modelPage = new TabPage("按模型"); modelPage.Controls.Add(_models);
-        var projectPage = new TabPage("按项目"); projectPage.Controls.Add(_projects);
-        var quotaPage = new TabPage("额度"); quotaPage.Controls.Add(_quotaControl);
-        var codexHistoryPage = new TabPage("Codex 周历史"); codexHistoryPage.Controls.Add(_codexHistory);
-        tabs.TabPages.AddRange([modelPage, projectPage, quotaPage, codexHistoryPage]);
+        _tabs = new TabControl { Dock = DockStyle.Fill, Margin = new Padding(12, 0, 12, 0) };
+        _modelPage = new TabPage(I18n.T("按模型", "By Model")); _modelPage.Controls.Add(_models);
+        _projectPage = new TabPage(I18n.T("按项目", "By Project")); _projectPage.Controls.Add(_projects);
+        _quotaPage = new TabPage(I18n.T("额度", "Quotas")); _quotaPage.Controls.Add(_quotaControl);
+        _codexHistoryPage = new TabPage(I18n.T("Codex 周历史", "Codex Weekly History")); _codexHistoryPage.Controls.Add(_codexHistory);
+        _tabs.TabPages.AddRange([_modelPage, _projectPage, _quotaPage, _codexHistoryPage]);
 
         var statusHeight = Math.Max(34, Font.Height + 16);
         _status = new Label
@@ -324,23 +354,123 @@ public sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, topHeight));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, cardsHeight));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, cacheMissHeight));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, chartTitleHeight + chartPlotHeight + 8));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, chartTitleHeight + chartPlotHeight + 18));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, statusHeight));
         root.Controls.Add(top, 0, 0);
         root.Controls.Add(cards, 0, 1);
         root.Controls.Add(cacheMissLine, 0, 2);
         root.Controls.Add(chartPanel, 0, 3);
-        root.Controls.Add(tabs, 0, 4);
+        root.Controls.Add(_tabs, 0, 4);
         root.Controls.Add(_status, 0, 5);
         Controls.Add(root);
+
+        RefreshProviderAndRangeOptions();
+        UpdateTooltips();
+        I18n.LanguageChanged += HandleLanguageChanged;
+        _isInitializing = false;
+    }
+
+    private void UpdateTooltips()
+    {
+        _toolTip.SetToolTip(_refreshButton, I18n.T("增量刷新：仅重新解析新增或发生变化的本地记录。程序启动时会自动全量读取一次；全量重读请到设置中执行。", "Incremental refresh: only re-parses new or modified local records. Full scans can be triggered in Settings."));
+        _toolTip.SetToolTip(_rangeCombo, I18n.T("选择自定义…后填写开始日期和结束日期，按本地日历统计。", "Select Custom... to specify start and end dates based on local calendar."));
+    }
+
+    private void HandleLanguageChanged()
+    {
+        Text = "QuotaTrace";
+        _refreshButton.Text = I18n.T("刷新", "Refresh");
+        _settingsButton.Text = I18n.T("设置", "Settings");
+        _providerFieldLabel.Text = I18n.T("提供商", "Provider");
+        _rangeFieldLabel.Text = I18n.T("日期", "Date");
+        _uncachedInputLabel.Text = I18n.T("未命中：", "Uncached: ");
+        _cacheCreationLabel.Text = I18n.T("缓存创建：", "Cache Creation: ");
+        _cacheHitRateLabel.Text = I18n.T("命中率：", "Hit Rate: ");
+        _speedEstimateLabel.Text = I18n.T("预估速率：", "Est. Speed: ");
+        _chartTitle.Text = I18n.T("每日 订阅参考金额", "Daily Sub Ref Value");
+
+        _modelPage.Text = I18n.T("按模型", "By Model");
+        _projectPage.Text = I18n.T("按项目", "By Project");
+        _quotaPage.Text = I18n.T("额度", "Quotas");
+        _codexHistoryPage.Text = I18n.T("Codex 周历史", "Codex Weekly History");
+
+        UpdateGridHeaders(_models, ModelColumns);
+        UpdateGridHeaders(_projects, ProjectColumns);
+        RefreshProviderAndRangeOptions();
+        UpdateTooltips();
+    }
+
+    private void RefreshProviderAndRangeOptions()
+    {
+        var enableCodex = _coordinator.Settings.EnableCodex;
+        var enableAntigravity = _coordinator.Settings.EnableAntigravity;
+
+        // Provider dropdown
+        var prevProviderIdx = _providerCombo.SelectedIndex;
+        _providerCombo.Items.Clear();
+        if (enableCodex && enableAntigravity)
+        {
+            _providerCombo.Items.AddRange([I18n.T("全部", "All"), "Codex", "Antigravity"]);
+            _providerCombo.Enabled = true;
+            _providerCombo.SelectedIndex = Math.Clamp(prevProviderIdx, 0, 2);
+        }
+        else if (enableCodex)
+        {
+            _providerCombo.Items.Add("Codex");
+            _providerCombo.SelectedIndex = 0;
+            _providerCombo.Enabled = false;
+        }
+        else
+        {
+            _providerCombo.Items.Add("Antigravity");
+            _providerCombo.SelectedIndex = 0;
+            _providerCombo.Enabled = false;
+        }
+
+        // Range dropdown
+        var prevRangeIdx = _rangeCombo.SelectedIndex;
+        _rangeCombo.Items.Clear();
+        _rangeCombo.Items.AddRange([
+            I18n.T("今天", "Today"),
+            I18n.T("7天", "7 Days"),
+            I18n.T("30天", "30 Days"),
+            I18n.T("本月", "This Month"),
+            I18n.T("本次周额度", "Current Weekly Cycle"),
+            I18n.T("全部", "All"),
+            I18n.T("自定义…", "Custom...")
+        ]);
+        _rangeCombo.SelectedIndex = prevRangeIdx >= 0 && prevRangeIdx < _rangeCombo.Items.Count ? prevRangeIdx : 4;
+
+        // TabPage visibility
+        if (!enableCodex)
+        {
+            if (_tabs.TabPages.Contains(_codexHistoryPage)) _tabs.TabPages.Remove(_codexHistoryPage);
+        }
+        else
+        {
+            if (!_tabs.TabPages.Contains(_codexHistoryPage)) _tabs.TabPages.Add(_codexHistoryPage);
+        }
+
+        // Quota control provider toggles
+        _quotaControl.EnableCodex = enableCodex;
+        _quotaControl.EnableAntigravity = enableAntigravity;
+
+        // Cards visibility
+        _codexApiValue.Visible = enableCodex;
+        _codexCycleNote.Visible = enableCodex;
+        _antigravityApiValue.Visible = enableAntigravity;
+        _antigravityCycleNote.Visible = enableAntigravity;
     }
 
     public void ApplySnapshot(DashboardSnapshot snapshot)
     {
         if (IsDisposed) return;
         if (InvokeRequired) { BeginInvoke(() => ApplySnapshot(snapshot)); return; }
-        
+
+        var enableCodex = _coordinator.Settings.EnableCodex;
+        var enableAntigravity = _coordinator.Settings.EnableAntigravity;
+
         var codexStdCost = snapshot.CodexStandardApiEquivalentUsd;
         var codexSparkCost = snapshot.CodexSparkApiEquivalentUsd;
         var codexResCost = snapshot.CodexReserveApiEquivalentUsd;
@@ -357,17 +487,17 @@ public sealed class MainForm : Form
         else
             _codexApiValue.Text = $"Codex: {FormatCost(codexStdCost)}";
 
-        _toolTip.SetToolTip(_codexApiValue, $"Codex 主力: {FormatCost(codexStdCost)}" +
+        _toolTip.SetToolTip(_codexApiValue, $"{I18n.T("Codex 主力: ", "Codex Primary: ")}{FormatCost(codexStdCost)}" +
             (hasSparkActivity ? $"\r\nGPT-5.3 Spark: {FormatCost(codexSparkCost)}" : "") +
             (hasReserveActivity ? $"\r\nCodex Reserve: {FormatCost(codexResCost)}" : ""));
 
         var geminiCost = snapshot.AntigravityGeminiApiEquivalentUsd;
         var claudeCost = snapshot.AntigravityClaudeApiEquivalentUsd;
         _antigravityApiValue.Text = $"Antigravity: {FormatCost(geminiCost)} | {FormatCost(claudeCost)}";
+        _toolTip.SetToolTip(_antigravityApiValue, $"Gemini: {FormatCost(geminiCost)}\r\nClaude: {FormatCost(claudeCost)}");
 
         if (snapshot.IsWeeklyCycleWindow)
         {
-            // Codex 多通道周期 (Standard / Spark / Reserve)
             var stdCycle = snapshot.CodexWeeklyCycles.FirstOrDefault(c => c.PoolCategory == "standard") ?? snapshot.CodexWeeklyCycle;
             var sparkCycle = snapshot.CodexWeeklyCycles.FirstOrDefault(c => c.PoolCategory == "spark");
             var resCycle = snapshot.CodexWeeklyCycles.FirstOrDefault(c => c.PoolCategory == "reserve") ?? snapshot.CodexReserveWeeklyCycle;
@@ -376,7 +506,7 @@ public sealed class MainForm : Form
             if (stdCycle is { ResetAt: not null })
             {
                 var rel = TimeFormatter.FormatRelativeFuture(stdCycle.ResetAt.Value);
-                cycleParts.Add($"主力: {stdCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{rel}）");
+                cycleParts.Add($"{I18n.T("主力: ", "Primary: ")}{stdCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{rel}）");
             }
             if (sparkCycle is { ResetAt: not null })
             {
@@ -391,7 +521,7 @@ public sealed class MainForm : Form
 
             if (cycleParts.Count > 0)
             {
-                _codexCycleNote.Text = $"周期：" + string.Join(" | ", cycleParts);
+                _codexCycleNote.Text = I18n.T("周期：", "Cycle: ") + string.Join(" | ", cycleParts);
             }
             else
             {
@@ -401,43 +531,40 @@ public sealed class MainForm : Form
                     var reset = codexQuota.Snapshot.ResetAt.Value;
                     var start = reset.AddDays(-7);
                     var rel = TimeFormatter.FormatRelativeFuture(reset);
-                    _codexCycleNote.Text = $"周期：{start.ToLocalTime():yyyy-MM-dd HH:mm} ~ {reset.ToLocalTime():yyyy-MM-dd HH:mm}（{rel}）";
+                    _codexCycleNote.Text = I18n.Format("周期：{0:yyyy-MM-dd HH:mm} ~ {1:yyyy-MM-dd HH:mm}（{2}）", "Cycle: {0:yyyy-MM-dd HH:mm} ~ {1:yyyy-MM-dd HH:mm} ({2})", start.ToLocalTime(), reset.ToLocalTime(), rel);
                 }
                 else
                 {
-                    _codexCycleNote.Text = "周期：待同步（未纳入本次周统计）";
+                    _codexCycleNote.Text = I18n.T("周期：待同步（未纳入本次周统计）", "Cycle: Syncing (Not in weekly window)");
                 }
             }
 
-            // Antigravity 双周期（Gemini 池 & Claude/GPT 池）
             var geminiEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && e.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase));
             var claudeEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && (e.DisplayName.Contains("Claude", StringComparison.OrdinalIgnoreCase) || e.DisplayName.Contains("3p", StringComparison.OrdinalIgnoreCase)));
 
             string geminiCycle = geminiEst?.ResetAt.HasValue == true
-                ? $"Gemini: {geminiEst.ResetAt.Value.AddDays(-7).ToLocalTime():MM-dd HH:mm}~{geminiEst.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{TimeFormatter.FormatRelativeFuture(geminiEst.ResetAt.Value)}）"
-                : "Gemini: 暂无配额";
+                ? I18n.Format("Gemini: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Gemini: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", geminiEst.ResetAt.Value.AddDays(-7).ToLocalTime(), geminiEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(geminiEst.ResetAt.Value))
+                : I18n.T("Gemini: 暂无配额", "Gemini: No quota");
 
             string claudeCycle = claudeEst?.ResetAt.HasValue == true
-                ? $"Claude: {claudeEst.ResetAt.Value.AddDays(-7).ToLocalTime():MM-dd HH:mm}~{claudeEst.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{TimeFormatter.FormatRelativeFuture(claudeEst.ResetAt.Value)}）"
-                : "Claude: 暂无配额";
+                ? I18n.Format("Claude: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Claude: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", claudeEst.ResetAt.Value.AddDays(-7).ToLocalTime(), claudeEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(claudeEst.ResetAt.Value))
+                : I18n.T("Claude: 暂无配额", "Claude: No quota");
 
-            _antigravityCycleNote.Text = $"周期：{geminiCycle} | {claudeCycle}";
+            _antigravityCycleNote.Text = I18n.T("周期：", "Cycle: ") + $"{geminiCycle} | {claudeCycle}";
         }
         else
         {
-            _codexCycleNote.Text = $"范围：{snapshot.Range.From:yyyy-MM-dd} 至 {snapshot.Range.To:yyyy-MM-dd}";
-            _antigravityCycleNote.Text = $"范围：{snapshot.Range.From:yyyy-MM-dd} 至 {snapshot.Range.To:yyyy-MM-dd}";
+            _codexCycleNote.Text = I18n.Format("范围：{0:yyyy-MM-dd} 至 {1:yyyy-MM-dd}", "Range: {0:yyyy-MM-dd} to {1:yyyy-MM-dd}", snapshot.Range.From, snapshot.Range.To);
+            _antigravityCycleNote.Text = I18n.Format("范围：{0:yyyy-MM-dd} 至 {1:yyyy-MM-dd}", "Range: {0:yyyy-MM-dd} to {1:yyyy-MM-dd}", snapshot.Range.From, snapshot.Range.To);
         }
-
-
-
 
         _inputValue.Text = FormatTokens(snapshot.NonCachedInputTokens);
         _cachedValue.Text = FormatTokens(snapshot.CachedTokens);
+        _outputValue.Text = FormatTokens(snapshot.OutputTokens);
+
         _uncachedInputValue.Text = FormatTokens(snapshot.NonCachedInputTokens);
         _cacheCreationValue.Text = FormatTokens(snapshot.CacheCreationTokens);
         _cacheHitRateValue.Text = snapshot.InputTokens > 0 ? $"{snapshot.CacheHitRate:F2}%" : "0.00%";
-        _outputValue.Text = FormatTokens(snapshot.OutputTokens);
 
         var speed = snapshot.SpeedEstimate;
         if (speed is not null && speed.HasData)
@@ -448,55 +575,100 @@ public sealed class MainForm : Form
         else
         {
             _speedEstimateValue.Text = "-";
-            _toolTip.SetToolTip(_speedEstimateValue, "预估速率：暂无足够的时间戳样本进行反推。\r\n\r\n说明：仅当本地会话存在连续 Turn 时间戳记录时计算。详情见“设置”。");
+            _toolTip.SetToolTip(_speedEstimateValue, I18n.T("预估速率：暂无足够的时间戳样本进行反推。\r\n\r\n说明：仅当本地会话存在连续 Turn 时间戳记录时计算。详情见“设置”。", "Estimated speed: Insufficient timestamp samples.\r\n\r\nNote: Calculated only when consecutive turn timestamps exist. See Settings for details."));
         }
 
         _chart.SetData(snapshot.Daily);
-
-        _models.Rows.Clear();
-        foreach (var row in snapshot.Models)
-        {
-            var hitRate = row.InputTokens > 0 ? $"{row.CacheHitRate:F2}%" : "0.00%";
-            var speedText = row.SpeedEstimate?.HasData == true ? row.SpeedEstimate.ToShortDisplayString() : "-";
-            var estWeeklyText = FormatCost(row.EstimatedWeeklyCostUsd);
-            var rowIndex = _models.Rows.Add(row.ModelId, row.Provider.ToStorageString(), FormatTokens(row.NonCachedInputTokens),
-                FormatTokens(row.CachedTokens), hitRate, speedText, FormatTokens(row.OutputTokens), FormatCost(row.ApiEquivalentUsd), estWeeklyText);
-
-            if (!string.IsNullOrEmpty(row.EstimateDetail))
-            {
-                _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = row.EstimateDetail;
-            }
-            else if (row.Provider == ProviderKind.Codex && !row.EstimatedWeeklyCostUsd.HasValue)
-            {
-                _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = "该模型暂无足够独立消耗样本测算周总额。";
-            }
-        }
-
-        _projects.Rows.Clear();
-        foreach (var row in snapshot.Projects)
-        {
-            var hitRate = row.InputTokens > 0 ? $"{row.CacheHitRate:F2}%" : "0.00%";
-            var speedText = row.SpeedEstimate?.HasData == true ? row.SpeedEstimate.ToShortDisplayString() : "-";
-            _projects.Rows.Add(row.DisplayName, row.Provider.ToStorageString(), FormatTokens(row.Tokens),
-                FormatTokens(row.NonCachedInputTokens), FormatTokens(row.CachedTokens), hitRate, speedText, FormatTokens(row.OutputTokens), FormatCost(row.ApiEquivalentUsd));
-        }
-
         _quotaControl.SetSnapshot(snapshot);
-        _codexHistory.SetCycles(snapshot.CodexHistoricalCycles);
 
-        var warningText = snapshot.Warnings.Count == 0 ? string.Empty : string.Join("；", snapshot.Warnings.Take(3));
-        var rangeText = !string.IsNullOrWhiteSpace(snapshot.RangeDisplayOverride)
+        if (enableCodex)
+        {
+            _codexHistory.SetCycles(snapshot.CodexHistoricalCycles);
+        }
+
+        RenderModels(snapshot.Models);
+        RenderProjects(snapshot.Projects);
+
+        var rangeLabel = !string.IsNullOrWhiteSpace(snapshot.RangeDisplayOverride)
             ? snapshot.RangeDisplayOverride
-            : $"范围：{FormatRange(snapshot.Range)}";
+            : FormatRange(snapshot.Range);
 
-        _status.Text = string.IsNullOrEmpty(warningText)
-            ? $"{rangeText}；最后刷新：{snapshot.RefreshedAt.ToLocalTime():HH:mm:ss}"
-            : $"{rangeText}；提示：{warningText}；最后刷新：{snapshot.RefreshedAt.ToLocalTime():HH:mm:ss}";
+        var statusText = I18n.Format("统计范围：{0} | 更新于 {1:yyyy-MM-dd HH:mm:ss}", "Range: {0} | Updated at {1:yyyy-MM-dd HH:mm:ss}", rangeLabel, snapshot.RefreshedAt.ToLocalTime());
+        if (snapshot.Warnings.Count > 0) statusText += $" | {snapshot.Warnings[0]}";
+        _status.Text = statusText;
+    }
+
+    private void RenderModels(IReadOnlyList<ModelUsageView> models)
+    {
+        _models.SuspendLayout();
+        try
+        {
+            _models.Rows.Clear();
+            foreach (var row in models)
+            {
+                var hitRate = row.InputTokens > 0 ? $"{row.CacheHitRate:F2}%" : "0.00%";
+                var speedText = row.SpeedEstimate?.HasData == true ? row.SpeedEstimate.ToShortDisplayString() : "-";
+                var estWeeklyText = FormatCost(row.EstimatedWeeklyCostUsd);
+
+                var rowIndex = _models.Rows.Add(
+                    row.ModelId,
+                    row.Provider.ToStorageString(),
+                    FormatTokens(row.NonCachedInputTokens),
+                    FormatTokens(row.CachedTokens),
+                    hitRate,
+                    speedText,
+                    FormatTokens(row.OutputTokens),
+                    FormatCost(row.ApiEquivalentUsd),
+                    estWeeklyText
+                );
+
+                if (!string.IsNullOrEmpty(row.EstimateDetail))
+                {
+                    _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = row.EstimateDetail;
+                }
+                else if (row.Provider == ProviderKind.Codex && !row.EstimatedWeeklyCostUsd.HasValue)
+                {
+                    _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = I18n.T("该模型暂无足够独立消耗样本测算周总额。", "Insufficient independent usage samples to estimate full weekly quota for this model.");
+                }
+            }
+        }
+        finally
+        {
+            _models.ResumeLayout();
+        }
+    }
+
+    private void RenderProjects(IReadOnlyList<ProjectUsageView> projects)
+    {
+        _projects.SuspendLayout();
+        try
+        {
+            _projects.Rows.Clear();
+            foreach (var row in projects)
+            {
+                var hitRate = row.InputTokens > 0 ? $"{row.CacheHitRate:F2}%" : "0.00%";
+                var speedText = row.SpeedEstimate?.HasData == true ? row.SpeedEstimate.ToShortDisplayString() : "-";
+                _projects.Rows.Add(
+                    row.DisplayName,
+                    row.Provider.ToStorageString(),
+                    FormatTokens(row.Tokens),
+                    FormatTokens(row.NonCachedInputTokens),
+                    FormatTokens(row.CachedTokens),
+                    hitRate,
+                    speedText,
+                    FormatTokens(row.OutputTokens),
+                    FormatCost(row.ApiEquivalentUsd)
+                );
+            }
+        }
+        finally
+        {
+            _projects.ResumeLayout();
+        }
     }
 
     public void RefreshCurrentSelection()
     {
-        if (IsDisposed) return;
         if (InvokeRequired) { BeginInvoke(RefreshCurrentSelection); return; }
         ApplyCurrentSelection();
     }
@@ -505,16 +677,24 @@ public sealed class MainForm : Form
     {
         try
         {
-            _status.Text = force ? "正在全量读取用量数据…" : "正在增量读取用量数据…";
+            _status.Text = force ? I18n.T("正在全量读取用量数据…", "Performing full scan...") : I18n.T("正在增量读取用量数据…", "Reading incremental usage data...");
+            _refreshButton.Enabled = false;
             await _coordinator.RefreshAsync(force);
             ApplyCurrentSelection();
         }
-        catch (Exception exception) { _status.Text = $"刷新失败：{exception.Message}"; }
+        catch (Exception exception)
+        {
+            _status.Text = I18n.Format("刷新失败：{0}", "Refresh failed: {0}", exception.Message);
+        }
+        finally
+        {
+            if (!IsDisposed) _refreshButton.Enabled = true;
+        }
     }
 
     private void HandleRangeSelectionChanged()
     {
-        if (_ignoreRangeSelection) return;
+        if (_isInitializing || _ignoreRangeSelection) return;
         if (_rangeCombo.SelectedIndex != 6)
         {
             _previousRangeIndex = _rangeCombo.SelectedIndex;
@@ -538,7 +718,32 @@ public sealed class MainForm : Form
 
     private void ApplyCurrentSelection()
     {
-        var provider = _providerCombo.SelectedIndex switch { 1 => ProviderKind.Codex, 2 => ProviderKind.Antigravity, _ => (ProviderKind?)null };
+        if (_isInitializing) return;
+        _ = ApplyCurrentSelectionAsync();
+    }
+
+    private async Task ApplyCurrentSelectionAsync()
+    {
+        if (IsDisposed) return;
+        var seq = Interlocked.Increment(ref _loadSequence);
+
+        ProviderKind? provider = null;
+        var enableCodex = _coordinator.Settings.EnableCodex;
+        var enableAntigravity = _coordinator.Settings.EnableAntigravity;
+
+        if (enableCodex && enableAntigravity)
+        {
+            provider = _providerCombo.SelectedIndex switch { 1 => ProviderKind.Codex, 2 => ProviderKind.Antigravity, _ => null };
+        }
+        else if (enableCodex)
+        {
+            provider = ProviderKind.Codex;
+        }
+        else if (enableAntigravity)
+        {
+            provider = ProviderKind.Antigravity;
+        }
+
         var isWeeklyCycle = _rangeCombo.SelectedIndex == 4;
         var range = _rangeCombo.SelectedIndex switch
         {
@@ -546,14 +751,28 @@ public sealed class MainForm : Form
             1 => DateRange.LastDays(7),
             2 => DateRange.LastDays(30),
             3 => DateRange.ThisMonth(),
-            4 => DateRange.LastDays(7), // 精确周周期窗口将在 BuildSnapshot 内部动态计算
+            4 => DateRange.LastDays(7),
             5 => DateRange.AllTime(),
             6 => _customRange,
             _ => DateRange.LastDays(7)
         };
-        ApplySnapshot(_coordinator.BuildSnapshot(range, provider, isWeeklyCycle));
-    }
 
+        _status.Text = I18n.T("正在计算用量数据…", "Calculating usage data...");
+
+        try
+        {
+            var snapshot = await Task.Run(() => _coordinator.BuildSnapshot(range, provider, isWeeklyCycle));
+            if (seq != _loadSequence || IsDisposed) return;
+            ApplySnapshot(snapshot);
+        }
+        catch (Exception ex)
+        {
+            if (seq == _loadSequence && !IsDisposed)
+            {
+                _status.Text = I18n.Format("计算失败：{0}", "Calculation failed: {0}", ex.Message);
+            }
+        }
+    }
 
     private Label FieldLabel(string text, int topOffset) => new()
     {
@@ -577,29 +796,16 @@ public sealed class MainForm : Form
     private Label InlineMetricLabel() => new()
     {
         Text = "—",
-        Dock = DockStyle.Fill,
-        AutoSize = false,
-        AutoEllipsis = true,
+        AutoSize = true,
+        Anchor = AnchorStyles.Left,
         TextAlign = ContentAlignment.MiddleLeft,
-        Font = new Font(Font, FontStyle.Bold),
+        Font = new Font(Font.FontFamily, 10F, FontStyle.Bold),
         ForeColor = Color.FromArgb(30, 70, 110),
-        Padding = new Padding(4, 0, 0, 0)
-    };
-
-    private Label NoteLabel(string text) => new()
-    {
-        Text = text,
-        Dock = DockStyle.Fill,
-        AutoSize = false,
-        AutoEllipsis = true,
-        TextAlign = ContentAlignment.MiddleLeft,
-        Font = new Font(Font, FontStyle.Regular),
-        ForeColor = Color.DimGray
+        Margin = new Padding(0, 0, 18, 0)
     };
 
     private static Control Card(string title, Control value, Label? note, Font titleFont, int titleHeight, int noteHeight)
     {
-
         var panel = new Panel
         {
             Dock = DockStyle.Fill,
@@ -630,30 +836,56 @@ public sealed class MainForm : Form
     private bool _isRestoringColumns;
     public event EventHandler? ColumnWidthsChanged;
 
+    private static readonly (string Key, string Zh, string En)[] ModelColumns =
+    [
+        ("模型", "模型", "Model"),
+        ("Provider", "Provider", "Provider"),
+        ("Input（未命中）", "Input（未命中）", "Input (Uncached)"),
+        ("Cache Read", "Cache Read", "Cache Read"),
+        ("缓存命中率", "缓存命中率", "Cache Hit Rate"),
+        ("预估速率", "预估速率", "Est. Speed"),
+        ("Output", "Output", "Output"),
+        ("订阅参考金额", "订阅参考金额", "Sub Ref Value"),
+        ("推算周满额", "推算周满额", "Est. Weekly Full")
+    ];
+
+    private static readonly (string Key, string Zh, string En)[] ProjectColumns =
+    [
+        ("项目", "项目", "Project"),
+        ("Provider", "Provider", "Provider"),
+        ("Tokens", "Tokens", "Tokens"),
+        ("Input（未命中）", "Input（未命中）", "Input (Uncached)"),
+        ("Cache Read", "Cache Read", "Cache Read"),
+        ("缓存命中率", "缓存命中率", "Cache Hit Rate"),
+        ("预估速率", "预估速率", "Est. Speed"),
+        ("Output", "Output", "Output"),
+        ("订阅参考金额", "订阅参考金额", "Sub Ref Value")
+    ];
+
     private static readonly Dictionary<string, int> DefaultModelColumnWidths = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["模型"] = 402,
-        ["Provider"] = 215,
-        ["Input（未命中）"] = 293,
-        ["Cache Read"] = 195,
-        ["缓存命中率"] = 212,
-        ["预估速率"] = 680,
-        ["Output"] = 260,
-        ["订阅参考金额"] = 155,
-        ["推算周满额"] = 155
+        ["模型"] = 150,
+        ["Provider"] = 90,
+        ["Input（未命中）"] = 135,
+        ["Cache Read"] = 105,
+        ["缓存命中率"] = 110,
+        ["预估速率"] = 210,
+        ["Output"] = 80,
+        ["订阅参考金额"] = 110,
+        ["推算周满额"] = 120
     };
 
     private static readonly Dictionary<string, int> DefaultProjectColumnWidths = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["项目"] = 307,
-        ["Provider"] = 207,
-        ["Tokens"] = 175,
-        ["Input（未命中）"] = 287,
-        ["Cache Read"] = 220,
-        ["缓存命中率"] = 216,
-        ["预估速率"] = 565,
-        ["Output"] = 185,
-        ["订阅参考金额"] = 178
+        ["项目"] = 180,
+        ["Provider"] = 90,
+        ["Tokens"] = 90,
+        ["Input（未命中）"] = 110,
+        ["Cache Read"] = 100,
+        ["缓存命中率"] = 90,
+        ["预估速率"] = 220,
+        ["Output"] = 80,
+        ["订阅参考金额"] = 100
     };
 
     public Dictionary<string, int> GetModelColumnWidths() => GetColumnWidths(_models);
@@ -697,7 +929,18 @@ public sealed class MainForm : Form
         }
     }
 
-    private DataGridView CreateGrid(string[] columns, Dictionary<string, int>? defaultWidths = null)
+    private static void UpdateGridHeaders(DataGridView grid, (string Key, string Zh, string En)[] columns)
+    {
+        foreach (var (key, zh, en) in columns)
+        {
+            if (grid.Columns.Contains(key))
+            {
+                grid.Columns[key].HeaderText = I18n.T(zh, en);
+            }
+        }
+    }
+
+    private DataGridView CreateGrid((string Key, string Zh, string En)[] columns, Dictionary<string, int>? defaultWidths = null)
     {
         var cellFont = new Font(Font, FontStyle.Regular);
         var headerFont = new Font(Font, FontStyle.Bold);
@@ -712,7 +955,7 @@ public sealed class MainForm : Form
             AllowUserToResizeRows = false,
             AllowUserToResizeColumns = true,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
-            AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
+            AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None,
             BackgroundColor = Color.White,
             RowHeadersVisible = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
@@ -741,13 +984,13 @@ public sealed class MainForm : Form
             SelectionBackColor = Color.FromArgb(218, 232, 247),
             SelectionForeColor = Color.FromArgb(25, 25, 25)
         };
-        foreach (var column in columns)
+        foreach (var (key, zh, en) in columns)
         {
-            var colIndex = grid.Columns.Add(column, column);
+            var colIndex = grid.Columns.Add(key, I18n.T(zh, en));
             var col = grid.Columns[colIndex];
             col.MinimumWidth = 40;
             col.Resizable = DataGridViewTriState.True;
-            if (defaultWidths != null && defaultWidths.TryGetValue(column, out var defW) && defW >= 30)
+            if (defaultWidths != null && defaultWidths.TryGetValue(key, out var defW) && defW >= 30)
             {
                 col.Width = defW;
             }
@@ -756,15 +999,30 @@ public sealed class MainForm : Form
                 col.Width = 100;
             }
         }
+        EnableDoubleBuffering(grid);
         return grid;
+    }
+
+    private static void EnableDoubleBuffering(Control control)
+    {
+        typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.SetValue(control, true, null);
     }
 
     private static string FormatRange(DateRange range) => range.From == range.To
         ? range.From.ToString("yyyy-MM-dd")
-        : $"{range.From:yyyy-MM-dd} 至 {range.To:yyyy-MM-dd}";
+        : I18n.Format("{0:yyyy-MM-dd} 至 {1:yyyy-MM-dd}", "{0:yyyy-MM-dd} to {1:yyyy-MM-dd}", range.From, range.To);
 
     private static string FormatTokens(long value) => value switch { >= 1_000_000 => $"{value / 1_000_000d:0.##}M", >= 1_000 => $"{value / 1_000d:0.##}K", _ => value.ToString("N0") };
     private static string FormatCost(decimal? value) => value.HasValue ? "$" + value.Value.ToString("0.00") : "—";
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            I18n.LanguageChanged -= HandleLanguageChanged;
+            _toolTip.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 }
-
-

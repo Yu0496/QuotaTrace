@@ -1,3 +1,4 @@
+using UsageTray.App;
 using UsageTray.Core;
 using UsageTray.Providers.Antigravity;
 using UsageTray.Services;
@@ -6,111 +7,135 @@ namespace UsageTray.UI;
 
 public static class QuotaDisplayFormatter
 {
-    public static string BuildPopupText(DashboardSnapshot snapshot)
+    public static string BuildPopupText(DashboardSnapshot snapshot, bool enableCodex = true, bool enableAntigravity = true)
     {
-        var sections = new[]
-        {
-            BuildAntigravitySection(snapshot),
-            BuildCodexSection(snapshot)
-        };
+        var sections = new List<string>();
+        if (enableAntigravity) sections.Add(BuildAntigravitySection(snapshot));
+        if (enableCodex) sections.Add(BuildCodexSection(snapshot));
+
+        var refreshedText = I18n.T("界面刷新：", "Refreshed: ");
+        var noteText = I18n.T("订阅参考金额按固定基准计量，并非账单或可用余额；满额金额仅按本机样本外推。",
+            "Subscription reference values are calculated using fixed benchmarks and do not represent actual bills or balances; full quota estimates are projected solely from local samples.");
+
         return string.Join($"{Environment.NewLine}{Environment.NewLine}", sections) +
-               $"{Environment.NewLine}{Environment.NewLine}界面刷新：{snapshot.RefreshedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}" +
-               $"{Environment.NewLine}订阅参考金额按固定基准计量，并非账单或可用余额；满额金额仅按本机样本外推。";
+               $"{Environment.NewLine}{Environment.NewLine}{refreshedText}{snapshot.RefreshedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}" +
+               $"{Environment.NewLine}{noteText}";
     }
 
-    public static string BuildCompactText(DashboardSnapshot snapshot)
+    public static string BuildCompactText(DashboardSnapshot snapshot, bool enableCodex = true, bool enableAntigravity = true)
     {
-        var antigravitySnapshots = snapshot.Quotas
-            .Where(item => item.Snapshot.Provider == ProviderKind.Antigravity)
-            .Select(item => item.Snapshot).ToList();
-        var ag5h = antigravitySnapshots.Where(IsFiveHour).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
-        var agWeekly = antigravitySnapshots.Where(IsWeekly).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
-
-        var shortText = FormatCompactWithResetOnZero(ag5h);
-        var weeklyText = FormatCompactWithResetOnZero(agWeekly);
-
-        var codexModels = snapshot.Models.Where(item => item.Provider == ProviderKind.Codex).ToList();
-        var codexQuota = snapshot.Quotas
-            .Where(item => item.Snapshot.Provider == ProviderKind.Codex)
-            .Select(item => item.Snapshot).ToList();
-
-        var codexPlan = codexQuota
-            .Where(s => !IsReserve(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
-            .OrderByDescending(s => s.CapturedAt)
-            .Select(s => s.PlanTier)
-            .FirstOrDefault();
-        var isProOrAbove = UsageAggregator.IsProOrAbovePlan(codexPlan);
-
-        var stdWeekly = codexQuota
-            .Where(s => IsWeekly(s) && !UsageAggregator.IsSparkSnapshot(s) && !IsReserve(s))
-            .OrderByDescending(s => s.CapturedAt)
-            .FirstOrDefault();
-        var std5h = codexQuota
-            .Where(s => IsFiveHour(s) && !UsageAggregator.IsSparkSnapshot(s) && !IsReserve(s))
-            .OrderByDescending(s => s.CapturedAt)
-            .FirstOrDefault();
-        var sparkWeekly = codexQuota
-            .Where(s => IsWeekly(s) && UsageAggregator.IsSparkSnapshot(s))
-            .OrderByDescending(s => s.CapturedAt)
-            .FirstOrDefault();
-        var codexReserve = codexQuota
-            .Where(IsReserve)
-            .OrderByDescending(s => s.CapturedAt)
-            .FirstOrDefault();
-
-        string codexText;
-        if (stdWeekly != null)
+        string? agPart = null;
+        if (enableAntigravity)
         {
-            var isWeeklyZero = stdWeekly.RemainingFraction.HasValue && stdWeekly.RemainingFraction.Value <= 0.0001 && !stdWeekly.IsResetPassed();
-            var is5hZero = std5h is { RemainingFraction: not null } && std5h.RemainingFraction.Value <= 0.0001 && !std5h.IsResetPassed();
+            var antigravitySnapshots = snapshot.Quotas
+                .Where(item => item.Snapshot.Provider == ProviderKind.Antigravity)
+                .Select(item => item.Snapshot).ToList();
+            var ag5h = antigravitySnapshots.Where(IsFiveHour).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
+            var agWeekly = antigravitySnapshots.Where(IsWeekly).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
 
-            string stdPart;
-            if (isWeeklyZero)
+            var shortText = FormatCompactWithResetOnZero(ag5h);
+            var weeklyText = FormatCompactWithResetOnZero(agWeekly);
+            var wkLabel = I18n.T("周", "Wk");
+            agPart = $"AG 5h {shortText} / {wkLabel} {weeklyText}";
+        }
+
+        string? codexText = null;
+        if (enableCodex)
+        {
+            var codexModels = snapshot.Models.Where(item => item.Provider == ProviderKind.Codex).ToList();
+            var codexQuota = snapshot.Quotas
+                .Where(item => item.Snapshot.Provider == ProviderKind.Codex)
+                .Select(item => item.Snapshot).ToList();
+
+            var stdWeekly = codexQuota
+                .Where(s => IsWeekly(s) && !UsageAggregator.IsSparkSnapshot(s) && !IsReserve(s))
+                .OrderByDescending(s => s.CapturedAt)
+                .FirstOrDefault();
+            var std5h = codexQuota
+                .Where(s => IsFiveHour(s) && !UsageAggregator.IsSparkSnapshot(s) && !IsReserve(s))
+                .OrderByDescending(s => s.CapturedAt)
+                .FirstOrDefault();
+            var sparkWeekly = codexQuota
+                .Where(s => IsWeekly(s) && UsageAggregator.IsSparkSnapshot(s))
+                .OrderByDescending(s => s.CapturedAt)
+                .FirstOrDefault();
+            var codexReserve = codexQuota
+                .Where(IsReserve)
+                .OrderByDescending(s => s.CapturedAt)
+                .FirstOrDefault();
+
+            var wkLabel = I18n.T("周", "Wk");
+            var resLabel = I18n.T("备用", "Res");
+
+            if (stdWeekly != null)
             {
-                stdPart = $"0%({FormatCompactReset(stdWeekly)})";
+                var isWeeklyZero = stdWeekly.RemainingFraction.HasValue && stdWeekly.RemainingFraction.Value <= 0.0001 && !stdWeekly.IsResetPassed();
+                var is5hZero = std5h is { RemainingFraction: not null } && std5h.RemainingFraction.Value <= 0.0001 && !std5h.IsResetPassed();
+
+                string stdPart;
+                if (isWeeklyZero)
+                {
+                    stdPart = $"0%({FormatCompactReset(stdWeekly)})";
+                }
+                else if (is5hZero)
+                {
+                    stdPart = $"5h 0%({FormatCompactReset(std5h!)}) / {wkLabel} {FormatCompact(stdWeekly)}";
+                }
+                else
+                {
+                    stdPart = FormatCompact(stdWeekly);
+                }
+
+                if (sparkWeekly != null && sparkWeekly.RemainingFraction.HasValue)
+                {
+                    codexText = $"{stdPart} / Spark {FormatCompact(sparkWeekly)}";
+                }
+                else
+                {
+                    codexText = stdPart;
+                }
+
+                if (codexReserve != null && codexReserve.RemainingFraction.HasValue)
+                {
+                    codexText += $" ({resLabel} {FormatCompact(codexReserve)})";
+                }
             }
-            else if (is5hZero)
+            else if (sparkWeekly != null)
             {
-                stdPart = $"5h 0%({FormatCompactReset(std5h!)}) / 周 {FormatCompact(stdWeekly)}";
+                codexText = $"Spark {FormatCompactWithResetOnZero(sparkWeekly)}";
+            }
+            else if (codexReserve != null)
+            {
+                codexText = $"{resLabel} {FormatCompactWithResetOnZero(codexReserve)}";
+            }
+            else if (std5h != null)
+            {
+                codexText = FormatCompactWithResetOnZero(std5h);
             }
             else
             {
-                stdPart = FormatCompact(stdWeekly);
+                codexText = codexModels.Count == 0 ? I18n.T("无日志", "No logs") : GetKnownCost(codexModels).HasValue ? "$" + GetKnownCost(codexModels)!.Value.ToString("0.00") : "—";
             }
+        }
 
-            if (sparkWeekly != null && sparkWeekly.RemainingFraction.HasValue)
-            {
-                codexText = $"{stdPart} / Spark {FormatCompact(sparkWeekly)}";
-            }
-            else
-            {
-                codexText = stdPart;
-            }
-
-            if (codexReserve != null && codexReserve.RemainingFraction.HasValue)
-            {
-                codexText += $" (备用 {FormatCompact(codexReserve)})";
-            }
-        }
-        else if (sparkWeekly != null)
+        string result;
+        if (enableAntigravity && enableCodex)
         {
-            codexText = $"Spark {FormatCompactWithResetOnZero(sparkWeekly)}";
+            result = $"{agPart} | Codex {codexText}";
         }
-        else if (codexReserve != null)
+        else if (enableAntigravity)
         {
-            codexText = $"备用 {FormatCompactWithResetOnZero(codexReserve)}";
+            result = agPart ?? "AG: —";
         }
-        else if (std5h != null)
+        else if (enableCodex)
         {
-            codexText = FormatCompactWithResetOnZero(std5h);
+            result = $"Codex {codexText}";
         }
         else
         {
-            codexText = codexModels.Count == 0 ? "无日志" : GetKnownCost(codexModels).HasValue ? "$" + GetKnownCost(codexModels)!.Value.ToString("0.00") : "—";
+            result = "QuotaTrace";
         }
 
-        var agPart = $"AG 5h {shortText} / 周 {weeklyText}";
-        var result = $"{agPart} | Codex {codexText}";
         if (result.Length > 63) result = result[..63];
         return result;
     }
@@ -118,8 +143,8 @@ public static class QuotaDisplayFormatter
     private static string FormatCompactWithResetOnZero(QuotaSnapshot? snapshot)
     {
         if (snapshot is null) return "—";
-        if (snapshot.IsResetPassed()) return "待同步";
-        if (!snapshot.HasValidFraction || !snapshot.RemainingFraction.HasValue) return "未知";
+        if (snapshot.IsResetPassed()) return I18n.T("待同步", "Syncing");
+        if (!snapshot.HasValidFraction || !snapshot.RemainingFraction.HasValue) return I18n.T("未知", "Unknown");
         if (snapshot.RemainingFraction.Value <= 0.0001 && !snapshot.IsStale())
             return $"0%({FormatCompactReset(snapshot)})";
         return FormatCompact(snapshot);
@@ -127,7 +152,7 @@ public static class QuotaDisplayFormatter
 
     private static string FormatCompactReset(QuotaSnapshot snapshot)
     {
-        if (!snapshot.ResetAt.HasValue) return "未知";
+        if (!snapshot.ResetAt.HasValue) return I18n.T("未知", "Unknown");
         var local = snapshot.ResetAt.Value.ToLocalTime();
         return local.Date == DateTime.Today
             ? local.ToString("HH:mm")
@@ -145,27 +170,34 @@ public static class QuotaDisplayFormatter
             .Select(item => item.PlanTier)
             .FirstOrDefault();
         var status = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity).ToList() is { Count: > 0 } views &&
-            views.All(item => item.IsOffline) ? "离线，显示最后一次快照" : "当前快照";
+            views.All(item => item.IsOffline)
+            ? I18n.T("离线，显示最后一次快照", "Offline, showing last snapshot")
+            : I18n.T("当前快照", "Active snapshot");
+
+        var titlePrefix = I18n.T("Antigravity 额度与用量", "Antigravity Quota & Usage");
+        var statusPrefix = I18n.T("状态：", "Status: ");
         var lines = new List<string>
         {
-            $"Antigravity 额度与用量{(string.IsNullOrWhiteSpace(plan) ? string.Empty : $"（{plan}）")}",
-            $"状态：{status}"
+            $"{titlePrefix}{(string.IsNullOrWhiteSpace(plan) ? string.Empty : $"（{plan}）")}",
+            $"{statusPrefix}{status}"
         };
+
         var ag5h = snapshots.Where(IsFiveHour).ToList();
-        if (ag5h.Count > 0) lines.Add(FormatWindow("5 小时窗口", ag5h));
+        if (ag5h.Count > 0) lines.Add(FormatWindow(I18n.T("5 小时窗口", "5-Hour Window"), ag5h));
         var agWeekly = snapshots.Where(IsWeekly).ToList();
-        if (agWeekly.Count > 0) lines.Add(FormatWindow("周窗口", agWeekly));
+        if (agWeekly.Count > 0) lines.Add(FormatWindow(I18n.T("周窗口", "Weekly Window"), agWeekly));
         var other = snapshots.Where(item => !IsFiveHour(item) && !IsWeekly(item)).ToList();
-        if (other.Count > 0) lines.Add(FormatWindow("其他窗口", other));
+        if (other.Count > 0) lines.Add(FormatWindow(I18n.T("其他窗口", "Other Windows"), other));
         if (snapshots.Count == 0)
-            lines.Add("暂无可用 quota 快照，请先刷新并确保 Antigravity 正在运行。");
+            lines.Add(I18n.T("暂无可用 quota 快照，请先刷新并确保 Antigravity 正在运行。", "No quota snapshots available. Refresh and ensure Antigravity is running."));
 
         foreach (var est in snapshot.AntigravityEstimates ?? [])
         {
             var isStale = est.CalculationDetails == "快照待更新";
-            var badge = isStale ? "（待更新）" : "（仅本机样本外推）";
-            var value = est.EstimatedFullQuotaUsd.HasValue ? $"约 ${est.EstimatedFullQuotaUsd:0.00}{badge}" : est.CalculationDetails ?? "样本不足";
-            lines.Add($"{est.DisplayName} {est.WindowKind} 满额样本外推：{value}");
+            var badge = isStale ? I18n.T("（待更新）", " (Pending Update)") : I18n.T("（仅本机样本外推）", " (Local Sample Projection)");
+            var value = est.EstimatedFullQuotaUsd.HasValue ? $"约 ${est.EstimatedFullQuotaUsd:0.00}{badge}" : est.CalculationDetails ?? I18n.T("样本不足", "Insufficient samples");
+            var projLabel = I18n.T("满额样本外推：", "Est. Full Quota: ");
+            lines.Add($"{est.DisplayName} {est.WindowKind} {projLabel}{value}");
         }
 
         if (models.Count > 0)
@@ -174,24 +206,23 @@ public static class QuotaDisplayFormatter
             var cacheRead = models.Sum(item => item.CachedTokens);
             var cacheCreation = models.Sum(item => item.CacheCreationTokens);
             var output = models.Sum(item => item.OutputTokens);
-            lines.Add($"Input（未命中）：{FormatTokens(input)}；Cache Read：{FormatTokens(cacheRead)}");
-            lines.Add($"Cache Creation：{FormatTokens(cacheCreation)}；Output：{FormatTokens(output)}");
-            lines.Add($"订阅参考金额：{FormatCost(GetKnownCost(models))}（范围 {FormatRange(snapshot.Range)}）");
+            var inputLbl = I18n.T("Input（未命中）：", "Input (Uncached): ");
+            var cacheReadLbl = I18n.T("；Cache Read：", "; Cache Read: ");
+            var cacheCreationLbl = I18n.T("Cache Creation：", "Cache Creation: ");
+            var outputLbl = I18n.T("；Output：", "; Output: ");
+            var subRefLbl = I18n.T("订阅参考金额：", "Sub Ref Value: ");
+            var rangeLbl = I18n.T("（范围 ", " (Range ");
+            lines.Add($"{inputLbl}{FormatTokens(input)}{cacheReadLbl}{FormatTokens(cacheRead)}");
+            lines.Add($"{cacheCreationLbl}{FormatTokens(cacheCreation)}{outputLbl}{FormatTokens(output)}");
+            lines.Add($"{subRefLbl}{FormatCost(GetKnownCost(models))}{rangeLbl}{FormatRange(snapshot.Range)}）");
         }
         else
         {
-            lines.Add("本次统计范围没有可显示的 Antigravity token。");
+            lines.Add(I18n.T("本次统计范围没有可显示的 Antigravity token。", "No Antigravity tokens found in the selected range."));
         }
 
         return string.Join(Environment.NewLine, lines);
     }
-
-    private static string FormatConfidence(QuotaEstimateConfidence confidence) => confidence switch
-    {
-        QuotaEstimateConfidence.High => "High",
-        QuotaEstimateConfidence.Medium => "Medium",
-        _ => "Low"
-    };
 
     private static string BuildCodexSection(DashboardSnapshot snapshot)
     {
@@ -208,23 +239,25 @@ public static class QuotaDisplayFormatter
             .OrderByDescending(s => s.CapturedAt)
             .Select(s => s.PlanTier)
             .FirstOrDefault();
+
+        var titlePrefix = I18n.T("Codex 额度与用量", "Codex Quota & Usage");
         var lines = new List<string>
         {
-            $"Codex 额度与用量{(string.IsNullOrWhiteSpace(codexPlan) ? string.Empty : $"（{codexPlan}）")}"
+            $"{titlePrefix}{(string.IsNullOrWhiteSpace(codexPlan) ? string.Empty : $"（{codexPlan}）")}"
         };
 
         if (codexQuotas.Count > 0)
         {
             var codex5h = codexQuotas.Where(IsFiveHour).ToList();
-            if (codex5h.Count > 0) lines.Add(FormatWindow("5 小时窗口", codex5h));
+            if (codex5h.Count > 0) lines.Add(FormatWindow(I18n.T("5 小时窗口", "5-Hour Window"), codex5h));
             var codexWeekly = codexQuotas.Where(IsWeekly).ToList();
-            if (codexWeekly.Count > 0) lines.Add(FormatWindow("周窗口", codexWeekly));
+            if (codexWeekly.Count > 0) lines.Add(FormatWindow(I18n.T("周窗口", "Weekly Window"), codexWeekly));
             var others = codexQuotas.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
-            if (others.Count > 0) lines.Add(FormatWindow("其他窗口", others));
+            if (others.Count > 0) lines.Add(FormatWindow(I18n.T("其他窗口", "Other Windows"), others));
         }
         else
         {
-            lines.Add("暂无可用 quota 快照（当前 session 未写入 rate_limits）");
+            lines.Add(I18n.T("暂无可用 quota 快照（当前 session 未写入 rate_limits）", "No quota snapshots available (rate_limits not written to active sessions)"));
         }
 
         var codexCycles = snapshot.CodexWeeklyCycles.Count > 0
@@ -235,14 +268,17 @@ public static class QuotaDisplayFormatter
 
         foreach (var cycle in codexCycles)
         {
-            var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : "未知";
+            var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : I18n.T("未知", "Unknown");
             var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
             var isStale = cycle.EstimateNote == "快照待更新";
-            var badge = isStale ? "（待更新）" : "";
-            var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}{badge}" : cycle.EstimateNote ?? "样本不足";
+            var badge = isStale ? I18n.T("（待更新）", " (Pending Update)") : "";
+            var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}{badge}" : cycle.EstimateNote ?? I18n.T("样本不足", "Insufficient samples");
             var prefix = codexCycles.Count > 1 ? $"{cycle.PoolName} " : string.Empty;
-            lines.Add($"{prefix}本轮订阅参考金额：{cycleCostText}（已消耗 {usedText}）");
-            lines.Add($"{prefix}满额样本外推：{estCostText}");
+            var subRefLbl = I18n.T("本轮订阅参考金额：", "Cycle Sub Ref Value: ");
+            var usedLbl = I18n.T("（已消耗 ", " (Consumed ");
+            var estLbl = I18n.T("满额样本外推：", "Est. Full Quota: ");
+            lines.Add($"{prefix}{subRefLbl}{cycleCostText}{usedLbl}{usedText}）");
+            lines.Add($"{prefix}{estLbl}{estCostText}");
         }
 
         if (models.Count > 0)
@@ -251,13 +287,19 @@ public static class QuotaDisplayFormatter
             var cacheRead = models.Sum(item => item.CachedTokens);
             var cacheCreation = models.Sum(item => item.CacheCreationTokens);
             var output = models.Sum(item => item.OutputTokens);
-            lines.Add($"Input（未命中）：{FormatTokens(input)}；Cache Read：{FormatTokens(cacheRead)}");
-            lines.Add($"Cache Creation：{FormatTokens(cacheCreation)}；Output：{FormatTokens(output)}");
-            lines.Add($"订阅参考金额：{FormatCost(GetKnownCost(models))}（范围 {FormatRange(snapshot.Range)}）");
+            var inputLbl = I18n.T("Input（未命中）：", "Input (Uncached): ");
+            var cacheReadLbl = I18n.T("；Cache Read：", "; Cache Read: ");
+            var cacheCreationLbl = I18n.T("Cache Creation：", "Cache Creation: ");
+            var outputLbl = I18n.T("；Output：", "; Output: ");
+            var subRefLbl = I18n.T("订阅参考金额：", "Sub Ref Value: ");
+            var rangeLbl = I18n.T("（范围 ", " (Range ");
+            lines.Add($"{inputLbl}{FormatTokens(input)}{cacheReadLbl}{FormatTokens(cacheRead)}");
+            lines.Add($"{cacheCreationLbl}{FormatTokens(cacheCreation)}{outputLbl}{FormatTokens(output)}");
+            lines.Add($"{subRefLbl}{FormatCost(GetKnownCost(models))}{rangeLbl}{FormatRange(snapshot.Range)}）");
         }
         else
         {
-            lines.Add("本次统计范围没有可显示的 Codex token。");
+            lines.Add(I18n.T("本次统计范围没有可显示的 Codex token。", "No Codex tokens found in the selected range."));
         }
 
         return string.Join(Environment.NewLine, lines);
@@ -265,25 +307,29 @@ public static class QuotaDisplayFormatter
 
     private static string FormatWindow(string label, IReadOnlyList<QuotaSnapshot> snapshots)
     {
-        if (snapshots.Count == 0) return $"{label}：暂无数据";
+        if (snapshots.Count == 0) return $"{label}：{I18n.T("暂无数据", "No data")}";
+        var sampleLbl = I18n.T("采样 ", "Sampled ");
+        var resetLbl = I18n.T("；重置 ", "; Reset ");
         var values = snapshots.Select(snapshot =>
-            $"{ShortLabel(snapshot)} {FormatRemaining(snapshot)}（采样 {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}；重置 {FormatReset(snapshot)}）");
+            $"{ShortLabel(snapshot)} {FormatRemaining(snapshot)}（{sampleLbl}{snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}{resetLbl}{FormatReset(snapshot)}）");
         return $"{label}：{string.Join("；", values)}";
     }
 
     private static string FormatCompact(QuotaSnapshot? snapshot)
     {
         if (snapshot is null) return "—";
-        if (snapshot.IsResetPassed()) return "待同步";
+        if (snapshot.IsResetPassed()) return I18n.T("待同步", "Syncing");
         var eff = snapshot.EffectiveRemainingFraction();
-        return eff.HasValue ? $"{eff.Value:P0}{(snapshot.IsStale() ? "旧" : "")}" : "未知";
+        var staleText = snapshot.IsStale() ? I18n.T("旧", "Stale") : "";
+        return eff.HasValue ? $"{eff.Value:P0}{staleText}" : I18n.T("未知", "Unknown");
     }
 
     private static string FormatRemaining(QuotaSnapshot snapshot)
     {
-        if (!snapshot.HasValidFraction || !snapshot.RemainingFraction.HasValue) return "剩余未知";
-        if (snapshot.IsResetPassed()) return $"待同步（上次 {snapshot.RemainingFraction.Value:P0}）";
-        return $"{snapshot.RemainingFraction.Value:P0} 剩余{(snapshot.IsStale() ? "（旧快照）" : "")}";
+        if (!snapshot.HasValidFraction || !snapshot.RemainingFraction.HasValue) return I18n.T("剩余未知", "Remaining Unknown");
+        if (snapshot.IsResetPassed()) return I18n.Format("待同步（上次 {0:P0}）", "Syncing (Last {0:P0})", snapshot.RemainingFraction.Value);
+        var staleNote = snapshot.IsStale() ? I18n.T("（旧快照）", " (Stale)") : "";
+        return I18n.Format("{0:P0} 剩余{1}", "{0:P0} Remaining{1}", snapshot.RemainingFraction.Value, staleNote);
     }
 
     private static string FormatReset(QuotaSnapshot snapshot) =>
@@ -312,7 +358,7 @@ public static class QuotaDisplayFormatter
             ? models.Sum(item => item.ApiEquivalentUsd!.Value)
             : null;
 
-    private static string FormatCost(decimal? value) => value.HasValue ? "$" + value.Value.ToString("0.00") : "—（含未定价用量）";
+    private static string FormatCost(decimal? value) => value.HasValue ? "$" + value.Value.ToString("0.00") : I18n.T("—（含未定价用量）", "— (Includes unpriced usage)");
 
     private static string FormatTokens(long value) => value switch
     {
@@ -323,7 +369,7 @@ public static class QuotaDisplayFormatter
 
     private static string FormatRange(DateRange range) => range.From == range.To
         ? range.From.ToString("yyyy-MM-dd")
-        : $"{range.From:yyyy-MM-dd} 至 {range.To:yyyy-MM-dd}";
+        : I18n.Format("{0:yyyy-MM-dd} 至 {1:yyyy-MM-dd}", "{0:yyyy-MM-dd} to {1:yyyy-MM-dd}", range.From, range.To);
 
     private static bool IsFiveHour(QuotaSnapshot snapshot)
     {

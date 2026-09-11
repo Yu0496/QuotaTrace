@@ -17,8 +17,15 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly System.Threading.Timer _refreshTimer;
     private readonly System.Windows.Forms.Timer _singleClickTimer;
     private readonly SynchronizationContext _uiContext;
+
+    private readonly ToolStripMenuItem _openDashboardMenuItem;
+    private readonly ToolStripMenuItem _refreshNowMenuItem;
     private readonly ToolStripMenuItem _quotaMenuItem;
     private readonly ToolStripMenuItem _pinQuotaMenuItem;
+    private readonly ToolStripMenuItem _startupMenuItem;
+    private readonly ToolStripMenuItem _settingsMenuItem;
+    private readonly ToolStripMenuItem _exitMenuItem;
+
     private MainForm? _mainForm;
     private QuotaPopupForm? _quotaPopup;
     private DashboardSnapshot _lastSnapshot;
@@ -32,6 +39,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         AppPaths.EnsureDirectories();
         _settingsStore = new AppSettingsStore(AppPaths.SettingsPath);
         var settings = _settingsStore.Load();
+        I18n.SetLanguage(settings.Language);
         new StartupManager().SyncStartupPathIfEnabled();
         var pricing = PricingService.LoadOrCreate(AppPaths.PricingPath, Path.Combine(AppContext.BaseDirectory, "Pricing", "default-pricing.json"));
         _database = new UsageDatabase(AppPaths.DatabasePath);
@@ -52,7 +60,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         };
 
         _applicationIcon = AppIcon.Create();
-        _notifyIcon = new NotifyIcon { Icon = _applicationIcon, Visible = true, Text = "AI Usage Tray" };
+        _notifyIcon = new NotifyIcon { Icon = _applicationIcon, Visible = true, Text = "QuotaTrace" };
         _notifyIcon.MouseClick += (_, e) =>
         {
             if (e.Button == MouseButtons.Left)
@@ -91,20 +99,31 @@ public sealed class TrayApplicationContext : ApplicationContext
             _contextMenuOpen = false;
             if (_quotaPopupPinned) ShowQuotaPopup();
         };
-        menu.Items.Add("打开仪表盘", null, (_, _) => ShowMainForm());
-        menu.Items.Add("立即刷新（增量）", null, async (_, _) => await RefreshAsync(false));
-        _quotaMenuItem = new ToolStripMenuItem("额度：等待刷新") { Enabled = false };
-        menu.Items.Add(_quotaMenuItem);
-        _pinQuotaMenuItem = new ToolStripMenuItem("固定显示额度摘要") { CheckOnClick = true };
+
+        _openDashboardMenuItem = new ToolStripMenuItem(string.Empty, null, (_, _) => ShowMainForm());
+        _refreshNowMenuItem = new ToolStripMenuItem(string.Empty, null, async (_, _) => await RefreshAsync(false));
+        _quotaMenuItem = new ToolStripMenuItem(string.Empty) { Enabled = false };
+        _pinQuotaMenuItem = new ToolStripMenuItem(string.Empty) { CheckOnClick = true };
         _pinQuotaMenuItem.Click += (_, _) => SetQuotaPopupPinned(_pinQuotaMenuItem.Checked);
+
+        _startupMenuItem = new ToolStripMenuItem(string.Empty) { Checked = settings.StartWithWindows, CheckOnClick = true };
+        _startupMenuItem.Click += (_, _) => { try { new StartupManager().SetEnabled(_startupMenuItem.Checked); } catch { } };
+
+        _settingsMenuItem = new ToolStripMenuItem(string.Empty, null, (_, _) => ShowSettings());
+        _exitMenuItem = new ToolStripMenuItem(string.Empty, null, (_, _) => ExitApplication());
+
+        menu.Items.Add(_openDashboardMenuItem);
+        menu.Items.Add(_refreshNowMenuItem);
+        menu.Items.Add(_quotaMenuItem);
         menu.Items.Add(_pinQuotaMenuItem);
-        var startup = new ToolStripMenuItem("开机启动") { Checked = settings.StartWithWindows, CheckOnClick = true };
-        startup.Click += (_, _) => { try { new StartupManager().SetEnabled(startup.Checked); } catch { } };
-        menu.Items.Add(startup);
-        menu.Items.Add("设置", null, (_, _) => ShowSettings());
+        menu.Items.Add(_startupMenuItem);
+        menu.Items.Add(_settingsMenuItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => ExitApplication());
+        menu.Items.Add(_exitMenuItem);
         _notifyIcon.ContextMenuStrip = menu;
+
+        UpdateMenuTexts();
+        I18n.LanguageChanged += HandleLanguageChanged;
 
         _refreshTimer = new System.Threading.Timer(async _ => await RefreshAsync(false), null,
             TimeSpan.FromSeconds(settings.RefreshSeconds), TimeSpan.FromSeconds(settings.RefreshSeconds));
@@ -113,6 +132,19 @@ public sealed class TrayApplicationContext : ApplicationContext
         var now = DateTimeOffset.UtcNow;
         var isWeeklyFullScanDue = !settings.LastFullScanUtc.HasValue || (now - settings.LastFullScanUtc.Value).TotalDays >= 7;
         _ = RefreshAsync(isWeeklyFullScanDue);
+    }
+
+    private void HandleLanguageChanged() => _uiContext.Post(_ => UpdateMenuTexts(), null);
+
+    private void UpdateMenuTexts()
+    {
+        _openDashboardMenuItem.Text = I18n.T("打开仪表盘", "Open Dashboard");
+        _refreshNowMenuItem.Text = I18n.T("立即刷新（增量）", "Refresh Now (Incremental)");
+        _pinQuotaMenuItem.Text = I18n.T("固定显示额度摘要", "Pin Quota Summary");
+        _startupMenuItem.Text = I18n.T("开机启动", "Start with Windows");
+        _settingsMenuItem.Text = I18n.T("设置", "Settings");
+        _exitMenuItem.Text = I18n.T("退出", "Exit");
+        UpdateTooltip(_lastSnapshot);
     }
 
     private async Task RefreshAsync(bool force)
@@ -125,7 +157,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         if (_disposed) return;
         _lastSnapshot = snapshot;
         if (_mainForm is { IsDisposed: false }) _mainForm.RefreshCurrentSelection();
-        if (_quotaPopup is { IsDisposed: false, Visible: true }) _quotaPopup.SetSnapshot(snapshot);
+        if (_quotaPopup is { IsDisposed: false, Visible: true })
+        {
+            _quotaPopup.UpdateProviderSettings(_coordinator.Settings.EnableCodex, _coordinator.Settings.EnableAntigravity);
+            _quotaPopup.SetSnapshot(snapshot);
+        }
         UpdateTooltip(snapshot);
     }
 
@@ -150,6 +186,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         ShowMainForm();
         using var form = new SettingsForm(_settingsStore, _coordinator);
         form.ShowDialog(_mainForm);
+        UpdateMenuTexts();
+        _quotaPopup?.UpdateProviderSettings(_coordinator.Settings.EnableCodex, _coordinator.Settings.EnableAntigravity);
+        _mainForm?.RefreshCurrentSelection();
     }
 
     private void ToggleQuotaPopup()
@@ -180,6 +219,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (_disposed || _contextMenuOpen || _notifyIcon.ContextMenuStrip?.Visible == true) return;
         _quotaPopup ??= CreateQuotaPopup();
+        _quotaPopup.UpdateProviderSettings(_coordinator.Settings.EnableCodex, _coordinator.Settings.EnableAntigravity);
         _quotaPopup.SetSnapshot(_lastSnapshot);
         _quotaPopup.ShowAt(Cursor.Position);
     }
@@ -187,6 +227,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private QuotaPopupForm CreateQuotaPopup()
     {
         var popup = new QuotaPopupForm();
+        popup.UpdateProviderSettings(_coordinator.Settings.EnableCodex, _coordinator.Settings.EnableAntigravity);
         popup.CloseRequested += (_, _) => SetQuotaPopupPinned(false);
         popup.DismissRequested += (_, _) =>
         {
@@ -202,9 +243,9 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void UpdateTooltip(DashboardSnapshot snapshot)
     {
-        var text = QuotaDisplayFormatter.BuildCompactText(snapshot);
+        var text = QuotaDisplayFormatter.BuildCompactText(snapshot, _coordinator.Settings.EnableCodex, _coordinator.Settings.EnableAntigravity);
         _notifyIcon.Text = text.Length > 63 ? text[..63] : text;
-        _quotaMenuItem.Text = $"额度：{text}";
+        _quotaMenuItem.Text = $"{I18n.T("额度：", "Quota: ")}{text}";
     }
 
     private void ExitApplication()
@@ -217,6 +258,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (_disposed) return;
         _disposed = true;
+        I18n.LanguageChanged -= HandleLanguageChanged;
         _singleClickTimer.Stop();
         _singleClickTimer.Dispose();
         _quotaPopup?.Dispose();

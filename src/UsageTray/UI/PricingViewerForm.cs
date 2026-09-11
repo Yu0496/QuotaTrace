@@ -1,4 +1,5 @@
 using System.Data;
+using UsageTray.App;
 using UsageTray.Core;
 using UsageTray.Pricing;
 using UsageTray.Services;
@@ -22,23 +23,23 @@ public sealed class PricingViewerForm : Form
         AutoScaleMode = AutoScaleMode.Font;
         Font = new Font("Segoe UI", 9F);
         Icon = AppIcon.Create();
-        Text = "当前模型与定价规则";
+        Text = I18n.T("当前模型与定价规则", "Current Models & Pricing Rules");
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         MinimizeBox = false;
 
-        var textHeight = TextRenderer.MeasureText("刷新", Font).Height;
+        var textHeight = TextRenderer.MeasureText(I18n.T("刷新", "Refresh"), Font).Height;
         var buttonHeight = Math.Max(32, textHeight + 10);
 
         _providerFilter = new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = 130,
+            Width = 140,
             Height = buttonHeight,
             Margin = new Padding(0, 0, 10, 0)
         };
-        _providerFilter.Items.AddRange(["全部 Provider", "Codex", "Antigravity"]);
+        _providerFilter.Items.AddRange([I18n.T("全部 Provider", "All Providers"), "Codex", "Antigravity"]);
         _providerFilter.SelectedIndex = 0;
         _providerFilter.SelectedIndexChanged += (_, _) => ApplyFilter();
 
@@ -46,14 +47,14 @@ public sealed class PricingViewerForm : Form
         {
             Width = 200,
             Height = buttonHeight,
-            PlaceholderText = "按模型名称搜索…",
+            PlaceholderText = I18n.T("按模型名称搜索…", "Search by model name..."),
             Margin = new Padding(0, 0, 10, 0)
         };
         _searchBox.TextChanged += (_, _) => ApplyFilter();
 
         var refreshButton = new Button
         {
-            Text = "重新读取",
+            Text = I18n.T("重新读取", "Reload"),
             Width = 90,
             Height = buttonHeight,
             Margin = Padding.Empty
@@ -73,9 +74,9 @@ public sealed class PricingViewerForm : Form
             WrapContents = false,
             BackColor = Color.FromArgb(248, 250, 252)
         };
-        topPanel.Controls.Add(new Label { Text = "筛选：", AutoSize = true, Margin = new Padding(0, 6, 4, 0) });
+        topPanel.Controls.Add(new Label { Text = I18n.T("筛选：", "Filter: "), AutoSize = true, Margin = new Padding(0, 6, 4, 0) });
         topPanel.Controls.Add(_providerFilter);
-        topPanel.Controls.Add(new Label { Text = "搜索：", AutoSize = true, Margin = new Padding(0, 6, 4, 0) });
+        topPanel.Controls.Add(new Label { Text = I18n.T("搜索：", "Search: "), AutoSize = true, Margin = new Padding(0, 6, 4, 0) });
         topPanel.Controls.Add(_searchBox);
         topPanel.Controls.Add(refreshButton);
 
@@ -92,7 +93,7 @@ public sealed class PricingViewerForm : Form
 
         var closeButton = new Button
         {
-            Text = "关闭",
+            Text = I18n.T("关闭", "Close"),
             DialogResult = DialogResult.OK,
             Width = 85,
             Height = buttonHeight,
@@ -158,6 +159,9 @@ public sealed class PricingViewerForm : Form
             var cacheRead = rule.CacheReadPerMillionUsd.HasValue ? $"${rule.CacheReadPerMillionUsd.Value:0.####}" : "—";
             var cacheWrite = rule.CacheWritePerMillionUsd.HasValue ? $"${rule.CacheWritePerMillionUsd.Value:0.####}" : "—";
 
+            var defaultBasis = I18n.T("自定义参考基准", "Custom Reference");
+            var sourceLbl = I18n.T("。来源：", ". Source: ");
+
             var rowIndex = _grid.Rows.Add(
                 rule.Provider,
                 rule.ModelPattern,
@@ -168,15 +172,18 @@ public sealed class PricingViewerForm : Form
                 $"${rule.OutputPerMillionUsd:0.##}",
                 longCtx,
                 rule.LastVerifiedAt.ToString("yyyy-MM-dd"),
-                rule.UnverifiedReason ?? rule.ReferenceBasis ?? "自定义参考基准"
+                rule.UnverifiedReason ?? rule.ReferenceBasis ?? defaultBasis
             );
             if (rule.UnverifiedReason is not null)
                 for (var col = 3; col <= 7; col++) _grid.Rows[rowIndex].Cells[col].Value = "—";
             foreach (DataGridViewCell cell in _grid.Rows[rowIndex].Cells)
-                cell.ToolTipText = rule.UnverifiedReason ?? $"{rule.ReferenceBasis ?? "自定义参考基准"}。来源：{rule.SourceUrl}";
+                cell.ToolTipText = rule.UnverifiedReason ?? $"{rule.ReferenceBasis ?? defaultBasis}{sourceLbl}{rule.SourceUrl}";
         }
 
-        _statusLabel.Text = $"共显示 {filtered.Count} / {_rules.Count} 条价格规则；单位均为 $/1M Tokens。固定参考基准，非实际账单。";
+        _statusLabel.Text = I18n.Format(
+            "共显示 {0} / {1} 条价格规则；单位均为 $/1M Tokens。固定参考基准，非实际账单。",
+            "Showing {0} / {1} rules; unit $/1M Tokens. Fixed benchmark, not actual bills.",
+            filtered.Count, _rules.Count);
     }
 
     private DataGridView CreateGrid()
@@ -191,7 +198,8 @@ public sealed class PricingViewerForm : Form
             AllowUserToAddRows = false,
             AllowUserToResizeRows = false,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-            AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
+            AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None,
+            RowTemplate = { Height = 32 },
             BackgroundColor = Color.White,
             RowHeadersVisible = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
@@ -202,6 +210,8 @@ public sealed class PricingViewerForm : Form
             GridColor = Color.FromArgb(226, 232, 240),
             Font = cellFont
         };
+        typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.SetValue(grid, true, null);
         grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
         {
             BackColor = Color.FromArgb(241, 245, 249),
@@ -220,10 +230,20 @@ public sealed class PricingViewerForm : Form
             SelectionForeColor = Color.FromArgb(15, 23, 42)
         };
 
-        string[] columns = [
-            "Provider", "模型模式 (Pattern)", "匹配类型", "输入价格", "缓存读取", "缓存创建", "输出价格", "长上下文价格", "核验日期", "参考依据"
-        ];
-        foreach (var col in columns) grid.Columns.Add(col, col);
+        var columns = new (string Key, string Zh, string En)[]
+        {
+            ("Provider", "Provider", "Provider"),
+            ("ModelPattern", "模型模式 (Pattern)", "Model Pattern"),
+            ("MatchMode", "匹配类型", "Match Type"),
+            ("InputPrice", "输入价格", "Input Price"),
+            ("CacheRead", "缓存读取", "Cache Read"),
+            ("CacheWrite", "缓存创建", "Cache Write"),
+            ("OutputPrice", "输出价格", "Output Price"),
+            ("LongContextPrice", "长上下文价格", "Long Context Price"),
+            ("VerifiedDate", "核验日期", "Verified Date"),
+            ("ReferenceBasis", "参考依据", "Reference Basis")
+        };
+        foreach (var col in columns) grid.Columns.Add(col.Key, I18n.T(col.Zh, col.En));
 
         grid.Columns[0].FillWeight = 55;
         grid.Columns[1].FillWeight = 110;

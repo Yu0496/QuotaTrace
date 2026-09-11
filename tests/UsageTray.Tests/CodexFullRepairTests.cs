@@ -178,7 +178,8 @@ public sealed class CodexFullRepairTests
     [Fact]
     public void RealShortGoldenSessionMatchesExpectedCumulativeFinal()
     {
-        const string path = "C:\\Users\\xiong\\.codex\\archived_sessions\\rollout-2026-08-13T21-57-20-019ffb69-c293-7f01-a81b-be85256432f2.jsonl";
+        var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var path = Path.Combine(userHome, ".codex", "archived_sessions", "rollout-2026-08-13T21-57-20-019ffb69-c293-7f01-a81b-be85256432f2.jsonl");
         if (!File.Exists(path)) return;
         var result = new CodexJsonlParser().ParseFile(path);
         Assert.Equal(185286, result.Buckets.Sum(item => item.InputTokens));
@@ -189,7 +190,8 @@ public sealed class CodexFullRepairTests
     [Fact]
     public void RealLongGoldenSessionMatchesExpectedGlobalFinal()
     {
-        const string path = "C:\\Users\\xiong\\.codex\\archived_sessions\\rollout-2026-07-11T02-18-37-019f4d40-afae-74b1-8c32-89927f0860e0.jsonl";
+        var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var path = Path.Combine(userHome, ".codex", "archived_sessions", "rollout-2026-07-11T02-18-37-019f4d40-afae-74b1-8c32-89927f0860e0.jsonl");
         if (!File.Exists(path)) return;
         var result = new CodexJsonlParser().ParseFile(path);
         Assert.Equal(100366344, result.Buckets.Sum(item => item.InputTokens));

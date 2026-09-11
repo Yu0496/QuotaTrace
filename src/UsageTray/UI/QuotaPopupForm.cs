@@ -126,6 +126,14 @@ internal sealed class QuotaPopupForm : Form
         RecalculateSize();
     }
 
+    public void UpdateProviderSettings(bool enableCodex, bool enableAntigravity)
+    {
+        _contentControl.EnableCodex = enableCodex;
+        _contentControl.EnableAntigravity = enableAntigravity;
+        RecalculateSize();
+        _contentControl.Invalidate();
+    }
+
     private void RecalculateSize()
     {
         var width = (int)Math.Round(580f * DeviceDpi / 96f);

@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using UsageTray.App;
 using UsageTray.Core;
 using UsageTray.Providers.Antigravity;
 using UsageTray.Services;
@@ -18,6 +19,8 @@ public sealed class QuotaSummaryControl : UserControl
     public bool ShowHeader { get; set; } = true;
     public bool ShowFooterNote { get; set; } = true;
     public bool IsLocked { get; set; }
+    public bool EnableCodex { get; set; } = true;
+    public bool EnableAntigravity { get; set; } = true;
 
     public QuotaSummaryControl()
     {
@@ -83,120 +86,134 @@ public sealed class QuotaSummaryControl : UserControl
             return y;
         }
 
+        if (!EnableAntigravity && !EnableCodex)
+        {
+            y += _regularFont.Height + 20;
+            return y;
+        }
+
         // Section 1: Antigravity
-        y += _sectionFont.Height + 6;
-        var rawAgSnapshots = _snapshot.Quotas
-            .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity)
-            .Select(q => q.Snapshot).ToList();
-        var agSnapshots = DeduplicateAntigravityQuotas(rawAgSnapshots);
-        if (agSnapshots.Count == 0)
+        if (EnableAntigravity)
         {
-            y += _regularFont.Height + 4;
-        }
-        else
-        {
-            var fiveHour = agSnapshots.Where(IsFiveHour).ToList();
-            if (fiveHour.Count > 0) y += MeasureQuotaWindowHeight(fiveHour);
-            var weekly = agSnapshots.Where(IsWeekly).ToList();
-            if (weekly.Count > 0) y += MeasureQuotaWindowHeight(weekly);
-            var others = agSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
-            if (others.Count > 0) y += MeasureQuotaWindowHeight(others);
-        }
-
-        // Antigravity Weekly Cycle Estimates
-        var agWeeklyEstimates = (_snapshot.AntigravityEstimates?
-            .Where(e => e.WindowKind == "weekly")
-            .ToList() ?? []).ToList();
-
-        if (agWeeklyEstimates.Count == 0)
-        {
-            var weeklySnaps = agSnapshots.Where(IsWeekly).ToList();
-            if (weeklySnaps.Count > 0)
+            y += _sectionFont.Height + 6;
+            var rawAgSnapshots = _snapshot.Quotas
+                .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity)
+                .Select(q => q.Snapshot).ToList();
+            var agSnapshots = DeduplicateAntigravityQuotas(rawAgSnapshots);
+            if (agSnapshots.Count == 0)
             {
-                agWeeklyEstimates = weeklySnaps.Select(w =>
-                {
-                    var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
-                    var name = isGemini ? "Gemini Models" : "Claude and GPT models";
-                    var rem = w.EffectiveRemainingFraction();
-                    var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
-                    return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, null, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
-                }).ToList();
+                y += _regularFont.Height + 4;
             }
-        }
-
-        if (agWeeklyEstimates.Count > 0)
-        {
-            y += 2;
-            y += _boldFont.Height + 3; // "周订阅统计与预估 (本轮 7 天窗口)"
-            foreach (var _ in agWeeklyEstimates)
+            else
             {
-                y += _regularFont.Height + 3; // 本轮参考金额
-                y += _regularFont.Height + 4; // 满额样本外推
+                var fiveHour = agSnapshots.Where(IsFiveHour).ToList();
+                if (fiveHour.Count > 0) y += MeasureQuotaWindowHeight(fiveHour);
+                var weekly = agSnapshots.Where(IsWeekly).ToList();
+                if (weekly.Count > 0) y += MeasureQuotaWindowHeight(weekly);
+                var others = agSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
+                if (others.Count > 0) y += MeasureQuotaWindowHeight(others);
             }
-        }
 
-        y += 6;
-        y += 1; // Divider
-        y += 8;
+            // Antigravity Weekly Cycle Estimates
+            var agWeeklyEstimates = (_snapshot.AntigravityEstimates?
+                .Where(e => e.WindowKind == "weekly")
+                .ToList() ?? []).ToList();
 
-        // Section 2: Codex
-        y += _sectionFont.Height + 6;
-        var codexSnapshots = _snapshot.Quotas
-            .Where(q => q.Snapshot.Provider == ProviderKind.Codex)
-            .Select(q => q.Snapshot).ToList();
-        var codexPlan = codexSnapshots
-            .Where(s => !UsageAggregator.IsReserveSnapshot(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
-            .OrderByDescending(s => s.CapturedAt)
-            .Select(s => s.PlanTier)
-            .FirstOrDefault()
-            ?? codexSnapshots
-            .Where(s => !string.IsNullOrWhiteSpace(s.PlanTier))
-            .OrderByDescending(s => s.CapturedAt)
-            .Select(s => s.PlanTier)
-            .FirstOrDefault();
-
-        if (codexSnapshots.Count > 0)
-        {
-            var fiveHour = codexSnapshots.Where(IsFiveHour).ToList();
-            if (fiveHour.Count > 0) y += MeasureQuotaWindowHeight(fiveHour);
-            var weekly = codexSnapshots.Where(IsWeekly).ToList();
-            if (weekly.Count > 0) y += MeasureQuotaWindowHeight(weekly);
-            var others = codexSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
-            if (others.Count > 0) y += MeasureQuotaWindowHeight(others);
-            var activeSnapshots = codexSnapshots;
-            if (activeSnapshots.Any(s => s.IsResetPassed())) y += _smallFont.Height + 4;
-        }
-        else
-        {
-            y += _regularFont.Height + 4;
-        }
-
-
-        // Codex Weekly Cycle & Projection
-        var codexCycles = _snapshot.CodexWeeklyCycles.Count > 0
-            ? _snapshot.CodexWeeklyCycles
-            : _snapshot.CodexWeeklyCycle != null
-                ? [_snapshot.CodexWeeklyCycle]
-                : [];
-
-        if (codexCycles.Count > 0)
-        {
-            y += 2;
-            y += _boldFont.Height + 3; // "周订阅统计与预估 (本轮 7 天窗口)"
-            foreach (var cycle in codexCycles)
+            if (agWeeklyEstimates.Count == 0)
             {
-                y += _regularFont.Height + 3; // 本轮参考金额
-                y += _regularFont.Height + 4; // 满额样本外推
-                if (!ShowHeader && cycle.ModelProjections is { Count: > 0 })
+                var weeklySnaps = agSnapshots.Where(IsWeekly).ToList();
+                if (weeklySnaps.Count > 0)
                 {
-                    y += (_regularFont.Height + 4) * cycle.ModelProjections.Count;
+                    agWeeklyEstimates = weeklySnaps.Select(w =>
+                    {
+                        var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
+                        var name = isGemini ? "Gemini Models" : "Claude and GPT models";
+                        var rem = w.EffectiveRemainingFraction();
+                        var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
+                        return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, null, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
+                    }).ToList();
+                }
+            }
+
+            if (agWeeklyEstimates.Count > 0)
+            {
+                y += 2;
+                y += _boldFont.Height + 3;
+                foreach (var _ in agWeeklyEstimates)
+                {
+                    y += _regularFont.Height + 3;
+                    y += _regularFont.Height + 4;
                 }
             }
         }
 
-        y += 6;
-        y += 1; // Divider
-        y += 8;
+        if (EnableAntigravity && EnableCodex)
+        {
+            y += 6;
+            y += 1; // Divider
+            y += 8;
+        }
+
+        // Section 2: Codex
+        if (EnableCodex)
+        {
+            y += _sectionFont.Height + 6;
+            var codexSnapshots = _snapshot.Quotas
+                .Where(q => q.Snapshot.Provider == ProviderKind.Codex)
+                .Select(q => q.Snapshot).ToList();
+
+            if (codexSnapshots.Count > 0)
+            {
+                var fiveHour = codexSnapshots.Where(IsFiveHour).ToList();
+                if (fiveHour.Count > 0) y += MeasureQuotaWindowHeight(fiveHour);
+                var weekly = codexSnapshots.Where(IsWeekly).ToList();
+                if (weekly.Count > 0) y += MeasureQuotaWindowHeight(weekly);
+                var others = codexSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
+                if (others.Count > 0) y += MeasureQuotaWindowHeight(others);
+
+                if (codexSnapshots.Any(s => s.IsResetPassed()))
+                {
+                    y += _smallFont.Height + 4;
+                }
+            }
+            else
+            {
+                y += _regularFont.Height + 4;
+            }
+
+            // Codex Weekly Cycle & Projection
+            var codexCycles = _snapshot.CodexWeeklyCycles.Count > 0
+                ? _snapshot.CodexWeeklyCycles
+                : _snapshot.CodexWeeklyCycle != null
+                    ? [_snapshot.CodexWeeklyCycle]
+                    : [];
+
+            if (codexCycles.Count > 0)
+            {
+                y += 2;
+                y += _boldFont.Height + 3;
+                foreach (var cycle in codexCycles)
+                {
+                    y += _regularFont.Height + 3;
+                    y += _regularFont.Height + 4;
+
+                    if (!ShowHeader && cycle.ModelProjections is { Count: > 0 })
+                    {
+                        foreach (var _ in cycle.ModelProjections)
+                        {
+                            y += _regularFont.Height + 4;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (EnableAntigravity || EnableCodex)
+        {
+            y += 6;
+            y += 1; // Divider
+            y += 8;
+        }
 
         // Footer / Timestamp
         y += _smallFont.Height + 6;
@@ -239,10 +256,12 @@ public sealed class QuotaSummaryControl : UserControl
         // Header
         if (ShowHeader)
         {
-            g.DrawString("额度与用量摘要", _titleFont, titleBrush, padX, y);
+            g.DrawString(I18n.T("额度与用量摘要", "Quota & Usage Summary"), _titleFont, titleBrush, padX, y);
             if (ShowDismissHint)
             {
-                var closeText = IsLocked ? "已拖动锁定 (点击面板关闭)" : "点击任意位置关闭 (支持拖动)";
+                var closeText = IsLocked
+                    ? I18n.T("已拖动锁定 (点击面板关闭)", "Locked (Click panel to close)")
+                    : I18n.T("点击任意位置关闭 (支持拖动)", "Click anywhere to close (Draggable)");
                 var closeSize = TextRenderer.MeasureText(g, closeText, _smallFont);
                 g.DrawString(closeText, _smallFont, hintBrush, width - padX - closeSize.Width, y + (_titleFont.Height - _smallFont.Height) / 2);
             }
@@ -255,196 +274,230 @@ public sealed class QuotaSummaryControl : UserControl
         if (_snapshot is null)
         {
             using var muted = new SolidBrush(Color.FromArgb(100, 116, 139));
-            g.DrawString("暂无额度快照，请先刷新。", _regularFont, muted, padX, y);
+            g.DrawString(I18n.T("暂无额度快照，请先刷新。", "No quota snapshots available. Please refresh."), _regularFont, muted, padX, y);
+            return;
+        }
+
+        if (!EnableAntigravity && !EnableCodex)
+        {
+            using var muted = new SolidBrush(Color.FromArgb(100, 116, 139));
+            g.DrawString(I18n.T("所有提供商均已禁用，请在设置中开启。", "All providers are disabled. Please enable them in Settings."), _regularFont, muted, padX, y);
             return;
         }
 
         // Section 1: Antigravity
-        var agViews = _snapshot.Quotas.Where(q => q.Snapshot.Provider == ProviderKind.Antigravity).ToList();
-        var rawAgSnapshots = agViews.Select(q => q.Snapshot).ToList();
-        var agSnapshots = DeduplicateAntigravityQuotas(rawAgSnapshots);
-        var agPlan = agSnapshots
-            .Where(s => !string.IsNullOrWhiteSpace(s.PlanTier))
-            .OrderByDescending(s => s.CapturedAt)
-            .Select(s => s.PlanTier)
-            .FirstOrDefault();
-        var agOffline = agViews.Count > 0 && agViews.All(v => v.IsOffline);
-
-        DrawSectionHeader(g, padX, ref y, "Antigravity 额度与周订阅", agPlan, agOffline ? "离线" : null, Color.FromArgb(59, 130, 246));
-
-        if (agSnapshots.Count == 0)
+        if (EnableAntigravity)
         {
-            using var muted = new SolidBrush(Color.FromArgb(148, 163, 184));
-            g.DrawString("暂无可用快照，请确保 Antigravity 正在运行并刷新。", _regularFont, muted, padX + 8, y);
-            y += _regularFont.Height + 4;
-        }
-        else
-        {
-            var fiveHour = agSnapshots.Where(IsFiveHour)
-                .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
-                .ToList();
-            if (fiveHour.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "5 小时窗口", fiveHour);
+            var agViews = _snapshot.Quotas.Where(q => q.Snapshot.Provider == ProviderKind.Antigravity).ToList();
+            var rawAgSnapshots = agViews.Select(q => q.Snapshot).ToList();
+            var agSnapshots = DeduplicateAntigravityQuotas(rawAgSnapshots);
+            var agPlan = agSnapshots
+                .Where(s => !string.IsNullOrWhiteSpace(s.PlanTier))
+                .OrderByDescending(s => s.CapturedAt)
+                .Select(s => s.PlanTier)
+                .FirstOrDefault();
+            var agOffline = agViews.Count > 0 && agViews.All(v => v.IsOffline);
 
-            var weekly = agSnapshots.Where(IsWeekly)
-                .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
-                .ToList();
-            if (weekly.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "周窗口", weekly);
+            var agTitle = I18n.T("Antigravity 额度与周订阅", "Antigravity Quota & Weekly Sub");
+            DrawSectionHeader(g, padX, ref y, agTitle, agPlan, agOffline ? I18n.T("离线", "Offline") : null, Color.FromArgb(59, 130, 246));
 
-            var others = agSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s))
-                .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
-                .ToList();
-            if (others.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "其他窗口", others);
-        }
-
-        // Antigravity Weekly Cycle Estimates (Gemini first, then Claude/GPT)
-        var agWeeklyEstimates = (_snapshot.AntigravityEstimates?
-            .Where(e => e.WindowKind == "weekly")
-            .ToList() ?? []).ToList();
-
-        if (agWeeklyEstimates.Count == 0)
-        {
-            var weeklySnaps = agSnapshots.Where(IsWeekly).ToList();
-            if (weeklySnaps.Count > 0)
+            if (agSnapshots.Count == 0)
             {
-                agWeeklyEstimates = weeklySnaps.Select(w =>
+                using var muted = new SolidBrush(Color.FromArgb(148, 163, 184));
+                g.DrawString(I18n.T("暂无可用快照，请确保 Antigravity 正在运行并刷新。", "No snapshot available. Ensure Antigravity is running and refresh."), _regularFont, muted, padX + 8, y);
+                y += _regularFont.Height + 4;
+            }
+            else
+            {
+                var fiveHour = agSnapshots.Where(IsFiveHour)
+                    .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
+                    .ToList();
+                if (fiveHour.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, I18n.T("5 小时窗口", "5-Hour Window"), fiveHour);
+
+                var weekly = agSnapshots.Where(IsWeekly)
+                    .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
+                    .ToList();
+                if (weekly.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, I18n.T("周窗口", "Weekly Window"), weekly);
+
+                var others = agSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s))
+                    .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
+                    .ToList();
+                if (others.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, I18n.T("其他窗口", "Other Windows"), others);
+            }
+
+            // Antigravity Weekly Cycle Estimates (Gemini first, then Claude/GPT)
+            var agWeeklyEstimates = (_snapshot.AntigravityEstimates?
+                .Where(e => e.WindowKind == "weekly")
+                .ToList() ?? []).ToList();
+
+            if (agWeeklyEstimates.Count == 0)
+            {
+                var weeklySnaps = agSnapshots.Where(IsWeekly).ToList();
+                if (weeklySnaps.Count > 0)
                 {
-                    var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
-                    var name = isGemini ? "Gemini Models" : "Claude and GPT models";
-                    var rem = w.EffectiveRemainingFraction();
-                    var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
-                    return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, null, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
-                }).ToList();
+                    agWeeklyEstimates = weeklySnaps.Select(w =>
+                    {
+                        var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
+                        var name = isGemini ? "Gemini Models" : "Claude and GPT models";
+                        var rem = w.EffectiveRemainingFraction();
+                        var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
+                        return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, null, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
+                    }).ToList();
+                }
             }
-        }
 
-        agWeeklyEstimates = agWeeklyEstimates
-            .OrderBy(e => (e.DisplayName?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
-            .ToList();
+            agWeeklyEstimates = agWeeklyEstimates
+                .OrderBy(e => (e.DisplayName?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
+                .ToList();
 
-        if (agWeeklyEstimates.Count > 0)
-        {
-            y += 2;
-            using var estHeaderBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
-            g.DrawString("周订阅统计与预估 (本轮 7 天窗口)", _boldFont, estHeaderBrush, padX + 8, y);
-            y += _boldFont.Height + 3;
-
-            foreach (var est in agWeeklyEstimates)
+            if (agWeeklyEstimates.Count > 0)
             {
-                var usedText = est.ConsumedFraction.HasValue ? $"{est.ConsumedFraction.Value:P0}" : (est.RemainingFraction.HasValue ? $"{1.0 - est.RemainingFraction.Value:P0}" : "未知");
-                var cycleCostText = est.ObservedCostUsd.HasValue ? "$" + est.ObservedCostUsd.Value.ToString("0.00") : "—";
-                var estCostText = est.EstimatedFullQuotaUsd.HasValue ? $"约 ${est.EstimatedFullQuotaUsd.Value:0.00}" : est.CalculationDetails ?? "样本不足";
-                var resetNote = est.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(est.ResetAt.Value)}）" : string.Empty;
+                y += 2;
+                using var estHeaderBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
+                g.DrawString(I18n.T("周订阅统计与预估 (本轮 7 天窗口)", "Weekly Sub Stats & Estimates (7-Day Window)"), _boldFont, estHeaderBrush, padX + 8, y);
+                y += _boldFont.Height + 3;
 
-                var isStale = est.CalculationDetails == "快照待更新";
-                var estBadge = est.EstimatedFullQuotaUsd.HasValue
-                    ? (isStale ? "（待更新）" : "（仅本机样本）")
-                    : string.Empty;
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 本轮参考金额", cycleCostText, $"（已消耗 {usedText}）", Color.FromArgb(37, 99, 235));
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{est.DisplayName} 满额样本外推", estCostText, estBadge, Color.FromArgb(5, 150, 105));
+                foreach (var est in agWeeklyEstimates)
+                {
+                    var usedText = est.ConsumedFraction.HasValue ? $"{est.ConsumedFraction.Value:P0}" : (est.RemainingFraction.HasValue ? $"{1.0 - est.RemainingFraction.Value:P0}" : I18n.T("未知", "Unknown"));
+                    var cycleCostText = est.ObservedCostUsd.HasValue ? "$" + est.ObservedCostUsd.Value.ToString("0.00") : "—";
+                    var estCostText = est.EstimatedFullQuotaUsd.HasValue
+                        ? I18n.Format("约 ${0:0.00}", "~ ${0:0.00}", est.EstimatedFullQuotaUsd.Value)
+                        : LocalizeEstimateNote(est.CalculationDetails);
+
+                    var isStale = est.CalculationDetails == "快照待更新";
+                    var estBadge = est.EstimatedFullQuotaUsd.HasValue
+                        ? (isStale ? I18n.T("（待更新）", " (Pending Update)") : I18n.T("（仅本机样本）", " (Local Samples)"))
+                        : string.Empty;
+
+                    var cycleKey = I18n.Format("{0} 本轮参考金额", "{0} Cycle Sub Ref", est.DisplayName);
+                    var fullKey = I18n.Format("{0} 满额样本外推", "{0} Est. Full Quota", est.DisplayName);
+                    var consumedNote = I18n.Format("（已消耗 {0}）", " (Consumed {0})", usedText);
+
+                    DrawKeyValueHighlight(g, padX + 16, ref y, cycleKey, cycleCostText, consumedNote, Color.FromArgb(37, 99, 235));
+                    DrawKeyValueHighlight(g, padX + 16, ref y, fullKey, estCostText, estBadge, Color.FromArgb(5, 150, 105));
+                }
             }
         }
 
-        y += 6;
-        g.DrawLine(dividerPen, padX, y, width - padX, y);
-        y += 8;
+        if (EnableAntigravity && EnableCodex)
+        {
+            y += 6;
+            g.DrawLine(dividerPen, padX, y, width - padX, y);
+            y += 8;
+        }
 
         // Section 2: Codex
-        var codexViews = _snapshot.Quotas.Where(q => q.Snapshot.Provider == ProviderKind.Codex).ToList();
-        var codexSnapshots = codexViews.Select(q => q.Snapshot).ToList();
-        var codexPlan = codexSnapshots
-            .Where(s => !UsageAggregator.IsReserveSnapshot(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
-            .OrderByDescending(s => s.CapturedAt)
-            .Select(s => s.PlanTier)
-            .FirstOrDefault()
-            ?? codexSnapshots
-            .Where(s => !UsageAggregator.IsReserveSnapshot(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
-            .Select(s => s.PlanTier)
-            .FirstOrDefault();
-
-        DrawSectionHeader(g, padX, ref y, "Codex 额度与周订阅", codexPlan, null, Color.FromArgb(16, 185, 129));
-
-        if (codexSnapshots.Count > 0)
+        if (EnableCodex)
         {
-            var fiveHour = codexSnapshots.Where(IsFiveHour).ToList();
-            if (fiveHour.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "5 小时窗口", fiveHour);
-            var weekly = codexSnapshots.Where(IsWeekly).ToList();
-            if (weekly.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "周窗口", weekly);
-            var others = codexSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
-            if (others.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, "其他窗口", others);
+            var codexViews = _snapshot.Quotas.Where(q => q.Snapshot.Provider == ProviderKind.Codex).ToList();
+            var codexSnapshots = codexViews.Select(q => q.Snapshot).ToList();
+            var codexPlan = codexSnapshots
+                .Where(s => !UsageAggregator.IsReserveSnapshot(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
+                .OrderByDescending(s => s.CapturedAt)
+                .Select(s => s.PlanTier)
+                .FirstOrDefault()
+                ?? codexSnapshots
+                .Where(s => !UsageAggregator.IsReserveSnapshot(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
+                .Select(s => s.PlanTier)
+                .FirstOrDefault();
 
-            var activeSnapshots = codexSnapshots;
-            if (activeSnapshots.Any(s => s.IsResetPassed()))
+            var codexTitle = I18n.T("Codex 额度与周订阅", "Codex Quota & Weekly Sub");
+            DrawSectionHeader(g, padX, ref y, codexTitle, codexPlan, null, Color.FromArgb(16, 185, 129));
+
+            if (codexSnapshots.Count > 0)
             {
-                using var tipBrush = new SolidBrush(Color.FromArgb(100, 116, 139));
-                g.DrawString("部分窗口已过期；使用对应模型后等待新快照。", _smallFont, tipBrush, padX + 8, y);
-                y += _smallFont.Height + 4;
-            }
-        }
-        else
-        {
-            using var muted = new SolidBrush(Color.FromArgb(100, 116, 139));
-            g.DrawString("暂无可用快照（当前 session 未写入 rate_limits）", _regularFont, muted, padX + 8, y);
-            y += _regularFont.Height + 4;
-        }
+                var fiveHour = codexSnapshots.Where(IsFiveHour).ToList();
+                if (fiveHour.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, I18n.T("5 小时窗口", "5-Hour Window"), fiveHour);
+                var weekly = codexSnapshots.Where(IsWeekly).ToList();
+                if (weekly.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, I18n.T("周窗口", "Weekly Window"), weekly);
+                var others = codexSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s)).ToList();
+                if (others.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, I18n.T("其他窗口", "Other Windows"), others);
 
-        // Codex Weekly Cycle & Projection
-        var codexCycles = _snapshot.CodexWeeklyCycles.Count > 0
-            ? _snapshot.CodexWeeklyCycles
-            : _snapshot.CodexWeeklyCycle != null
-                ? [_snapshot.CodexWeeklyCycle]
-                : [];
-
-        if (codexCycles.Count > 0)
-        {
-            y += 2;
-            using var subHeaderBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
-            g.DrawString("周订阅统计与预估 (本轮 7 天窗口)", _boldFont, subHeaderBrush, padX + 8, y);
-            y += _boldFont.Height + 3;
-
-            foreach (var cycle in codexCycles)
-            {
-                var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : "未知";
-                var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
-                var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue ? $"约 ${cycle.EstimatedWeeklyCostUsd.Value:0.00}" : cycle.EstimateNote ?? "样本不足";
-                var codexResetNote = cycle.ResetAt.HasValue ? $"（重置 {TimeFormatter.FormatResetWithRelative(cycle.ResetAt.Value)}）" : string.Empty;
-                var poolPrefix = codexCycles.Count > 1 ? $"{cycle.PoolName} " : string.Empty;
-                var isStale = cycle.EstimateNote == "快照待更新";
-                var estBadge = cycle.EstimatedWeeklyCostUsd.HasValue
-                    ? (isStale ? "（待更新）" : "（仅本机样本）")
-                    : string.Empty;
-
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}本轮参考金额", cycleCostText, $"（已消耗 {usedText}）", Color.FromArgb(37, 99, 235));
-                DrawKeyValueHighlight(g, padX + 16, ref y, $"{poolPrefix}满额样本外推", estCostText, estBadge, Color.FromArgb(5, 150, 105));
-
-                if (!ShowHeader && cycle.ModelProjections is { Count: > 0 })
+                var activeSnapshots = codexSnapshots;
+                if (activeSnapshots.Any(s => s.IsResetPassed()))
                 {
-                    foreach (var mp in cycle.ModelProjections)
+                    using var tipBrush = new SolidBrush(Color.FromArgb(100, 116, 139));
+                    g.DrawString(I18n.T("部分窗口已过期；使用对应模型后等待新快照。", "Some windows expired; a new snapshot will be recorded upon model usage."), _smallFont, tipBrush, padX + 8, y);
+                    y += _smallFont.Height + 4;
+                }
+            }
+            else
+            {
+                using var muted = new SolidBrush(Color.FromArgb(100, 116, 139));
+                g.DrawString(I18n.T("暂无可用快照（当前 session 未写入 rate_limits）", "No snapshot available (rate_limits not written to active sessions)"), _regularFont, muted, padX + 8, y);
+                y += _regularFont.Height + 4;
+            }
+
+            // Codex Weekly Cycle & Projection
+            var codexCycles = _snapshot.CodexWeeklyCycles.Count > 0
+                ? _snapshot.CodexWeeklyCycles
+                : _snapshot.CodexWeeklyCycle != null
+                    ? [_snapshot.CodexWeeklyCycle]
+                    : [];
+
+            if (codexCycles.Count > 0)
+            {
+                y += 2;
+                using var subHeaderBrush = new SolidBrush(Color.FromArgb(71, 85, 105));
+                g.DrawString(I18n.T("周订阅统计与预估 (本轮 7 天窗口)", "Weekly Sub Stats & Estimates (7-Day Window)"), _boldFont, subHeaderBrush, padX + 8, y);
+                y += _boldFont.Height + 3;
+
+                foreach (var cycle in codexCycles)
+                {
+                    var usedText = cycle.UsedFraction.HasValue ? $"{cycle.UsedFraction.Value:P0}" : I18n.T("未知", "Unknown");
+                    var cycleCostText = cycle.CycleCostUsd.HasValue ? "$" + cycle.CycleCostUsd.Value.ToString("0.00") : "—";
+                    var estCostText = cycle.EstimatedWeeklyCostUsd.HasValue
+                        ? I18n.Format("约 ${0:0.00}", "~ ${0:0.00}", cycle.EstimatedWeeklyCostUsd.Value)
+                        : LocalizeEstimateNote(cycle.EstimateNote);
+                    var poolPrefix = codexCycles.Count > 1 ? $"{LocalizePoolName(cycle.PoolName)} " : string.Empty;
+                    var isStale = cycle.EstimateNote == "快照待更新";
+                    var estBadge = cycle.EstimatedWeeklyCostUsd.HasValue
+                        ? (isStale ? I18n.T("（待更新）", " (Pending Update)") : I18n.T("（仅本机样本）", " (Local Samples)"))
+                        : string.Empty;
+
+                    var cycleKey = I18n.Format("{0}本轮参考金额", "{0}Cycle Sub Ref", poolPrefix);
+                    var fullKey = I18n.Format("{0}满额样本外推", "{0}Est. Full Quota", poolPrefix);
+                    var consumedNote = I18n.Format("（已消耗 {0}）", " (Consumed {0})", usedText);
+
+                    DrawKeyValueHighlight(g, padX + 16, ref y, cycleKey, cycleCostText, consumedNote, Color.FromArgb(37, 99, 235));
+                    DrawKeyValueHighlight(g, padX + 16, ref y, fullKey, estCostText, estBadge, Color.FromArgb(5, 150, 105));
+
+                    if (!ShowHeader && cycle.ModelProjections is { Count: > 0 })
                     {
-                        var note = mp.IsFromCurrentCycle ? (isStale ? "（实测·待更新）" : "（本周实测）") : "（历史样本）";
-                        DrawKeyValueHighlight(g, padX + 28, ref y, $"├─ 按 {mp.ModelId} 测算", $"约 ${mp.EstimatedWeeklyCostUsd:0.00}", note, Color.FromArgb(13, 148, 136));
+                        foreach (var mp in cycle.ModelProjections)
+                        {
+                            var note = mp.IsFromCurrentCycle
+                                ? (isStale ? I18n.T("（实测·待更新）", " (Measured · Pending Update)") : I18n.T("（本周实测）", " (Measured This Week)"))
+                                : I18n.T("（历史样本）", " (Historical Samples)");
+                            var mpKey = I18n.Format("├─ 按 {0} 测算", "├─ Projected for {0}", mp.ModelId);
+                            DrawKeyValueHighlight(g, padX + 28, ref y, mpKey, $"约 ${mp.EstimatedWeeklyCostUsd:0.00}", note, Color.FromArgb(13, 148, 136));
+                        }
                     }
                 }
             }
         }
 
-        y += 6;
-        g.DrawLine(dividerPen, padX, y, width - padX, y);
-        y += 8;
+        if (EnableAntigravity || EnableCodex)
+        {
+            y += 6;
+            g.DrawLine(dividerPen, padX, y, width - padX, y);
+            y += 8;
+        }
 
         // Footer / Timestamp
         using var footerBrush = new SolidBrush(Color.FromArgb(148, 163, 184));
-        g.DrawString($"界面刷新：{_snapshot.RefreshedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss}", _smallFont, footerBrush, padX, y);
+        var refreshStr = I18n.Format("界面刷新：{0:yyyy-MM-dd HH:mm:ss}", "Refreshed: {0:yyyy-MM-dd HH:mm:ss}", _snapshot.RefreshedAt.ToLocalTime());
+        g.DrawString(refreshStr, _smallFont, footerBrush, padX, y);
         y += _smallFont.Height + 6;
 
         if (ShowFooterNote)
         {
             using var noteBrush = new SolidBrush(Color.FromArgb(160, 174, 192));
-            g.DrawString("• 订阅参考金额按固定基准计量，并非账单或可用余额。", _smallFont, noteBrush, padX, y);
+            g.DrawString(I18n.T("• 订阅参考金额按固定基准计量，并非账单或可用余额。", "• Subscription reference values use fixed benchmarks and are not bills or balances."), _smallFont, noteBrush, padX, y);
             y += _smallFont.Height + 3;
-            g.DrawString("• 满额金额仅按同周期本机样本外推；过期额度等待新快照。", _smallFont, noteBrush, padX, y);
+            g.DrawString(I18n.T("• 满额金额仅按同周期本机样本外推；过期额度等待新快照。", "• Full projections are estimated solely from local samples; expired quotas await new snapshots."), _smallFont, noteBrush, padX, y);
         }
-
-
     }
 
     private void DrawSectionHeader(Graphics g, int x, ref int y, string title, string? badge, string? statusBadge, Color dotColor)
@@ -503,7 +556,7 @@ public sealed class QuotaSummaryControl : UserControl
             using var brush = new SolidBrush(color);
             g.DrawString(text, _boldFont, brush, x + 12 + TextRenderer.MeasureText(g, label, _regularFont).Width, y);
             y += _regularFont.Height + 3;
-            var detail = $"采样 {snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm} · 重置 {FormatReset(snapshot)}";
+            var detail = I18n.Format("采样 {0:MM-dd HH:mm} · 重置 {1}", "Sampled {0:MM-dd HH:mm} · Reset {1}", snapshot.CapturedAt.ToLocalTime(), FormatReset(snapshot));
             g.DrawString(detail, _smallFont, detailBrush, x + 12, y);
             y += _smallFont.Height + 4;
         }
@@ -536,13 +589,14 @@ public sealed class QuotaSummaryControl : UserControl
 
     private static (string Text, Color Color) GetRemainingTextAndColor(QuotaSnapshot snapshot)
     {
-        if (!snapshot.RemainingFraction.HasValue) return ("剩余未知", Color.FromArgb(100, 116, 139));
+        if (!snapshot.RemainingFraction.HasValue) return (I18n.T("剩余未知", "Remaining Unknown"), Color.FromArgb(100, 116, 139));
         var frac = snapshot.RemainingFraction.Value;
         if (snapshot.IsResetPassed())
         {
-            return ($"待同步（上次 {frac:P0}）", Color.FromArgb(100, 116, 139));
+            return (I18n.Format("待同步（上次 {0:P0}）", "Syncing (Last {0:P0})", frac), Color.FromArgb(100, 116, 139));
         }
-        var text = $"{frac:P0} 剩余{(snapshot.IsStale() ? "（旧快照）" : "")}";
+        var staleText = snapshot.IsStale() ? I18n.T("（旧快照）", " (Stale)") : "";
+        var text = I18n.Format("{0:P0} 剩余{1}", "{0:P0} Remaining{1}", frac, staleText);
         var color = frac switch
         {
             > 0.30 => Color.FromArgb(22, 163, 74),  // Green
@@ -552,9 +606,28 @@ public sealed class QuotaSummaryControl : UserControl
         return (text, color);
     }
 
-
-
     private static string FormatReset(QuotaSnapshot snapshot) => TimeFormatter.FormatResetWithRelative(snapshot.ResetAt);
+
+    private static string LocalizeEstimateNote(string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note)) return I18n.T("样本不足", "Insufficient drop");
+        return note switch
+        {
+            "样本消耗不足5%" => I18n.T("样本消耗不足5%", "Drop < 5%"),
+            "快照待更新" => I18n.T("快照待更新", "Pending update"),
+            "需同周期两个快照" => I18n.T("需同周期两个快照", "Need 2 snapshots"),
+            "额度或周期未知" => I18n.T("额度或周期未知", "Quota unknown"),
+            "缺少对应本机用量" => I18n.T("缺少对应本机用量", "No local usage"),
+            "样本含未定价用量" => I18n.T("样本含未定价用量", "Unpriced usage"),
+            _ => note
+        };
+    }
+
+    private static string LocalizePoolName(string name)
+    {
+        if (name.Contains("主力")) return I18n.T("Codex 主力模型", "Codex Primary");
+        return name;
+    }
 
     private static string ShortLabel(QuotaSnapshot snapshot)
     {
@@ -562,12 +635,14 @@ public sealed class QuotaSummaryControl : UserControl
             string.Equals(snapshot.DisplayLabel, snapshot.ModelOrPoolId, StringComparison.OrdinalIgnoreCase)
             ? snapshot.ModelOrPoolId
             : snapshot.DisplayLabel;
-        return label
+        var clean = label
             .Replace("(5小时额度)", "")
             .Replace("(周额度)", "")
             .Replace("(5h)", "")
             .Replace("(weekly)", "")
             .Trim();
+        if (clean.Contains("主力")) return I18n.T("Codex 主力模型", "Codex Primary");
+        return clean;
     }
 
     private static bool IsFiveHour(QuotaSnapshot snapshot)
