@@ -18,6 +18,10 @@
 
 <br>
 
+**[📥 立即下载最新免安装版 (Latest Release)](https://github.com/Yu0496/QuotaTrace/releases/latest)**
+
+<br>
+
 **专为 Windows 打造 · 零外网出站请求 · 零隐私上传 · 毫秒级增量 · 纯本机解析与进程通信**
 
 ---

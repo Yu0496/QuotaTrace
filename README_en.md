@@ -18,6 +18,10 @@ A lightweight, 100% local Windows desktop system tray utility for developers usi
 
 <br>
 
+**[📥 Download Latest Standalone Release](https://github.com/Yu0496/QuotaTrace/releases/latest)**
+
+<br>
+
 **Designed for Windows · No Outbound Requests · Zero Cloud Upload · Zero Telemetry · 100% Local Loopback IPC**
 
 ---
