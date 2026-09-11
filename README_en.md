@@ -3,7 +3,7 @@
 # 📊 QuotaTrace
 ### (AI Usage & Quota Monitor)
 
-A lightweight, 100% local Windows system tray utility for developers using **OpenAI Codex** and **Google Antigravity**.
+A lightweight, 100% local Windows desktop system tray utility for developers using **OpenAI Codex** and **Google Antigravity**.
 
 <div>
     <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet">
@@ -18,7 +18,7 @@ A lightweight, 100% local Windows system tray utility for developers using **Ope
 
 <br>
 
-**No Outbound Requests · Zero Cloud Upload · Zero Telemetry · 100% Local Loopback IPC**
+**Designed for Windows · No Outbound Requests · Zero Cloud Upload · Zero Telemetry · 100% Local Loopback IPC**
 
 ---
 </div>
@@ -29,24 +29,7 @@ A lightweight, 100% local Windows system tray utility for developers using **Ope
 
 ## 📖 How to Use
 
-QuotaTrace provides three progressive interaction modes, from glanceable ambient monitoring to deep multi-dimensional analytics:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                   System Tray Resident                  │
-└────────────┬────────────────────────────┬───────────────┘
-             │ Hover Cursor               │ Single Click
-             ▼                            ▼
-┌─────────────────────────┐  ┌────────────────────────────┐
-│ 1. Tray Tooltip         │  │ 2. Tray Popup Card         │
-└────────────┬────────────┘  └────────────┬───────────────┘
-             │                            │ Double Click
-             └─────────────┬──────────────┘
-                           ▼
-             ┌────────────────────────────┐
-             │ 3. Main Dashboard          │
-             └────────────────────────────┘
-```
+QuotaTrace is tailor-made for Windows desktops, quietly residing in the system tray and offering three progressive interaction modes:
 
 ### 1. Tray Tooltip (Hover Glance)
 - **How to Trigger**: Hover your mouse cursor over the system tray icon in the Windows taskbar (no clicking required).
