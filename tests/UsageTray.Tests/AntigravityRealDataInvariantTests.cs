@@ -106,6 +106,13 @@ public sealed class AntigravityRealDataInvariantTests
     [Fact]
     public async Task LiveLanguageServerQuotaDiscoveryReturnsValidRealSnapshots()
     {
+        if (string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            _output.WriteLine("GitHub CI environment detected; skipping live Antigravity Language Server integration test.");
+            return;
+        }
+
         var procDiscovery = new AntigravityProcessDiscovery();
         var procs = procDiscovery.Discover();
         _output.WriteLine($"Discovered {procs.Count} processes.");

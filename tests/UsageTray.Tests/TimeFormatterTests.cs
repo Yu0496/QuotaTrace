@@ -110,8 +110,9 @@ public sealed class TimeFormatterTests
         var target = new DateTimeOffset(2026, 8, 27, 2, 59, 0, TimeSpan.FromHours(8));
 
         var result = TimeFormatter.FormatResetWithRelative(target, "MM-dd HH:mm", now);
+        var expectedAbsolute = target.ToLocalTime().ToString("MM-dd HH:mm");
 
-        Assert.Equal("08-27 02:59，14小时59分后", result);
+        Assert.Equal($"{expectedAbsolute}，14小时59分后", result);
     }
 
     [Fact]
