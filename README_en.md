@@ -77,7 +77,7 @@ QuotaTrace is tailor-made for Windows desktops, quietly residing in the system t
 ### Option 1: Download Standalone Release (Recommended for Most Users)
 No need to install the .NET SDK or configure build environments:
 1. Head to the **[Releases Page](../../releases)** on the right side of this repository;
-2. Download the latest release zip archive (e.g., `QuotaTrace-v1.0.0-win-x64.zip`);
+2. Download the latest release zip archive (e.g., `QuotaTrace-v1.1.0-win-x64.zip`);
 3. Extract it to any local directory and double-click **`UsageTray.exe`** to run.
 > 100% Portable: App settings and local usage databases are stored cleanly under `%LOCALAPPDATA%\UsageTray\`. To uninstall, simply delete the extracted folder.
 
@@ -87,7 +87,7 @@ For developers wishing to inspect or customize the source code:
 
 ```powershell
 # 1. Clone the repository
-git clone https://github.com/your-username/QuotaTrace.git
+git clone https://github.com/Yu0496/QuotaTrace.git
 cd QuotaTrace
 
 # 2. Restore dependencies and run unit tests

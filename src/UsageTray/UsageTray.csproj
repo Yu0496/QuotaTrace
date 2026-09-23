@@ -8,6 +8,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>UsageTray</RootNamespace>
     <AssemblyName>UsageTray</AssemblyName>
+    <Version>1.1.0</Version>
     <Platforms>AnyCPU</Platforms>
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\publish\</PublishDir>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
