@@ -16,6 +16,8 @@ public sealed class AccuracyRepairTests
 
     [Theory]
     [InlineData("gpt-6-astra", 2.5)]
+    [InlineData("gpt-6-sol", 2.5)]
+    [InlineData("gpt-6-luna", 2.0)]
     [InlineData("gpt-5.6-sol", 2.5)]
     [InlineData("gpt-5.6-terra", 2.5)]
     [InlineData("gpt-5.6-luna", 2.5)]
@@ -41,6 +43,8 @@ public sealed class AccuracyRepairTests
     {
         var pricing = Pricing();
         Assert.Equal(.8m, pricing.Calculate(Bucket("gpt-5.6-sol")).CostUsd);
+        Assert.Equal(.3m, pricing.Calculate(Bucket("gpt-6-sol")).CostUsd);
+        Assert.Equal(.015m, pricing.Calculate(Bucket("gpt-6-luna")).CostUsd);
         Assert.Equal(3.75m, pricing.Calculate(Bucket("gpt-6-fast", "fast")).CostUsd);
         Assert.Null(pricing.Calculate(Bucket("gpt-5.6-sol", "batch")).CostUsd);
         Assert.Null(pricing.Calculate(Bucket("gpt-5.6-sol-future-model")).CostUsd);

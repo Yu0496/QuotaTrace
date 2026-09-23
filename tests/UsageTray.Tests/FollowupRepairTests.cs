@@ -41,7 +41,7 @@ public sealed class FollowupRepairTests
         var migrated = service.Rules.Single(r => r.ModelPattern == pattern);
         Assert.Null(migrated.UnverifiedReason);
         Assert.Contains("Luna", migrated.ReferenceBasis);
-        Assert.Equal(5, service.Document.SchemaVersion);
+        Assert.Equal(PricingService.DefaultDocumentVersion, service.Document.SchemaVersion);
     }
 
     [Fact]

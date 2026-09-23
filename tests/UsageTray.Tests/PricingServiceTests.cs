@@ -89,6 +89,8 @@ public sealed class PricingServiceTests
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "custom-model");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-astra");
+        Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-sol");
+        Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-luna");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.8-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-4-6*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash");
@@ -104,7 +106,31 @@ public sealed class PricingServiceTests
         Assert.Equal("gemini-3.5-flash", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.5 Flash (High)"));
         Assert.Equal("gemini-3.1-pro", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.1 Pro (High)"));
         Assert.Equal("gpt-6-astra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Astra (Preview)"));
+        Assert.Equal("gpt-6-sol", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Sol (Preview)"));
+        Assert.Equal("gpt-6-luna", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Luna (Thinking)"));
+        Assert.Equal("gpt-6-sol", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Sol"));
+        Assert.Equal("gpt-6-luna", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Luna"));
         Assert.Equal("gpt-oss-120b-medium", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-OSS 120B (Medium)"));
+    }
+
+    [Fact]
+    public void Gpt6SolAndLunaCalculateAccurateCostsWithLongContext()
+    {
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+
+        // gpt-6-sol: 1M uncached input = $2.0, 1M cache-read = $0.2, 1M cache-write = $2.5, 100k output = $1.0 => $5.70
+        var solBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 9, 23), null, "gpt-6-sol",
+            3_000_000, 1_000_000, 100_000, 1, DataQuality.Exact, "fixture", null, 1_000_000, CostQuality.ExactTokenSplit);
+        var solResult = pricing.Calculate(solBucket);
+        Assert.NotNull(solResult.CostUsd);
+        Assert.Equal(5.70m, solResult.CostUsd.Value);
+
+        // gpt-6-luna: 1M uncached input = $0.10, 1M cache-read = $0.01, 1M cache-write = $0.125, 100k output = $0.05 => $0.285
+        var lunaBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 9, 23), null, "gpt-6-luna",
+            3_000_000, 1_000_000, 100_000, 1, DataQuality.Exact, "fixture", null, 1_000_000, CostQuality.ExactTokenSplit);
+        var lunaResult = pricing.Calculate(lunaBucket);
+        Assert.NotNull(lunaResult.CostUsd);
+        Assert.Equal(0.285m, lunaResult.CostUsd.Value);
     }
 
     [Fact]

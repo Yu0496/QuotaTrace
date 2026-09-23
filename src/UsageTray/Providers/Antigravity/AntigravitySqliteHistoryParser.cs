@@ -133,7 +133,11 @@ public sealed class AntigravitySqliteHistoryParser
         if (name.Contains("gemini") && name.Contains("pro")) return "gemini-3.1-pro";
         if (name.Contains("gemini") && name.Contains("flash")) return "gemini-3.5-flash";
 
+        if (name.Contains("gpt-6") && name.Contains("sol")) return "gpt-6-sol";
+        if (name.Contains("gpt-6") && name.Contains("luna")) return "gpt-6-luna";
         if (name.Contains("gpt-6") || name.Contains("astra")) return "gpt-6-astra";
+        if (name.Contains("sol")) return "gpt-6-sol";
+        if (name.Contains("luna")) return "gpt-6-luna";
         if (name.Contains("gpt-oss") || name.Contains("120b")) return "gpt-oss-120b-medium";
 
         return displayName.Trim();
