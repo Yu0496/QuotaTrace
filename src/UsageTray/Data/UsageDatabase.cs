@@ -183,6 +183,10 @@ CREATE TABLE IF NOT EXISTS app_metadata (
         EnsureColumn(connection, "file_usage", "long_context_cache_write_input_tokens", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "file_usage", "long_context_output_tokens", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "file_usage", "cache_write_available", "INTEGER NOT NULL DEFAULT 1");
+        using var cleanupSpark = connection.CreateCommand();
+        cleanupSpark.CommandText = "DELETE FROM quota_snapshots WHERE model_or_pool_id LIKE '%spark%';";
+        cleanupSpark.ExecuteNonQuery();
+
         using var metadata = connection.CreateCommand();
         metadata.CommandText = "SELECT value FROM app_metadata WHERE key='codex_schema_version'";
         var version = metadata.ExecuteScalar() as string;

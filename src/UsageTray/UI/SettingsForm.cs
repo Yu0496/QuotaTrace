@@ -207,8 +207,8 @@ public sealed class SettingsForm : Form
         var reviewNote = new Label
         {
             Text = I18n.T(
-                "• Reserve 与 Auto-Review 按约定使用 GPT-5.6 Luna 参考价：输入 $0.2 / 缓存读取 $0.02 / 缓存创建 $0.25 / 输出 $1.2（每百万 Token）；长上下文及 Fast 档位同 Luna。\r\n• 这是本软件的参考计量约定，底层模型身份及官方实际扣减仍存在不确定性。Spark 维持未定价。\r\n• 本软件统计订阅消耗参考价值：Token × 非促销基准价；Codex Fast 采用订阅倍率。金额并非实际扣费或订阅余额。\r\n• 额度来自官方快照；满额参考金额只能基于同周期本机用量样本外推，其他设备、云端任务及缺失日志都会影响结果。",
-                "• Reserve and Auto-Review use GPT-5.6 Luna benchmark: Input $0.2 / CacheRead $0.02 / CacheCreation $0.25 / Output $1.2 per 1M tokens.\r\n• This is a local benchmark convention; underlying models and official consumption carry uncertainty. Spark remains unpriced.\r\n• Subscription reference values reflect estimated equivalent worth, not actual bills or account balances.\r\n• Quotas reflect official snapshots; full projections are estimated solely from local samples."),
+                "• Reserve 与 Auto-Review 按约定使用 GPT-5.6 Luna 参考价：输入 $0.2 / 缓存读取 $0.02 / 缓存创建 $0.25 / 输出 $1.2（每百万 Token）；长上下文及 Fast 档位同 Luna。\r\n• 这是本软件的参考计量约定，底层模型身份及官方实际扣减仍存在不确定性。\r\n• 本软件统计订阅消耗参考价值：Token × 非促销基准价；Codex Fast 采用订阅倍率。金额并非实际扣费或订阅余额。\r\n• 额度来自官方快照；满额参考金额只能基于同周期本机用量样本外推，其他设备、云端任务及缺失日志都会影响结果。",
+                "• Reserve and Auto-Review use GPT-5.6 Luna benchmark: Input $0.2 / CacheRead $0.02 / CacheCreation $0.25 / Output $1.2 per 1M tokens.\r\n• This is a local benchmark convention; underlying models and official consumption carry uncertainty.\r\n• Subscription reference values reflect estimated equivalent worth, not actual bills or account balances.\r\n• Quotas reflect official snapshots; full projections are estimated solely from local samples."),
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
             Margin = new Padding(0, 4, 0, 10)

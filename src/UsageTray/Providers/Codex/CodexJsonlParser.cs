@@ -258,19 +258,17 @@ public sealed class CodexJsonlParser
             var explicitPool = string.Equals(limitId, "base_model_inference", StringComparison.OrdinalIgnoreCase)
                 ? CodexQuotaPools.FromLimitId(limitName) : CodexQuotaPools.FromLimitId(limitId);
             if (explicitPool == "unknown") continue;
-            var isSparkModel = explicitPool is not null ? explicitPool == "spark" :
-                CodexQuotaPools.IsSparkModel(limitName) || CodexQuotaPools.IsSparkModel(currentModel);
+
+            // Spark 已被官方删除废弃，不再采集 Spark 额度快照
+            var isSpark = string.Equals(limitId, "codex_bengalfox", StringComparison.OrdinalIgnoreCase) ||
+                limitName?.Contains("spark", StringComparison.OrdinalIgnoreCase) == true ||
+                limitName?.Contains("bengalfox", StringComparison.OrdinalIgnoreCase) == true ||
+                currentModel?.Contains("spark", StringComparison.OrdinalIgnoreCase) == true ||
+                currentModel?.Contains("bengalfox", StringComparison.OrdinalIgnoreCase) == true;
+            if (isSpark) continue;
+
             var isReserve = explicitPool is not null ? explicitPool == "reserve" :
                 CodexQuotaPools.IsReserveModel(limitName) || isReserveModel;
-
-            // Observed Pro/ProLite Spark logs can report the generic codex id with
-            // Spark's 5h + weekly pair; the main pool reports a single weekly window.
-            if (explicitPool == "standard" && isProOrTeam && CodexQuotaPools.IsSparkModel(currentModel) &&
-                JsonValueReader.TryGetProperty(rateLimits, out var sparkPrimary, "primary") && sparkPrimary.ValueKind == JsonValueKind.Object &&
-                JsonValueReader.GetLong(sparkPrimary, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins") == 300 &&
-                JsonValueReader.TryGetProperty(rateLimits, out var sparkSecondary, "secondary") && sparkSecondary.ValueKind == JsonValueKind.Object &&
-                JsonValueReader.GetLong(sparkSecondary, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins") == 10080)
-                isSparkModel = true;
 
             // Observed legacy Reserve: limit_id=codex, current model=gpt-reserve,
             // one weekly primary and no secondary. Standard ids otherwise win over current model.
@@ -281,7 +279,7 @@ public sealed class CodexJsonlParser
                 isReserve = true;
 
             // Compatibility with legacy Plus logs that omit a pool id.
-            if (explicitPool is null && !isReserve && !isSparkModel &&
+            if (explicitPool is null && !isReserve &&
                 string.Equals(effectivePlan, "plus", StringComparison.OrdinalIgnoreCase) &&
                 (!JsonValueReader.TryGetProperty(rateLimits, out var sec, "secondary") || sec.ValueKind != JsonValueKind.Object) &&
                 JsonValueReader.TryGetProperty(rateLimits, out var prim, "primary") && prim.ValueKind == JsonValueKind.Object &&
@@ -309,30 +307,15 @@ public sealed class CodexJsonlParser
                     var usedPercent = JsonValueReader.GetDouble(window, "used_percent", "usedPercent");
                     if (!usedPercent.HasValue || usedPercent.Value is < 0 or > 100) continue;
                     var minutes = JsonValueReader.GetLong(window, "window_minutes", "windowMinutes", "window_duration_mins", "windowDurationMins");
-                    var kind = ClassifyWindow(windowName, minutes, isProOrTeam, isSparkModel);
+                    var kind = ClassifyWindow(windowName, minutes, isProOrTeam);
 
-                    string modelOrPoolId;
-                    string displayLabel;
-                    if (isSparkModel)
+                    var modelOrPoolId = $"codex-{kind}";
+                    var displayLabel = kind switch
                     {
-                        modelOrPoolId = $"codex-spark-{kind}";
-                        displayLabel = kind switch
-                        {
-                            "5h" => "GPT-5.3 Spark (5小时额度)",
-                            "weekly" => "GPT-5.3 Spark (周额度)",
-                            _ => $"GPT-5.3 Spark ({kind})"
-                        };
-                    }
-                    else
-                    {
-                        modelOrPoolId = $"codex-{kind}";
-                        displayLabel = kind switch
-                        {
-                            "5h" => "Codex 主力模型 (5小时额度)",
-                            "weekly" => "Codex 主力模型 (周额度)",
-                            _ => $"Codex 主力模型 ({kind})"
-                        };
-                    }
+                        "5h" => "Codex 主力模型 (5小时额度)",
+                        "weekly" => "Codex 主力模型 (周额度)",
+                        _ => $"Codex 主力模型 ({kind})"
+                    };
 
                     var snapshot = new QuotaSnapshot(ProviderKind.Codex, capturedAt, modelOrPoolId, displayLabel,
                         1d - usedPercent.Value / 100d, ReadReset(window, capturedAt), kind, "codex-session-rate-limits", effectivePlan ?? planTier);
@@ -343,13 +326,11 @@ public sealed class CodexJsonlParser
         return result;
     }
 
-    private static string ClassifyWindow(string windowName, long? minutes, bool isProOrTeam = false, bool isSpark = false) => minutes switch
+    private static string ClassifyWindow(string windowName, long? minutes, bool isProOrTeam = false) => minutes switch
     {
         300 => "5h",
         10080 => "weekly",
         > 0 => $"{minutes}m",
-        _ when isSpark && string.Equals(windowName, "primary", StringComparison.OrdinalIgnoreCase) => "5h",
-        _ when isSpark && string.Equals(windowName, "secondary", StringComparison.OrdinalIgnoreCase) => "weekly",
         _ when string.Equals(windowName, "primary", StringComparison.OrdinalIgnoreCase) => "5h",
         _ when string.Equals(windowName, "secondary", StringComparison.OrdinalIgnoreCase) => "weekly",
         _ => "unknown"

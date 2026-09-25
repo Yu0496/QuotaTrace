@@ -77,7 +77,7 @@ QuotaTrace 专为 Windows 桌面打造，常驻在任务栏右下角系统托盘
 ### 方式一：下载免安装绿色版（推荐普通用户）
 无需配置编译环境或安装 .NET SDK，开箱即用：
 1. 前往本仓库右侧的 **[Releases 页面](../../releases)**；
-2. 下载最新版本的发布压缩包（例如 `QuotaTrace-v1.1.0-win-x64.zip`）；
+2. 下载最新版本的发布压缩包（例如 `QuotaTrace-v1.2.0-win-x64.zip`）；
 3. 解压到本地任意文件夹，双击运行 **`UsageTray.exe`** 即可。
 > 绿色安全：软件配置与解析数据库均保存在本地 `%LOCALAPPDATA%\UsageTray\` 中，卸载时直接删除解压目录即可，无注册表残留。
 

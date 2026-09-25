@@ -125,7 +125,7 @@ public sealed class FollowupRepairTests
     }
 
     [Fact]
-    public void ObservedProLiteSparkPairWithGenericIdStaysOutOfMainPool()
+    public void SparkRateLimitsAreIgnoredAndDoNotCreateQuotas()
     {
         using var workspace = new TempWorkspace();
         var path = workspace.File("spark.jsonl");
@@ -134,9 +134,7 @@ public sealed class FollowupRepairTests
             {"timestamp":"2026-09-08T09:55:07.716Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"codex","limit_name":null,"plan_type":"prolite","primary":{"used_percent":52,"window_minutes":300,"resets_at":1788874852},"secondary":{"used_percent":23,"window_minutes":10080,"resets_at":1789461652}}}}
             """);
         var quotas = new CodexJsonlParser().ParseFile(path).Quotas;
-        Assert.Equal(2, quotas.Count);
-        Assert.All(quotas, q => Assert.StartsWith("codex-spark-", q.ModelOrPoolId));
-        Assert.Equal(.77, quotas.Single(q => q.WindowKind == "weekly").RemainingFraction);
+        Assert.Empty(quotas);
     }
 
     private static void RunSta(Action action)

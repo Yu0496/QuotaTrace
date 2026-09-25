@@ -88,7 +88,6 @@ public sealed class I18nAndProviderToggleTests
             OutputTokens = 300,
             CodexApiEquivalentUsd = 1.50m,
             CodexStandardApiEquivalentUsd = 1.50m,
-            CodexSparkApiEquivalentUsd = 0m,
             CodexReserveApiEquivalentUsd = 0m,
             AntigravityApiEquivalentUsd = 2.50m
         };

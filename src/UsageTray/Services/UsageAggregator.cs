@@ -51,10 +51,9 @@ public sealed class UsageAggregator
             }
             if (provider is null or ProviderKind.Codex)
             {
-                var std = Window(ProviderKind.Codex, q => !IsReserveSnapshot(q) && !IsSparkSnapshot(q));
-                var spark = Window(ProviderKind.Codex, IsSparkSnapshot);
+                var std = Window(ProviderKind.Codex, q => !IsReserveSnapshot(q));
                 var reserve = Window(ProviderKind.Codex, IsReserveSnapshot);
-                cycleBuckets.AddRange(_repository.GetCodexUsageInPoolWindows(std.Start, std.End, reserve.Start, reserve.End, spark.Start, spark.End));
+                cycleBuckets.AddRange(_repository.GetCodexUsageInPoolWindows(std.Start, std.End, reserve.Start, reserve.End));
             }
             if (provider is null or ProviderKind.Antigravity)
             {
@@ -79,7 +78,7 @@ public sealed class UsageAggregator
         var (speedEstimate, modelSpeeds, projectSpeeds) = _repository.GetDetailedSpeedEstimates(range, provider, windowStartUtc, windowEndUtc);
 
         var codexHistoricalCycles = BuildCodexHistoricalCycles();
-        var (codexWeeklyCycle, codexSparkCycle, codexReserveCycle) = BuildCodexWeeklyCycles(quotas, warnings, codexHistoricalCycles);
+        var (codexWeeklyCycle, codexReserveCycle) = BuildCodexWeeklyCycles(quotas, warnings, codexHistoricalCycles);
         var codexModelProjections = codexWeeklyCycle?.ModelProjections ?? [];
         var modelProjDict = codexModelProjections.ToDictionary(p => p.ModelId, StringComparer.OrdinalIgnoreCase);
 
@@ -106,10 +105,8 @@ public sealed class UsageAggregator
                 .Where(value => value.HasValue).Select(value => value!.Value).OrderBy(value => value).FirstOrDefault();
         var codexBuckets = buckets.Where(b => b.Provider == ProviderKind.Codex).ToList();
         var codexCost = codexBuckets.Count > 0 ? _pricing.CalculateAggregate(codexBuckets).PricedCostUsd : 0m;
-        var codexStandardBuckets = codexBuckets.Where(b => !IsCodexReserveModel(b.ModelId) && !IsCodexSparkModel(b.ModelId)).ToList();
+        var codexStandardBuckets = codexBuckets.Where(b => !IsCodexReserveModel(b.ModelId)).ToList();
         var codexStandardCost = codexStandardBuckets.Count > 0 ? _pricing.CalculateAggregate(codexStandardBuckets).PricedCostUsd : 0m;
-        var codexSparkBuckets = codexBuckets.Where(b => IsCodexSparkModel(b.ModelId)).ToList();
-        var codexSparkCost = codexSparkBuckets.Count > 0 ? _pricing.CalculateAggregate(codexSparkBuckets).PricedCostUsd : 0m;
         var codexReserveBuckets = codexBuckets.Where(b => IsCodexReserveModel(b.ModelId)).ToList();
         var codexReserveCost = codexReserveBuckets.Count > 0 ? _pricing.CalculateAggregate(codexReserveBuckets).PricedCostUsd : 0m;
 
@@ -122,7 +119,6 @@ public sealed class UsageAggregator
 
         var codexWeeklyCycles = new List<CodexCycleUsageView>();
         if (codexWeeklyCycle != null) codexWeeklyCycles.Add(codexWeeklyCycle);
-        if (codexSparkCycle != null) codexWeeklyCycles.Add(codexSparkCycle);
         if (codexReserveCycle != null) codexWeeklyCycles.Add(codexReserveCycle);
         var antigravityEstimates = BuildAntigravityEstimates(quotas);
 
@@ -137,7 +133,6 @@ public sealed class UsageAggregator
             ApiEquivalentUsd = aggregate.PricedCostUsd,
             CodexApiEquivalentUsd = codexCost,
             CodexStandardApiEquivalentUsd = codexStandardCost,
-            CodexSparkApiEquivalentUsd = codexSparkCost,
             CodexReserveApiEquivalentUsd = codexReserveCost,
             AntigravityApiEquivalentUsd = agCost,
             AntigravityGeminiApiEquivalentUsd = agGeminiCost,
@@ -150,7 +145,6 @@ public sealed class UsageAggregator
             CostQuality = aggregate.Quality,
             CoverageStart = coverage == default ? null : coverage,
             CodexWeeklyCycle = codexWeeklyCycle,
-            CodexSparkWeeklyCycle = codexSparkCycle,
             CodexReserveWeeklyCycle = codexReserveCycle,
             CodexWeeklyCycles = codexWeeklyCycles,
             CodexHistoricalCycles = codexHistoricalCycles,
@@ -188,17 +182,11 @@ public sealed class UsageAggregator
         }
     }
 
-    private (CodexCycleUsageView? Standard, CodexCycleUsageView? Spark, CodexCycleUsageView? Reserve) BuildCodexWeeklyCycles(
+    private (CodexCycleUsageView? Standard, CodexCycleUsageView? Reserve) BuildCodexWeeklyCycles(
         IReadOnlyList<QuotaView> quotas, HashSet<string> warnings, IReadOnlyList<CodexHistoricalCycleView>? historicalCycles = null)
     {
         var standardQuota = quotas
-            .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsWeekly(q.Snapshot) && !IsReserveSnapshot(q.Snapshot) && !IsSparkSnapshot(q.Snapshot))
-            .Select(q => q.Snapshot)
-            .OrderByDescending(q => q.CapturedAt)
-            .FirstOrDefault();
-
-        var sparkQuota = quotas
-            .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsWeekly(q.Snapshot) && IsSparkSnapshot(q.Snapshot))
+            .Where(q => q.Snapshot.Provider == ProviderKind.Codex && IsWeekly(q.Snapshot) && !IsReserveSnapshot(q.Snapshot))
             .Select(q => q.Snapshot)
             .OrderByDescending(q => q.CapturedAt)
             .FirstOrDefault();
@@ -210,10 +198,9 @@ public sealed class UsageAggregator
             .FirstOrDefault();
 
         var standardCycle = standardQuota != null ? BuildSingleCodexCycle(standardQuota, "standard", warnings, historicalCycles) : null;
-        var sparkCycle = sparkQuota != null ? BuildSingleCodexCycle(sparkQuota, "spark", warnings, historicalCycles) : null;
         var reserveCycle = reserveQuota != null ? BuildSingleCodexCycle(reserveQuota, "reserve", warnings, historicalCycles) : null;
 
-        return (standardCycle, sparkCycle, reserveCycle);
+        return (standardCycle, reserveCycle);
     }
 
     private CodexCycleUsageView? BuildSingleCodexCycle(
@@ -232,8 +219,7 @@ public sealed class UsageAggregator
         var buckets = allBuckets.Where(b => poolCategory switch
         {
             "reserve" => IsCodexReserveModel(b.ModelId),
-            "spark" => IsCodexSparkModel(b.ModelId),
-            _ => !IsCodexReserveModel(b.ModelId) && !IsCodexSparkModel(b.ModelId)
+            _ => !IsCodexReserveModel(b.ModelId)
         }).ToList();
         var cost = _pricing.CalculateAggregate(buckets);
         foreach (var warning in cost.Warnings) warnings.Add(warning);
@@ -246,8 +232,7 @@ public sealed class UsageAggregator
             var sample = _repository.GetCodexUsageInUtcWindow(start, end).Where(b => poolCategory switch
             {
                 "reserve" => IsCodexReserveModel(b.ModelId),
-                "spark" => IsCodexSparkModel(b.ModelId),
-                _ => !IsCodexReserveModel(b.ModelId) && !IsCodexSparkModel(b.ModelId)
+                _ => !IsCodexReserveModel(b.ModelId)
             });
             return _pricing.CalculateAggregate(sample).PricedCostUsd;
         });
@@ -262,7 +247,7 @@ public sealed class UsageAggregator
                 allCodexSnapshots,
                 (start, end) =>
                 {
-                    var sAudits = codexEvents.Where(a => a.CapturedAt >= start && a.CapturedAt < end && !IsCodexReserveModel(a.ModelId) && !IsCodexSparkModel(a.ModelId)).ToList();
+                    var sAudits = codexEvents.Where(a => a.CapturedAt >= start && a.CapturedAt < end && !IsCodexReserveModel(a.ModelId)).ToList();
                     if (sAudits.Count == 0) return new Dictionary<string, decimal>();
                     var sBuckets = UsageRepository.ConvertAuditsToBuckets(sAudits);
                     var dict = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
@@ -296,7 +281,6 @@ public sealed class UsageAggregator
         var poolName = poolCategory switch
         {
             "reserve" => "Codex Reserve",
-            "spark" => "GPT-5.3 Spark",
             _ => "Codex 主力模型"
         };
 
@@ -334,15 +318,14 @@ public sealed class UsageAggregator
             var normalizedEvents = _repository.GetNormalizedCodexEvents();
             var now = DateTimeOffset.UtcNow;
             var result = new List<CodexHistoricalCycleView>();
-            var pools = new[] { "standard", "spark", "reserve" };
+            var pools = new[] { "standard", "reserve" };
 
             foreach (var pool in pools)
             {
                 var poolSnapshots = weeklySnapshots.Where(s =>
                 {
                     if (pool == "reserve") return IsReserveSnapshot(s);
-                    if (pool == "spark") return IsSparkSnapshot(s);
-                    return !IsReserveSnapshot(s) && !IsSparkSnapshot(s);
+                    return !IsReserveSnapshot(s);
                 })
                 .OrderBy(s => s.ResetAt!.Value)
                 .ThenBy(s => s.CapturedAt)
@@ -352,7 +335,6 @@ public sealed class UsageAggregator
 
                 var poolName = pool switch
                 {
-                    "spark" => "GPT-5.3 Spark",
                     "reserve" => "Codex Reserve",
                     _ => "Codex 主力模型"
                 };
@@ -453,8 +435,7 @@ public sealed class UsageAggregator
                     {
                         if (a.CapturedAt < cycleStart || a.CapturedAt >= windowEnd) return false;
                         if (pool == "reserve") return IsCodexReserveModel(a.ModelId);
-                        if (pool == "spark") return IsCodexSparkModel(a.ModelId);
-                        return !IsCodexReserveModel(a.ModelId) && !IsCodexSparkModel(a.ModelId);
+                        return !IsCodexReserveModel(a.ModelId);
                     });
 
                     var buckets = UsageRepository.ConvertAuditsToBuckets(cycleAudits);
@@ -473,8 +454,7 @@ public sealed class UsageAggregator
                             {
                                 if (a.CapturedAt < s || a.CapturedAt >= e) return false;
                                 if (pool == "reserve") return IsCodexReserveModel(a.ModelId);
-                                if (pool == "spark") return IsCodexSparkModel(a.ModelId);
-                                return !IsCodexReserveModel(a.ModelId) && !IsCodexSparkModel(a.ModelId);
+                                return !IsCodexReserveModel(a.ModelId);
                             });
                             var sBuckets = UsageRepository.ConvertAuditsToBuckets(sAudits);
                             return _pricing.CalculateAggregate(sBuckets).PricedCostUsd;
@@ -492,7 +472,7 @@ public sealed class UsageAggregator
                             snapshotsInCycle,
                             (s, e) =>
                             {
-                                var sAudits = normalizedEvents.Where(a => a.CapturedAt >= s && a.CapturedAt < e && !IsCodexReserveModel(a.ModelId) && !IsCodexSparkModel(a.ModelId)).ToList();
+                                var sAudits = normalizedEvents.Where(a => a.CapturedAt >= s && a.CapturedAt < e && !IsCodexReserveModel(a.ModelId)).ToList();
                                 if (sAudits.Count == 0) return new Dictionary<string, decimal>();
                                 var sBuckets = UsageRepository.ConvertAuditsToBuckets(sAudits);
                                 var dict = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
@@ -539,7 +519,7 @@ public sealed class UsageAggregator
 
             return result
                 .OrderByDescending(c => c.ResetAt)
-                .ThenBy(c => c.PoolCategory switch { "standard" => 0, "spark" => 1, _ => 2 })
+                .ThenBy(c => c.PoolCategory switch { "standard" => 0, _ => 1 })
                 .Take(maxCycles)
                 .ToList();
         }
@@ -551,15 +531,9 @@ public sealed class UsageAggregator
 
     public static bool IsCodexReserveModel(string? modelId) => CodexQuotaPools.IsReserveModel(modelId);
 
-    public static bool IsCodexSparkModel(string? modelId) => CodexQuotaPools.IsSparkModel(modelId);
-
     public static bool IsReserveSnapshot(QuotaSnapshot snapshot) =>
         snapshot.ModelOrPoolId.Contains("reserve", StringComparison.OrdinalIgnoreCase) ||
         snapshot.DisplayLabel.Contains("reserve", StringComparison.OrdinalIgnoreCase);
-
-    public static bool IsSparkSnapshot(QuotaSnapshot snapshot) =>
-        snapshot.ModelOrPoolId.Contains("spark", StringComparison.OrdinalIgnoreCase) ||
-        snapshot.DisplayLabel.Contains("spark", StringComparison.OrdinalIgnoreCase);
 
     public static bool IsProOrAbovePlan(string? planTier)
     {

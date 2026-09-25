@@ -471,8 +471,7 @@ public sealed class UsageRepository
 
     public IReadOnlyList<UsageBucket> GetCodexUsageInPoolWindows(
         DateTimeOffset? standardStartUtc, DateTimeOffset? standardEndUtc,
-        DateTimeOffset? reserveStartUtc, DateTimeOffset? reserveEndUtc,
-        DateTimeOffset? sparkStartUtc = null, DateTimeOffset? sparkEndUtc = null)
+        DateTimeOffset? reserveStartUtc, DateTimeOffset? reserveEndUtc)
     {
         var snapshots = GetCodexSnapshots();
         if (snapshots.Count == 0) return [];
@@ -483,9 +482,7 @@ public sealed class UsageRepository
             {
                 var window = CodexQuotaPools.IsReserveModel(a.ModelId)
                     ? (Start: reserveStartUtc, End: reserveEndUtc)
-                    : CodexQuotaPools.IsSparkModel(a.ModelId)
-                        ? (Start: sparkStartUtc, End: sparkEndUtc)
-                        : (Start: standardStartUtc, End: standardEndUtc);
+                    : (Start: standardStartUtc, End: standardEndUtc);
                 return window.Start.HasValue && window.End.HasValue &&
                     a.CapturedAt >= window.Start.Value && a.CapturedAt < window.End.Value;
             })
@@ -674,6 +671,7 @@ public sealed class UsageRepository
         if (provider == ProviderKind.Codex)
         {
             CleanupStaleReserveSnapshots();
+            CleanupSparkSnapshots();
         }
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
@@ -690,10 +688,6 @@ public sealed class UsageRepository
                     (q.model_or_pool_id LIKE '%reserve%' AND q.captured_at_utc=(
                         SELECT MAX(captured_at_utc) FROM quota_snapshots
                         WHERE provider=$provider AND model_or_pool_id LIKE '%reserve%'))
-                    OR
-                    (q.model_or_pool_id LIKE '%spark%' AND q.captured_at_utc=(
-                        SELECT MAX(captured_at_utc) FROM quota_snapshots
-                        WHERE provider=$provider AND model_or_pool_id LIKE '%spark%'))
                 )
                 ORDER BY q.model_or_pool_id,q.window_kind";
         }
@@ -715,13 +709,34 @@ public sealed class UsageRepository
         }
 
         if (provider == ProviderKind.Codex)
+        {
             list.RemoveAll(item => CodexQuotaPools.IsReserveModel(item.ModelOrPoolId) && item.IsResetPassed());
+            list.RemoveAll(item => item.ModelOrPoolId.Contains("spark", StringComparison.OrdinalIgnoreCase) ||
+                                   item.DisplayLabel.Contains("spark", StringComparison.OrdinalIgnoreCase));
+        }
 
         return list
             .GroupBy(item => $"{item.ModelOrPoolId}_{item.WindowKind}")
             .Select(group => group.OrderByDescending(item => item.CapturedAt).First())
             .OrderBy(item => item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
             .ToList();
+    }
+
+    public void CleanupSparkSnapshots()
+    {
+        try
+        {
+            using var connection = _database.OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                DELETE FROM quota_snapshots
+                WHERE model_or_pool_id LIKE '%spark%' OR label LIKE '%spark%'";
+            command.ExecuteNonQuery();
+        }
+        catch
+        {
+            // 忽略非关键清理异常
+        }
     }
 
     public void CleanupStaleReserveSnapshots()

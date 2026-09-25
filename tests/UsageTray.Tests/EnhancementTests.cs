@@ -188,7 +188,7 @@ public sealed class EnhancementTests
     }
 
     [Fact]
-    public void CompactTooltip_SingleSourceOfTruth_DecouplesStandardAndSparkWithoutMisleading77Percent()
+    public void CompactTooltip_SingleSourceOfTruth_ExcludesSparkAndShowsStandardAccurately()
     {
         var now = DateTimeOffset.UtcNow;
         var resetAt = now.AddDays(6);
@@ -204,8 +204,8 @@ public sealed class EnhancementTests
         };
 
         var compact = UsageTray.UI.QuotaDisplayFormatter.BuildCompactText(snapshot);
-        // 核心验证：单行紧凑显示必须准确反映主力 98% 与 Spark 77%，绝不能被误导显示成 "Codex 77%"
-        Assert.Contains("Codex 98% / Spark 77%", compact);
-        Assert.DoesNotContain("Codex 77%", compact);
+        // 核心验证：单行紧凑显示必须准确反映主力 98%，不再显示已废弃的 Spark
+        Assert.Contains("Codex 98%", compact);
+        Assert.DoesNotContain("Spark", compact);
     }
 }

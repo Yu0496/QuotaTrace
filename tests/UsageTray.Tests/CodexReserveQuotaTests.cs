@@ -312,7 +312,7 @@ public sealed class CodexReserveQuotaTests
             // Turn 1: standard model with 90% used (10% remaining)
             "{\"timestamp\":\"2026-09-07T20:35:34.818Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.6-luna\"}}",
             "{\"timestamp\":\"2026-09-07T20:35:34.818Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":1000,\"cached_input_tokens\":0,\"cache_write_input_tokens\":0,\"output_tokens\":100}},\"rate_limits\":{\"limit_id\":\"codex\",\"limit_name\":null,\"primary\":{\"used_percent\":90.0,\"window_minutes\":10080,\"resets_at\":1789274934},\"secondary\":null,\"plan_type\":\"prolite\"}}}",
-            // Turn 2: auxiliary spark model with 1% used (99% remaining), captured 11 seconds later
+            // Turn 2: auxiliary spark model (deprecated / removed), captured 11 seconds later
             "{\"timestamp\":\"2026-09-07T20:35:45.967Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.3-codex-spark\"}}",
             "{\"timestamp\":\"2026-09-07T20:35:45.967Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"total_token_usage\":{\"input_tokens\":2000,\"cached_input_tokens\":0,\"cache_write_input_tokens\":0,\"output_tokens\":200}},\"rate_limits\":{\"limit_id\":\"codex_bengalfox\",\"limit_name\":\"GPT-5.3-Codex-Spark\",\"primary\":{\"used_percent\":0.0,\"window_minutes\":300,\"resets_at\":1788831336},\"secondary\":{\"used_percent\":1.0,\"window_minutes\":10080,\"resets_at\":1789279059},\"plan_type\":\"prolite\"}}}"
         };
@@ -321,19 +321,13 @@ public sealed class CodexReserveQuotaTests
         var parser = new CodexJsonlParser();
         var result = parser.ParseFile(sessionPath);
 
-        // Verify standard weekly quota is not overwritten by spark
+        // Verify standard weekly quota is not overwritten
         var standardWeekly = result.Quotas.FirstOrDefault(q => q.ModelOrPoolId == "codex-weekly");
         Assert.NotNull(standardWeekly);
         Assert.Equal(0.10, standardWeekly.RemainingFraction!.Value, 4);
 
-        // Verify spark quota is isolated
-        var sparkWeekly = result.Quotas.FirstOrDefault(q => q.ModelOrPoolId == "codex-spark-weekly");
-        Assert.NotNull(sparkWeekly);
-        Assert.Equal(0.99, sparkWeekly.RemainingFraction!.Value, 4);
-
-        var spark5h = result.Quotas.FirstOrDefault(q => q.ModelOrPoolId == "codex-spark-5h");
-        Assert.NotNull(spark5h);
-        Assert.Equal(1.0, spark5h.RemainingFraction!.Value, 4);
+        // Verify spark quota is ignored / not created
+        Assert.DoesNotContain(result.Quotas, q => q.ModelOrPoolId.Contains("spark", StringComparison.OrdinalIgnoreCase));
     }
 
     [Theory]
@@ -395,23 +389,24 @@ public sealed class CodexReserveQuotaTests
             ]);
 
             var latest = repository.GetLatestQuotas(ProviderKind.Codex);
-            Assert.Equal(3, latest.Count);
+            // Spark snapshots are purged/filtered; only standard and reserve remain
+            Assert.Equal(2, latest.Count);
             Assert.Contains(latest, q => q.ModelOrPoolId == "codex-weekly");
-            Assert.Contains(latest, q => q.ModelOrPoolId == "codex-spark-weekly");
+            Assert.DoesNotContain(latest, q => q.ModelOrPoolId == "codex-spark-weekly");
             Assert.Contains(latest, q => q.ModelOrPoolId == "codex-reserve");
 
             var aggregator = new UsageAggregator(repository, new PricingService("fake.json", new PricingDocument(1, DateOnly.FromDateTime(DateTime.Today), [])));
             var snapshot = aggregator.BuildSnapshot(new DateRange(DateOnly.MinValue, DateOnly.MaxValue), ProviderKind.Codex);
 
-            // Pro user with triggered reserve has 3 cycles: standard, spark, reserve
-            Assert.Equal(3, snapshot.CodexWeeklyCycles.Count);
+            // Pro user with triggered reserve has 2 cycles: standard and reserve
+            Assert.Equal(2, snapshot.CodexWeeklyCycles.Count);
             Assert.Contains(snapshot.CodexWeeklyCycles, c => c.PoolCategory == "standard");
-            Assert.Contains(snapshot.CodexWeeklyCycles, c => c.PoolCategory == "spark");
+            Assert.DoesNotContain(snapshot.CodexWeeklyCycles, c => c.PoolCategory == "spark");
             Assert.Contains(snapshot.CodexWeeklyCycles, c => c.PoolCategory == "reserve");
 
             var popupText = QuotaDisplayFormatter.BuildPopupText(snapshot);
             Assert.Contains("Codex 主力模型", popupText);
-            Assert.Contains("GPT-5.3 Spark", popupText);
+            Assert.DoesNotContain("GPT-5.3 Spark", popupText);
             Assert.Contains("Codex Reserve", popupText);
         }
     }

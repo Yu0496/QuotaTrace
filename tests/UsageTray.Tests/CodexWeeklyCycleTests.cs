@@ -249,7 +249,7 @@ public sealed class CodexWeeklyCycleTests
     }
 
     [Fact]
-    public void BuildSnapshot_DecouplesStandardAndSparkWeeklyCycles()
+    public void BuildSnapshot_DecouplesStandardAndReserveWeeklyCycles()
     {
         using var workspace = new TempWorkspace();
         var (database, repository) = RepositoryFactory.Create(workspace);
@@ -257,13 +257,12 @@ public sealed class CodexWeeklyCycleTests
         {
             var now = DateTimeOffset.UtcNow;
             var stdReset = now.AddDays(3);
-            var sparkReset = now.AddDays(5);
+            var resReset = now.AddDays(5);
 
-            // Add standard and spark quotas
+            // Add standard and reserve quotas
             repository.AddQuotaSnapshots([
                 new QuotaSnapshot(ProviderKind.Codex, now, "codex-weekly", "Codex 主力模型 (周额度)", 0.80, stdReset, "weekly", "rate_limits", "Pro"),
-                new QuotaSnapshot(ProviderKind.Codex, now, "codex-spark-5h", "GPT-5.3 Spark (5小时额度)", 0.48, now.AddHours(2), "5h", "rate_limits", "Pro"),
-                new QuotaSnapshot(ProviderKind.Codex, now, "codex-spark-weekly", "GPT-5.3 Spark (周额度)", 0.77, sparkReset, "weekly", "rate_limits", "Pro")
+                new QuotaSnapshot(ProviderKind.Codex, now, "codex-reserve", "Codex Reserve", 0.77, resReset, "weekly", "rate_limits", "Pro")
             ]);
 
             var sessionPath1 = workspace.File("session_std.jsonl");
@@ -278,21 +277,21 @@ public sealed class CodexWeeklyCycleTests
             };
             repository.ReplaceCodexSource(file1, snapshots1, "session_std", null, "gpt-5.6-luna", null);
 
-            var sessionPath2 = workspace.File("session_spark.jsonl");
+            var sessionPath2 = workspace.File("session_reserve.jsonl");
             var file2 = new FileInfo(sessionPath2);
             File.WriteAllText(sessionPath2, "mock2");
             var snapshots2 = new List<CodexTokenSnapshot>
             {
-                new("session_spark", now.AddHours(-2), "gpt-5.3-codex-spark", null, "standard",
+                new("session_reserve", now.AddHours(-2), "gpt-reserve", null, "standard",
                     new CodexCumulativeUsage(50_000, 10_000, 5_000, 0),
                     new CodexRequestUsage(50_000, 10_000, 5_000, 0),
                     null, sessionPath2, 1)
             };
-            repository.ReplaceCodexSource(file2, snapshots2, "session_spark", null, "gpt-5.3-codex-spark", null);
+            repository.ReplaceCodexSource(file2, snapshots2, "session_reserve", null, "gpt-reserve", null);
 
             var pricing = new PricingService(workspace.File("pricing.json"), new PricingDocument(1, DateOnly.FromDateTime(now.DateTime), [
                 new PricingRule("Codex", "gpt-5.6-luna", MatchMode.Exact, 2.0m, 0.5m, 1.0m, 10.0m, "https://example.invalid", new DateOnly(2026, 8, 19)),
-                new PricingRule("Codex", "gpt-5.3-codex-spark", MatchMode.Exact, 1.0m, 0.2m, 0.5m, 5.0m, "https://example.invalid", new DateOnly(2026, 8, 19))
+                new PricingRule("Codex", "gpt-reserve", MatchMode.Exact, 1.0m, 0.2m, 0.5m, 5.0m, "https://example.invalid", new DateOnly(2026, 8, 19))
             ]));
 
             var aggregator = new UsageAggregator(repository, pricing);
@@ -300,7 +299,7 @@ public sealed class CodexWeeklyCycleTests
 
             // Both cycles exist
             Assert.NotNull(dashboard.CodexWeeklyCycle);
-            Assert.NotNull(dashboard.CodexSparkWeeklyCycle);
+            Assert.NotNull(dashboard.CodexReserveWeeklyCycle);
             Assert.Equal(2, dashboard.CodexWeeklyCycles.Count);
 
             // Standard cycle: only includes luna tokens
@@ -310,17 +309,16 @@ public sealed class CodexWeeklyCycleTests
             Assert.Equal(10_000, stdCycle.CycleOutputTokens);
             Assert.True(stdCycle.CycleCostUsd > 0);
 
-            // Spark cycle: only includes spark tokens
-            var sparkCycle = dashboard.CodexSparkWeeklyCycle!;
-            Assert.Equal("GPT-5.3 Spark", sparkCycle.PoolName);
-            Assert.Equal(50_000, sparkCycle.CycleInputTokens);
-            Assert.Equal(5_000, sparkCycle.CycleOutputTokens);
-            Assert.True(sparkCycle.CycleCostUsd > 0);
+            // Reserve cycle: only includes reserve tokens
+            var resCycle = dashboard.CodexReserveWeeklyCycle!;
+            Assert.Equal("Codex Reserve", resCycle.PoolName);
+            Assert.Equal(50_000, resCycle.CycleInputTokens);
+            Assert.Equal(5_000, resCycle.CycleOutputTokens);
+            Assert.True(resCycle.CycleCostUsd > 0);
 
             // Verify QuotaDisplayFormatter output
             var formatted = QuotaDisplayFormatter.BuildPopupText(dashboard);
-            Assert.Contains("5 小时窗口：GPT-5.3 Spark 48% 剩余", formatted);
-            Assert.Contains("GPT-5.3 Spark 本轮订阅参考金额", formatted);
+            Assert.Contains("Codex Reserve 本轮订阅参考金额", formatted);
             Assert.Contains("Codex 主力模型 本轮订阅参考金额", formatted);
         }
     }

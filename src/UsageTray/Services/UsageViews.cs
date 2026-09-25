@@ -106,7 +106,6 @@ public sealed record DashboardSnapshot
     public decimal? ApiEquivalentUsd { get; init; }
     public decimal? CodexApiEquivalentUsd { get; init; }
     public decimal? CodexStandardApiEquivalentUsd { get; init; }
-    public decimal? CodexSparkApiEquivalentUsd { get; init; }
     public decimal? CodexReserveApiEquivalentUsd { get; init; }
     public decimal? AntigravityApiEquivalentUsd { get; init; }
     public decimal? AntigravityGeminiApiEquivalentUsd { get; init; }
@@ -125,7 +124,6 @@ public sealed record DashboardSnapshot
     public CostQuality CostQuality { get; init; } = CostQuality.Unavailable;
     public DateTimeOffset? CoverageStart { get; init; }
     public CodexCycleUsageView? CodexWeeklyCycle { get; init; }
-    public CodexCycleUsageView? CodexSparkWeeklyCycle { get; init; }
     public CodexCycleUsageView? CodexReserveWeeklyCycle { get; init; }
     public IReadOnlyList<CodexCycleUsageView> CodexWeeklyCycles { get; init; } = [];
     public IReadOnlyList<CodexHistoricalCycleView> CodexHistoricalCycles { get; init; } = [];

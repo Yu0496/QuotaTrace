@@ -52,8 +52,7 @@ public sealed class AccuracyRepairTests
 
     [Theory]
     [InlineData("gpt-5.3-codex", "codex", null, "codex-weekly")]
-    [InlineData("gpt-5.3-codex-spark", "codex", null, "codex-weekly")]
-    [InlineData("gpt-6-astra", "codex_bengalfox", null, "codex-spark-weekly")]
+    [InlineData("gpt-5.5", "codex", null, "codex-weekly")]
     [InlineData("gpt-reserve", "base_model_inference", "gpt-reserve", "codex-reserve")]
     [InlineData("gpt-reserve", "codex", null, "codex-reserve")]
     public void ParserUsesReportedPoolAndObservedLegacyReserveFormat(string model, string id, string? name, string expected)
@@ -81,7 +80,7 @@ public sealed class AccuracyRepairTests
                 new CodexCumulativeUsage(100_000, 0, 10_000, 0), new CodexRequestUsage(100_000, 0, 10_000, 0), null, path, 1);
             var events = new[] { S("fast", "gpt-6-astra", now.AddMinutes(-5), "fast"),
                 S("old-reserve", "gpt-reserve", now.AddDays(-30), null),
-                S("spark", "gpt-5.3-codex-spark", now.AddMinutes(-1), null) };
+                S("recent-reserve", "gpt-reserve", now.AddMinutes(-1), null) };
             repo.ReplaceCodexSource(new FileInfo(path), events, "fixture", null, null, null);
             repo.ReplaceCodexLogicalUsage(new CodexUsageNormalizer().Normalize(events).Buckets);
             repo.AddQuotaSnapshots([new(ProviderKind.Codex, now, "codex-weekly", "Codex weekly", .8,
@@ -155,7 +154,7 @@ public sealed class AccuracyRepairTests
     public void ExpiredFractionIsUnknownAndUiRefreshDoesNotChangeSnapshotAge(double remaining)
     {
         var now = DateTimeOffset.UtcNow;
-        var q = new QuotaSnapshot(ProviderKind.Codex, now.AddHours(-6), "codex-spark-5h", "Spark", remaining,
+        var q = new QuotaSnapshot(ProviderKind.Codex, now.AddHours(-6), "codex-5h", "Codex", remaining,
             now.AddHours(-1), "5h", "fixture", "Pro");
         Assert.Null(q.EffectiveRemainingFraction());
         var text = QuotaDisplayFormatter.BuildPopupText(new DashboardSnapshot { Quotas = [new(q, true)], RefreshedAt = now });
@@ -191,9 +190,9 @@ public sealed class AccuracyRepairTests
             form.ApplySnapshot(new DashboardSnapshot
             {
                 CodexStandardApiEquivalentUsd = null, CodexApiEquivalentUsd = 123m,
-                CodexSparkApiEquivalentUsd = null, AntigravityGeminiApiEquivalentUsd = null,
+                CodexReserveApiEquivalentUsd = null, AntigravityGeminiApiEquivalentUsd = null,
                 AntigravityClaudeApiEquivalentUsd = 0m,
-                Quotas = [new(new(ProviderKind.Codex, now, "codex-spark-weekly", "Spark", .8,
+                Quotas = [new(new(ProviderKind.Codex, now, "codex-reserve", "Reserve", .8,
                     now.AddDays(2), "weekly", "fixture"), false)]
             });
             IEnumerable<System.Windows.Forms.Control> Descendants(System.Windows.Forms.Control c) =>

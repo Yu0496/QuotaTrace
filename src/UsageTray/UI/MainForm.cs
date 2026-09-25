@@ -472,23 +472,16 @@ public sealed class MainForm : Form
         var enableAntigravity = _coordinator.Settings.EnableAntigravity;
 
         var codexStdCost = snapshot.CodexStandardApiEquivalentUsd;
-        var codexSparkCost = snapshot.CodexSparkApiEquivalentUsd;
         var codexResCost = snapshot.CodexReserveApiEquivalentUsd;
 
-        var hasSparkActivity = codexSparkCost > 0 || snapshot.CodexWeeklyCycles.Any(c => c.PoolCategory == "spark") || snapshot.Quotas.Any(q => q.Snapshot.Provider == ProviderKind.Codex && UsageAggregator.IsSparkSnapshot(q.Snapshot));
         var hasReserveActivity = codexResCost > 0 || snapshot.CodexWeeklyCycles.Any(c => c.PoolCategory == "reserve") || snapshot.Quotas.Any(q => q.Snapshot.Provider == ProviderKind.Codex && UsageAggregator.IsReserveSnapshot(q.Snapshot));
 
-        if (hasSparkActivity && hasReserveActivity)
-            _codexApiValue.Text = $"Codex: {FormatCost(codexStdCost)} | {FormatCost(codexSparkCost)} | {FormatCost(codexResCost)}";
-        else if (hasSparkActivity)
-            _codexApiValue.Text = $"Codex: {FormatCost(codexStdCost)} | {FormatCost(codexSparkCost)}";
-        else if (hasReserveActivity)
+        if (hasReserveActivity)
             _codexApiValue.Text = $"Codex: {FormatCost(codexStdCost)} | {FormatCost(codexResCost)}";
         else
             _codexApiValue.Text = $"Codex: {FormatCost(codexStdCost)}";
 
         _toolTip.SetToolTip(_codexApiValue, $"{I18n.T("Codex 主力: ", "Codex Primary: ")}{FormatCost(codexStdCost)}" +
-            (hasSparkActivity ? $"\r\nGPT-5.3 Spark: {FormatCost(codexSparkCost)}" : "") +
             (hasReserveActivity ? $"\r\nCodex Reserve: {FormatCost(codexResCost)}" : ""));
 
         var geminiCost = snapshot.AntigravityGeminiApiEquivalentUsd;
@@ -499,7 +492,6 @@ public sealed class MainForm : Form
         if (snapshot.IsWeeklyCycleWindow)
         {
             var stdCycle = snapshot.CodexWeeklyCycles.FirstOrDefault(c => c.PoolCategory == "standard") ?? snapshot.CodexWeeklyCycle;
-            var sparkCycle = snapshot.CodexWeeklyCycles.FirstOrDefault(c => c.PoolCategory == "spark");
             var resCycle = snapshot.CodexWeeklyCycles.FirstOrDefault(c => c.PoolCategory == "reserve") ?? snapshot.CodexReserveWeeklyCycle;
 
             var cycleParts = new List<string>();
@@ -507,11 +499,6 @@ public sealed class MainForm : Form
             {
                 var rel = TimeFormatter.FormatRelativeFuture(stdCycle.ResetAt.Value);
                 cycleParts.Add($"{I18n.T("主力: ", "Primary: ")}{stdCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{rel}）");
-            }
-            if (sparkCycle is { ResetAt: not null })
-            {
-                var rel = TimeFormatter.FormatRelativeFuture(sparkCycle.ResetAt.Value);
-                cycleParts.Add($"Spark: {sparkCycle.ResetAt.Value.ToLocalTime():MM-dd HH:mm}（{rel}）");
             }
             if (resCycle is { ResetAt: not null })
             {

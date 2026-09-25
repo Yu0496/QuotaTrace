@@ -75,7 +75,7 @@ public sealed class CodexHistoryControl : UserControl
             Width = Math.Max(150, (int)(150 * scale)),
             Margin = new Padding(0, 0, (int)(16 * scale), 0)
         };
-        _poolFilterCombo.Items.AddRange([I18n.T("全部", "All"), I18n.T("Codex 主力模型", "Codex Primary"), "GPT-5.3 Spark", "Codex Reserve"]);
+        _poolFilterCombo.Items.AddRange([I18n.T("全部", "All"), I18n.T("Codex 主力模型", "Codex Primary"), "Codex Reserve"]);
         _poolFilterCombo.SelectedIndex = 0;
         _poolFilterCombo.SelectedIndexChanged += (_, _) => ApplyFilter();
 
@@ -154,7 +154,7 @@ public sealed class CodexHistoryControl : UserControl
         _filterLabel.Text = I18n.T("模型池筛选：", "Pool Filter: ");
         var curFilter = _poolFilterCombo.SelectedIndex;
         _poolFilterCombo.Items.Clear();
-        _poolFilterCombo.Items.AddRange([I18n.T("全部", "All"), I18n.T("Codex 主力模型", "Codex Primary"), "GPT-5.3 Spark", "Codex Reserve"]);
+        _poolFilterCombo.Items.AddRange([I18n.T("全部", "All"), I18n.T("Codex 主力模型", "Codex Primary"), "Codex Reserve"]);
         _poolFilterCombo.SelectedIndex = Math.Clamp(curFilter, 0, _poolFilterCombo.Items.Count - 1);
 
         var colMap = new Dictionary<string, (string Zh, string En)>
@@ -363,8 +363,7 @@ public sealed class CodexHistoryControl : UserControl
             var filter = _poolFilterCombo.SelectedIndex switch
             {
                 1 => "standard",
-                2 => "spark",
-                3 => "reserve",
+                2 => "reserve",
                 _ => null
             };
 

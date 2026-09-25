@@ -44,19 +44,15 @@ public static class QuotaDisplayFormatter
         {
             var codexModels = snapshot.Models.Where(item => item.Provider == ProviderKind.Codex).ToList();
             var codexQuota = snapshot.Quotas
-                .Where(item => item.Snapshot.Provider == ProviderKind.Codex)
+                .Where(item => item.Snapshot.Provider == ProviderKind.Codex && !IsSpark(item.Snapshot))
                 .Select(item => item.Snapshot).ToList();
 
             var stdWeekly = codexQuota
-                .Where(s => IsWeekly(s) && !UsageAggregator.IsSparkSnapshot(s) && !IsReserve(s))
+                .Where(s => IsWeekly(s) && !IsReserve(s))
                 .OrderByDescending(s => s.CapturedAt)
                 .FirstOrDefault();
             var std5h = codexQuota
-                .Where(s => IsFiveHour(s) && !UsageAggregator.IsSparkSnapshot(s) && !IsReserve(s))
-                .OrderByDescending(s => s.CapturedAt)
-                .FirstOrDefault();
-            var sparkWeekly = codexQuota
-                .Where(s => IsWeekly(s) && UsageAggregator.IsSparkSnapshot(s))
+                .Where(s => IsFiveHour(s) && !IsReserve(s))
                 .OrderByDescending(s => s.CapturedAt)
                 .FirstOrDefault();
             var codexReserve = codexQuota
@@ -86,23 +82,12 @@ public static class QuotaDisplayFormatter
                     stdPart = FormatCompact(stdWeekly);
                 }
 
-                if (sparkWeekly != null && sparkWeekly.RemainingFraction.HasValue)
-                {
-                    codexText = $"{stdPart} / Spark {FormatCompact(sparkWeekly)}";
-                }
-                else
-                {
-                    codexText = stdPart;
-                }
+                codexText = stdPart;
 
                 if (codexReserve != null && codexReserve.RemainingFraction.HasValue)
                 {
                     codexText += $" ({resLabel} {FormatCompact(codexReserve)})";
                 }
-            }
-            else if (sparkWeekly != null)
-            {
-                codexText = $"Spark {FormatCompactWithResetOnZero(sparkWeekly)}";
             }
             else if (codexReserve != null)
             {
@@ -227,7 +212,7 @@ public static class QuotaDisplayFormatter
     private static string BuildCodexSection(DashboardSnapshot snapshot)
     {
         var models = snapshot.Models.Where(item => item.Provider == ProviderKind.Codex).ToList();
-        var codexQuotaViews = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Codex).ToList();
+        var codexQuotaViews = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Codex && !IsSpark(item.Snapshot)).ToList();
         var codexQuotas = codexQuotaViews.Select(item => item.Snapshot).ToList();
         var codexPlan = codexQuotas
             .Where(s => !IsReserve(s) && !string.IsNullOrWhiteSpace(s.PlanTier))
@@ -352,6 +337,10 @@ public static class QuotaDisplayFormatter
     private static bool IsReserve(QuotaSnapshot snapshot) =>
         snapshot.ModelOrPoolId.Contains("reserve", StringComparison.OrdinalIgnoreCase) ||
         snapshot.DisplayLabel.Contains("reserve", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSpark(QuotaSnapshot snapshot) =>
+        snapshot.ModelOrPoolId.Contains("spark", StringComparison.OrdinalIgnoreCase) ||
+        snapshot.DisplayLabel.Contains("spark", StringComparison.OrdinalIgnoreCase);
 
     private static decimal? GetKnownCost(IReadOnlyList<ModelUsageView> models) =>
         models.Count > 0 && models.All(item => item.ApiEquivalentUsd.HasValue)
