@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Net;
-using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
 
 namespace UsageTray.Providers.Antigravity;
@@ -18,14 +16,8 @@ public sealed class AntigravityPortDiscovery
             processPorts.AddRange(ParsePorts(proc.CommandLine));
         }
 
-        var listeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners()
-            .Where(endpoint => IPAddress.IsLoopback(endpoint.Address))
-            .Select(endpoint => endpoint.Port)
-            .Where(IsValidPort);
-
         return processPorts
             .Where(IsValidPort)
-            .Concat(listeners)
             .Distinct()
             .Take(128)
             .ToList();

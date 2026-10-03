@@ -188,6 +188,22 @@ public sealed class EnhancementTests
     }
 
     [Fact]
+    public void ProtobufSpanReaderRejectsOversizedAndTruncatedLengths()
+    {
+        byte[] oversized = [0x0A, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F];
+        byte[] truncated = [0x0A, 0x05, 0x01];
+
+        var oversizedReader = new ProtobufSpanReader(oversized);
+        var truncatedReader = new ProtobufSpanReader(truncated);
+        Assert.False(oversizedReader.ReadNext());
+        Assert.False(truncatedReader.ReadNext());
+        Assert.Equal((0UL, 0), AntigravityProtobufReader.ReadVarint([0x80]));
+        Assert.Equal((0UL, 0), AntigravityProtobufReader.ReadVarint([
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02
+        ]));
+    }
+
+    [Fact]
     public void CompactTooltip_SingleSourceOfTruth_ExcludesSparkAndShowsStandardAccurately()
     {
         var now = DateTimeOffset.UtcNow;

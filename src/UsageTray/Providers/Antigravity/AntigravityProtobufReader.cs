@@ -30,7 +30,7 @@ public ref struct ProtobufSpanReader
     {
         if (_offset >= _span.Length) return false;
         var (tag, tagLen) = AntigravityProtobufReader.ReadVarint(_span.Slice(_offset));
-        if (tagLen == 0) return false;
+        if (tagLen == 0 || (tag >> 3) is 0 or > 0x1FFFFFFF) return false;
         _offset += tagLen;
         FieldNumber = (int)(tag >> 3);
         WireType = (int)(tag & 7);
@@ -50,8 +50,8 @@ public ref struct ProtobufSpanReader
             var (len, lenBytes) = AntigravityProtobufReader.ReadVarint(_span.Slice(_offset));
             if (lenBytes == 0) return false;
             _offset += lenBytes;
+            if (len > (ulong)(_span.Length - _offset)) return false;
             int byteCount = (int)len;
-            if (_offset + byteCount > _span.Length) return false;
             Bytes = _span.Slice(_offset, byteCount);
             _offset += byteCount;
             return true;
@@ -81,15 +81,15 @@ public static class AntigravityProtobufReader
         ulong result = 0;
         int shift = 0;
         int bytesRead = 0;
-        while (bytesRead < buffer.Length)
+        while (bytesRead < buffer.Length && bytesRead < 10)
         {
             byte b = buffer[bytesRead++];
+            if (bytesRead == 10 && b > 1) return (0, 0);
             result |= (ulong)(b & 0x7F) << shift;
             if ((b & 0x80) == 0) return (result, bytesRead);
             shift += 7;
-            if (shift >= 64) break;
         }
-        return (result, bytesRead);
+        return (0, 0);
     }
 
     public static List<RawProtobufField> DecodeFields(ReadOnlyMemory<byte> memory)

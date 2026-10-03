@@ -5,7 +5,7 @@ namespace UsageTray.Providers.Antigravity;
 
 public sealed class AntigravityProvider : IUsageProvider, IDisposable
 {
-    public const int ParserVersion = 3;
+    public const int ParserVersion = 4;
 
     private readonly AntigravityHistoryLocator _historyLocator;
     private readonly AntigravitySqliteHistoryParser _sqliteHistoryParser;
@@ -113,9 +113,14 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
         {
             try
             {
-                var ports = _portDiscovery.DiscoverCandidatePorts(processes);
-                var csrfToken = processes.Select(process => process.CsrfToken).FirstOrDefault(token => !string.IsNullOrWhiteSpace(token));
-                var quota = await _localApi.TryGetQuotaAsync(ports, csrfToken, cancellationToken);
+                AntigravityQuotaResult? quota = null;
+                foreach (var process in processes.Where(process => !string.IsNullOrWhiteSpace(process.CsrfToken)))
+                {
+                    // Keep each CSRF token paired with ports owned by the same language server process.
+                    var ports = _portDiscovery.DiscoverCandidatePorts([process]);
+                    quota = await _localApi.TryGetQuotaAsync(ports, process.CsrfToken, cancellationToken);
+                    if (quota is not null) break;
+                }
                 if (quota is not null)
                 {
                     quotas.AddRange(quota.Snapshots);
@@ -124,7 +129,7 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
                 }
                 else
                 {
-                    warnings.Add(string.IsNullOrWhiteSpace(csrfToken)
+                    warnings.Add(processes.All(process => string.IsNullOrWhiteSpace(process.CsrfToken))
                         ? "Antigravity 进程存在，但未读取到本地 CSRF token，无法通过 quota 接口校验。"
                         : "Antigravity 进程存在，但未探测到可用的本地 quota 接口；保留最后成功快照。");
                 }

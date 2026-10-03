@@ -58,6 +58,32 @@ public sealed class PricingServiceTests
     }
 
     [Theory]
+    [InlineData("claude-sonnet-5-5-thinking", 14.7)]
+    [InlineData("claude-opus-5-5-thinking", 29.2)]
+    public void Claude55ModelsUseTheirOwnReferencePrices(string model, double expected)
+    {
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+        var bucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 10, 4), null, model,
+            3_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null,
+            1_000_000, CostQuality.ExactTokenSplit);
+
+        Assert.Equal((decimal)expected, pricing.Calculate(bucket).CostUsd);
+    }
+
+    [Theory]
+    [InlineData("claude-sonnet")]
+    [InlineData("claude-opus")]
+    [InlineData("claude-sonnet-5-6")]
+    public void UnverifiedClaudeVersionsRemainUnpriced(string model)
+    {
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+        var bucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 10, 4), null, model,
+            1_000_000, 0, 1_000_000, 1, DataQuality.Exact, "fixture");
+
+        Assert.Null(pricing.Calculate(bucket).CostUsd);
+    }
+
+    [Theory]
     [InlineData("gemini-pro-default")]
     [InlineData("gemini-3-flash-a")]
     [InlineData("gemini-default")]
@@ -93,6 +119,9 @@ public sealed class PricingServiceTests
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-luna");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.8-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-4-6*");
+        Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-5-5*");
+        Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-opus-5-5*");
+        Assert.Equal(7, loaded.Document.SchemaVersion);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-pro-default*");
     }
@@ -102,6 +131,10 @@ public sealed class PricingServiceTests
     {
         Assert.Equal("claude-sonnet-4-6", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Claude Sonnet 4.6 (Thinking)"));
         Assert.Equal("claude-opus-4-6-thinking", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Claude Opus 4.6 (Thinking)"));
+        Assert.Equal("claude-sonnet-5-5", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Claude Sonnet 5.5 (Thinking)"));
+        Assert.Equal("claude-opus-5-5-thinking", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Claude Opus 5.5 (Thinking)"));
+        Assert.Equal("claude-sonnet-4-5", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Claude Sonnet 4.5"));
+        Assert.Equal("claude-opus", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Claude Opus"));
         Assert.Equal("gemini-3.8-flash", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.8 Flash (High)"));
         Assert.Equal("gemini-3.5-flash", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.5 Flash (High)"));
         Assert.Equal("gemini-3.1-pro", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.1 Pro (High)"));

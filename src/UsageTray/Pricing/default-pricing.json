@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 6,
-  "lastVerifiedAt": "2026-09-23",
+  "schemaVersion": 7,
+  "lastVerifiedAt": "2026-10-04",
   "rules": [
     {
       "provider": "Codex",
@@ -665,6 +665,19 @@
     },
     {
       "provider": "Antigravity",
+      "modelPattern": "claude-sonnet-5-5*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "lastVerifiedAt": "2026-10-04",
+      "cacheSplitValidated": true,
+      "referenceBasis": "常规 Token 基准；缓存创建采用 5 分钟价格假设"
+    },
+    {
+      "provider": "Antigravity",
       "modelPattern": "claude-sonnet-4-6*",
       "matchMode": "Wildcard",
       "inputPerMillionUsd": 3.0,
@@ -738,6 +751,19 @@
       "outputPerMillionUsd": 15.0,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "lastVerifiedAt": "2026-09-08",
+      "cacheSplitValidated": true,
+      "referenceBasis": "常规 Token 基准；缓存创建采用 5 分钟价格假设"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "claude-opus-5-5*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 4.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": 5.0,
+      "outputPerMillionUsd": 20.0,
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "lastVerifiedAt": "2026-10-04",
       "cacheSplitValidated": true,
       "referenceBasis": "常规 Token 基准；缓存创建采用 5 分钟价格假设"
     },

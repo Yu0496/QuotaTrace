@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using UsageTray.Providers.Antigravity;
 
 namespace UsageTray.Tests;
@@ -19,5 +21,19 @@ public sealed class AntigravityProcessDiscoveryTests
     public void ReturnsNullWhenCommandLineDoesNotContainCsrfToken(string? commandLine)
     {
         Assert.Null(AntigravityProcessDiscovery.ExtractCsrfToken(commandLine));
+    }
+
+    [Fact]
+    public void CandidatePortsExcludeUnrelatedLoopbackListeners()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var unrelatedPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var discovery = new AntigravityPortDiscovery();
+        Assert.DoesNotContain(unrelatedPort, discovery.DiscoverCandidatePorts([]));
+        Assert.Equal([unrelatedPort], discovery.DiscoverCandidatePorts([
+            new AntigravityProcessInfo("language_server", 0, null, $"--port={unrelatedPort}", "token")
+        ]));
     }
 }

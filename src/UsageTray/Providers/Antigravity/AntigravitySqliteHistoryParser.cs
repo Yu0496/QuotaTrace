@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using UsageTray.Core;
 using UsageTray.Pricing;
@@ -117,8 +118,15 @@ public sealed class AntigravitySqliteHistoryParser
         if (string.IsNullOrWhiteSpace(displayName)) return "Unknown";
         var name = displayName.Trim().ToLowerInvariant();
 
-        if (name.Contains("sonnet")) return "claude-sonnet-4-6";
-        if (name.Contains("opus")) return "claude-opus-4-6-thinking";
+        var claudeVersion = Regex.Match(name, @"\b(sonnet|opus)\b[\s_-]*(\d+)[._-](\d+)\b", RegexOptions.CultureInvariant);
+        if (claudeVersion.Success)
+        {
+            var family = claudeVersion.Groups[1].Value;
+            var model = $"claude-{family}-{claudeVersion.Groups[2].Value}-{claudeVersion.Groups[3].Value}";
+            return family == "opus" && name.Contains("thinking", StringComparison.Ordinal) ? model + "-thinking" : model;
+        }
+        if (name.Contains("sonnet", StringComparison.Ordinal)) return "claude-sonnet";
+        if (name.Contains("opus", StringComparison.Ordinal)) return "claude-opus";
         if (name.Contains("haiku")) return "claude-3-5-haiku";
 
         if (name.Contains("3.8") && name.Contains("flash")) return "gemini-3.8-flash";
