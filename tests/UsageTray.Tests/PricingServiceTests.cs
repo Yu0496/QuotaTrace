@@ -121,7 +121,7 @@ public sealed class PricingServiceTests
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-4-6*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-5-5*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-opus-5-5*");
-        Assert.Equal(7, loaded.Document.SchemaVersion);
+        Assert.Equal(PricingService.DefaultDocumentVersion, loaded.Document.SchemaVersion);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-pro-default*");
     }
@@ -167,17 +167,23 @@ public sealed class PricingServiceTests
     }
 
     [Fact]
-    public void CodexAutoReviewUsesAgreedLunaReference()
+    public void CodexAutoReviewIsFreeAndNotPriced()
     {
         var service = PricingService.BuiltInDefaults();
         var pricing = new PricingService("dummy", service);
 
-        // codex-auto-review (1M uncached input = $0.2, 10M cached = $0.2, 100K output = $0.12 => $0.52)
+        // codex-auto-review 官方现已直接免费，审核模型不再计费/计价 ($0.00)
         var reviewBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 8, 31), null, "codex-auto-review",
             11_000_000, 10_000_000, 100_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
         var result = pricing.Calculate(reviewBucket);
-        Assert.Equal(0.52m, result.CostUsd);
+        Assert.Equal(0.0m, result.CostUsd);
         Assert.Equal(CostQuality.ExactTokenSplit, result.Quality);
+
+        // 通用 moderation 模型同样免费
+        var modBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 10, 8), null, "omni-moderation-latest",
+            500_000, 200_000, 10_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        var modResult = pricing.Calculate(modBucket);
+        Assert.Equal(0.0m, modResult.CostUsd);
     }
 
     [Fact]
