@@ -22,12 +22,31 @@ public static class PricingMatcher
     internal static bool Matches(PricingRule rule, string modelId)
     {
         var pattern = rule.ModelPattern.Trim();
-        return rule.MatchMode switch
+        if (MatchPattern(rule.MatchMode, pattern, modelId)) return true;
+
+        var normalizedModelId = NormalizeModelId(modelId);
+        if (!string.Equals(normalizedModelId, modelId, StringComparison.OrdinalIgnoreCase))
         {
-            MatchMode.Exact => string.Equals(pattern, modelId, StringComparison.OrdinalIgnoreCase),
-            MatchMode.Prefix => modelId.StartsWith(pattern, StringComparison.OrdinalIgnoreCase),
-            MatchMode.Contains => modelId.Contains(pattern, StringComparison.OrdinalIgnoreCase),
-            MatchMode.Wildcard => WildcardMatch(pattern, modelId),
+            if (MatchPattern(rule.MatchMode, pattern, normalizedModelId)) return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeModelId(string modelId)
+    {
+        var trimmed = modelId.Trim();
+        return System.Text.RegularExpressions.Regex.Replace(trimmed, @"[\s_]+", "-");
+    }
+
+    private static bool MatchPattern(MatchMode mode, string pattern, string value)
+    {
+        return mode switch
+        {
+            MatchMode.Exact => string.Equals(pattern, value, StringComparison.OrdinalIgnoreCase),
+            MatchMode.Prefix => value.StartsWith(pattern, StringComparison.OrdinalIgnoreCase),
+            MatchMode.Contains => value.Contains(pattern, StringComparison.OrdinalIgnoreCase),
+            MatchMode.Wildcard => WildcardMatch(pattern, value),
             _ => false
         };
     }

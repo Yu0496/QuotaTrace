@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS file_usage (
     long_context_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0,
     long_context_output_tokens INTEGER NOT NULL DEFAULT 0,
     cache_write_available INTEGER NOT NULL DEFAULT 1,
-    PRIMARY KEY(provider, source_path, local_date, project_key, model_id)
+    PRIMARY KEY(provider, source_path, local_date, project_key, model_id, service_tier)
 );
 CREATE TABLE IF NOT EXISTS codex_snapshots (
     provider TEXT NOT NULL,
@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS app_metadata (
         EnsureColumn(connection, "file_usage", "long_context_cache_write_input_tokens", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "file_usage", "long_context_output_tokens", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "file_usage", "cache_write_available", "INTEGER NOT NULL DEFAULT 1");
+        EnsureFileUsagePrimaryKey(connection);
         using var cleanupSpark = connection.CreateCommand();
         cleanupSpark.CommandText = "DELETE FROM quota_snapshots WHERE model_or_pool_id LIKE '%spark%';";
         cleanupSpark.ExecuteNonQuery();
@@ -213,6 +214,68 @@ CREATE TABLE IF NOT EXISTS app_metadata (
         using var alter = connection.CreateCommand();
         alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
         alter.ExecuteNonQuery();
+    }
+
+    private static void EnsureFileUsagePrimaryKey(SqliteConnection connection)
+    {
+        using var check = connection.CreateCommand();
+        check.CommandText = "PRAGMA table_info(file_usage);";
+        using var reader = check.ExecuteReader();
+        var hasServiceTierInPk = false;
+        while (reader.Read())
+        {
+            var colName = reader.GetString(1);
+            var pk = reader.GetInt32(5);
+            if (string.Equals(colName, "service_tier", StringComparison.OrdinalIgnoreCase) && pk > 0)
+            {
+                hasServiceTierInPk = true;
+                break;
+            }
+        }
+        reader.Close();
+
+        if (!hasServiceTierInPk)
+        {
+            using var alter = connection.CreateCommand();
+            alter.CommandText = @"
+                CREATE TABLE IF NOT EXISTS file_usage_v2 (
+                    provider TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    local_date TEXT NOT NULL,
+                    project_key TEXT NOT NULL DEFAULT '',
+                    model_id TEXT NOT NULL DEFAULT '',
+                    input_tokens INTEGER NOT NULL,
+                    cached_input_tokens INTEGER NOT NULL,
+                    cache_write_input_tokens INTEGER NOT NULL DEFAULT 0,
+                    output_tokens INTEGER NOT NULL,
+                    request_count INTEGER NOT NULL DEFAULT 0,
+                    data_quality INTEGER NOT NULL,
+                    cost_quality INTEGER NOT NULL DEFAULT 1,
+                    session_id TEXT NULL,
+                    service_tier TEXT NOT NULL DEFAULT '',
+                    long_context_request_count INTEGER NOT NULL DEFAULT 0,
+                    request_shape_uncertain_count INTEGER NOT NULL DEFAULT 0,
+                    long_context_input_tokens INTEGER NOT NULL DEFAULT 0,
+                    long_context_cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+                    long_context_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0,
+                    long_context_output_tokens INTEGER NOT NULL DEFAULT 0,
+                    cache_write_available INTEGER NOT NULL DEFAULT 1,
+                    PRIMARY KEY(provider, source_path, local_date, project_key, model_id, service_tier)
+                );
+                INSERT OR REPLACE INTO file_usage_v2(provider, source_path, local_date, project_key, model_id, input_tokens,
+                    cached_input_tokens, cache_write_input_tokens, output_tokens, request_count, data_quality, cost_quality, session_id,
+                    service_tier, long_context_request_count, request_shape_uncertain_count, long_context_input_tokens,
+                    long_context_cached_input_tokens, long_context_cache_write_input_tokens, long_context_output_tokens, cache_write_available)
+                SELECT provider, source_path, local_date, project_key, model_id, input_tokens,
+                    cached_input_tokens, cache_write_input_tokens, output_tokens, request_count, data_quality, cost_quality, session_id,
+                    service_tier, long_context_request_count, request_shape_uncertain_count, long_context_input_tokens,
+                    long_context_cached_input_tokens, long_context_cache_write_input_tokens, long_context_output_tokens, cache_write_available
+                FROM file_usage;
+                DROP TABLE file_usage;
+                ALTER TABLE file_usage_v2 RENAME TO file_usage;
+            ";
+            alter.ExecuteNonQuery();
+        }
     }
 
     public void Dispose() { }

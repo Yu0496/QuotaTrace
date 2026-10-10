@@ -86,6 +86,64 @@ public sealed class AntigravitySqliteHistoryParserTests
     }
 
     [Fact]
+    public void ParsesGemini38FlashNGenerationsAndPricedSuccessfully()
+    {
+        using var workspace = new TempWorkspace();
+        var path = workspace.File("conv_flash_n.db");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = path }.ToString();
+
+        var tsSeconds = 1771480000L;
+        var stepData = CreateProtobufStepMetadata(tsSeconds, 500000);
+        var genData = CreateProtobufGenMetadata(
+            model: "gemini-3.8-flash-n",
+            input: 1_000_000,
+            cacheRead: 1_000_000,
+            cacheWrite: 0,
+            thinking: 100_000,
+            respOutput: 900_000,
+            aggregateOutput: 1_000_000,
+            responseId: "resp_flash_n",
+            generationId: "gen_flash_n"
+        );
+
+        using (var connection = new SqliteConnection(connectionString))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+            CREATE TABLE steps (idx INTEGER PRIMARY KEY, metadata BLOB);
+            CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB);
+            """;
+            command.ExecuteNonQuery();
+
+            using var insertStep = connection.CreateCommand();
+            insertStep.CommandText = "INSERT INTO steps(idx, metadata) VALUES(1, $blob)";
+            insertStep.Parameters.AddWithValue("$blob", stepData);
+            insertStep.ExecuteNonQuery();
+
+            using var insertGen = connection.CreateCommand();
+            insertGen.CommandText = "INSERT INTO gen_metadata(idx, data) VALUES(1, $blob)";
+            insertGen.Parameters.AddWithValue("$blob", genData);
+            insertGen.ExecuteNonQuery();
+        }
+
+        var pricing = new UsageTray.Pricing.PricingService("dummy", UsageTray.Pricing.PricingService.BuiltInDefaults());
+        var parser = new AntigravitySqliteHistoryParser();
+        var result = parser.ParseFile(path, null, pricing.Rules);
+
+        Assert.Single(result.Generations);
+        Assert.Equal("gemini-3.8-flash-n", result.Generations[0].Model);
+        Assert.Single(result.Buckets);
+        var bucket = result.Buckets[0];
+        Assert.Equal("gemini-3.8-flash-n", bucket.ModelId);
+        Assert.Equal(CostQuality.ExactTokenSplit, bucket.CostQuality);
+
+        var calc = pricing.Calculate(bucket);
+        Assert.NotNull(calc.CostUsd);
+        Assert.Equal(9.15m, calc.CostUsd.Value);
+    }
+
+    [Fact]
     public void ParsesLongContextGenerationsCorrectly()
     {
         var pricingService = new UsageTray.Pricing.PricingService("dummy", UsageTray.Pricing.PricingService.BuiltInDefaults());

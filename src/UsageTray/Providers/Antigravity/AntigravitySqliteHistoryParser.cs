@@ -129,7 +129,11 @@ public sealed class AntigravitySqliteHistoryParser
         if (name.Contains("opus", StringComparison.Ordinal)) return "claude-opus";
         if (name.Contains("haiku")) return "claude-3-5-haiku";
 
-        if (name.Contains("3.8") && name.Contains("flash")) return "gemini-3.8-flash";
+        if (name.Contains("3.8") && name.Contains("flash"))
+        {
+            if (name.Contains("-n") || Regex.IsMatch(name, @"\bflash[\s_-]+n\b")) return "gemini-3.8-flash-n";
+            return "gemini-3.8-flash";
+        }
         if (name.Contains("3.7") && name.Contains("flash")) return "gemini-3.7-flash";
         if (name.Contains("3.6") && name.Contains("flash")) return "gemini-3.6-flash";
         if (name.Contains("3.5") && name.Contains("lite")) return "gemini-3.5-flash-lite";

@@ -2,6 +2,6 @@ namespace UsageTray.Data;
 
 public static class DatabaseMigrations
 {
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
 }
 

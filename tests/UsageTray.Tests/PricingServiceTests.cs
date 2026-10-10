@@ -241,6 +241,63 @@ public sealed class PricingServiceTests
         Assert.Equal(3.15m, pricing.Calculate(bucket with { ModelId = "gpt-5.3-codex" }).CostUsd);
     }
 
+    [Fact]
+    public void Gpt61SolAndLunaCalculateCorrectStandardAndFastCost()
+    {
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
 
+        // 1. gpt-6.1-sol standard tier: 2M input (1M uncached @ $2.0, 1M cached @ $0.2) + 1M output @ $10.0 = $12.20
+        var solBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 10, 11), null, "gpt-6.1-sol",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        var solResult = pricing.Calculate(solBucket);
+        Assert.NotNull(solResult.CostUsd);
+        Assert.Equal(12.2m, solResult.CostUsd.Value);
+
+        // 2. gpt-6.1-sol fast tier: 2M input (1M uncached @ $5.0, 1M cached @ $0.5) + 1M output @ $25.0 = $30.50
+        var solFastBucket = solBucket with { ServiceTier = "fast" };
+        var solFastResult = pricing.Calculate(solFastBucket);
+        Assert.NotNull(solFastResult.CostUsd);
+        Assert.Equal(30.5m, solFastResult.CostUsd.Value);
+
+        // 3. gpt-6.1-luna standard tier: 2M input (1M uncached @ $0.1, 1M cached @ $0.01) + 1M output @ $0.5 = $0.61
+        var lunaBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 10, 11), null, "gpt-6.1-luna",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        var lunaResult = pricing.Calculate(lunaBucket);
+        Assert.NotNull(lunaResult.CostUsd);
+        Assert.Equal(0.61m, lunaResult.CostUsd.Value);
+
+        // 4. gpt-6.1-luna fast tier: 2M input (1M uncached @ $0.2, 1M cached @ $0.02) + 1M output @ $1.0 = $1.22
+        var lunaFastBucket = lunaBucket with { ServiceTier = "fast" };
+        var lunaFastResult = pricing.Calculate(lunaFastBucket);
+        Assert.NotNull(lunaFastResult.CostUsd);
+        Assert.Equal(1.22m, lunaFastResult.CostUsd.Value);
+    }
+
+    [Fact]
+    public void Gemini38FlashNCalculatesCorrectCostAndMatchesNormalizedVariants()
+    {
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+
+        // 1. Exact model ID: gemini-3.8-flash-n: 2M input (1M uncached @ $1.5, 1M cached @ $0.15) + 1M output @ $7.5 = $9.15
+        var bucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 10, 11), null, "gemini-3.8-flash-n",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        var result = pricing.Calculate(bucket);
+        Assert.NotNull(result.CostUsd);
+        Assert.Equal(9.15m, result.CostUsd.Value);
+
+        // 2. Space separated model ID: "gemini 3.8 flash n" normalizes and matches
+        var spaceResult = pricing.Calculate(bucket with { ModelId = "gemini 3.8 flash n" });
+        Assert.NotNull(spaceResult.CostUsd);
+        Assert.Equal(9.15m, spaceResult.CostUsd.Value);
+
+        // 3. Suffix variant: gemini-3.8-flash-n-preview matches wildcard
+        var variantResult = pricing.Calculate(bucket with { ModelId = "gemini-3.8-flash-n-preview" });
+        Assert.NotNull(variantResult.CostUsd);
+        Assert.Equal(9.15m, variantResult.CostUsd.Value);
+
+        // 4. InferModelFromDisplayName parses "Gemini 3.8 Flash N"
+        var inferred = UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.8 Flash N");
+        Assert.Equal("gemini-3.8-flash-n", inferred);
+    }
 }
 

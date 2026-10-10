@@ -269,6 +269,65 @@ INSERT INTO file_usage(provider,source_path,local_date,project_key,model_id,inpu
         Assert.Equal(999, repository.GetUsage(new DateRange(new DateOnly(2026, 8, 20), new DateOnly(2026, 8, 20)), ProviderKind.Codex).Sum(item => item.InputTokens));
     }
 
+    [Fact]
+    public void FileUsageSupportsDifferentServiceTiersOnSameDateAndModel()
+    {
+        using var workspace = new TempWorkspace();
+        var path = workspace.File("usage.db");
+        using var database = new UsageDatabase(path);
+        var repository = new UsageRepository(database);
+
+        var date = new DateOnly(2026, 9, 16);
+        var bucketStandard = new UsageBucket(ProviderKind.Codex, date, "projectA", "gpt-6.1-sol",
+            100, 10, 20, 1, DataQuality.Exact, "session1.jsonl", null, 0, CostQuality.ExactTokenSplit, "");
+        var bucketFast = new UsageBucket(ProviderKind.Codex, date, "projectA", "gpt-6.1-sol",
+            200, 20, 40, 1, DataQuality.Exact, "session1.jsonl", null, 0, CostQuality.ExactTokenSplit, "fast");
+
+        repository.ReplaceCodexLogicalUsage([bucketStandard, bucketFast]);
+
+        var usages = repository.GetUsage(new DateRange(date, date), ProviderKind.Codex);
+        Assert.Equal(2, usages.Count);
+        Assert.Contains(usages, item => string.IsNullOrEmpty(item.ServiceTier) && item.InputTokens == 100);
+        Assert.Contains(usages, item => item.ServiceTier == "fast" && item.InputTokens == 200);
+    }
+
+    [Fact]
+    public void LegacyDatabaseMigratesFileUsagePrimaryKeyToIncludeServiceTier()
+    {
+        using var workspace = new TempWorkspace();
+        var path = workspace.File("legacy_pk.db");
+        using (var connection = new SqliteConnection($"Data Source={path}"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+CREATE TABLE source_files(provider TEXT NOT NULL,path TEXT NOT NULL,file_size INTEGER NOT NULL,mtime_utc_ticks INTEGER NOT NULL,
+parsed_bytes INTEGER NOT NULL DEFAULT 0,parser_version INTEGER NOT NULL DEFAULT 1,session_id TEXT NULL,project_key TEXT NULL,last_model TEXT NULL,parser_state_json TEXT NULL,last_error TEXT NULL,PRIMARY KEY(provider,path));
+CREATE TABLE file_usage(provider TEXT NOT NULL,source_path TEXT NOT NULL,local_date TEXT NOT NULL,project_key TEXT NOT NULL DEFAULT '',model_id TEXT NOT NULL DEFAULT '',input_tokens INTEGER NOT NULL,cached_input_tokens INTEGER NOT NULL,cache_write_input_tokens INTEGER NOT NULL DEFAULT 0,output_tokens INTEGER NOT NULL,request_count INTEGER NOT NULL DEFAULT 0,data_quality INTEGER NOT NULL,cost_quality INTEGER NOT NULL DEFAULT 1,session_id TEXT NULL,service_tier TEXT NOT NULL DEFAULT '',PRIMARY KEY(provider,source_path,local_date,project_key,model_id));
+CREATE TABLE app_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+INSERT INTO app_metadata(key, value) VALUES('codex_schema_version', '5');
+INSERT INTO file_usage(provider,source_path,local_date,project_key,model_id,input_tokens,cached_input_tokens,output_tokens,request_count,data_quality,cost_quality,service_tier)
+VALUES('Codex','file1.jsonl','2026-09-16','prj','gpt-6.1-sol',100,10,20,1,1,1,'');";
+            command.ExecuteNonQuery();
+        }
+
+        using var database = new UsageDatabase(path);
+        var repository = new UsageRepository(database);
+
+        var date = new DateOnly(2026, 9, 16);
+        var bucketStandard = new UsageBucket(ProviderKind.Codex, date, "prj", "gpt-6.1-sol",
+            100, 10, 20, 1, DataQuality.Exact, "file1.jsonl", null, 0, CostQuality.ExactTokenSplit, "");
+        var bucketFast = new UsageBucket(ProviderKind.Codex, date, "prj", "gpt-6.1-sol",
+            200, 20, 40, 1, DataQuality.Exact, "file1.jsonl", null, 0, CostQuality.ExactTokenSplit, "fast");
+
+        repository.ReplaceCodexLogicalUsage([bucketStandard, bucketFast]);
+
+        var usages = repository.GetUsage(new DateRange(date, date), ProviderKind.Codex);
+        Assert.Equal(2, usages.Count);
+        Assert.Contains(usages, u => string.IsNullOrEmpty(u.ServiceTier) && u.InputTokens == 100);
+        Assert.Contains(usages, u => u.ServiceTier == "fast" && u.InputTokens == 200);
+    }
+
     private static CodexTokenSnapshot Snapshot(string session, int seconds, string model, long totalInput, long lastInput,
         long output, string source = "fixture.jsonl", long? cacheWrite = 0, long cached = 0, long? lastOutput = null) =>
         new(session, T0.AddSeconds(seconds), model, "Demo", null,

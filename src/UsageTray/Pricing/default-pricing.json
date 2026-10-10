@@ -220,6 +220,150 @@
     },
     {
       "provider": "Codex",
+      "modelPattern": "gpt-6-sol*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-sol",
+      "lastVerifiedAt": "2026-09-23",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": 5.0,
+        "outputPerMillionUsd": 15.0
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 25.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 10.0,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 37.5
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6.1-sol",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-sol",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": 5.0,
+        "outputPerMillionUsd": 15.0
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 25.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 10.0,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 37.5
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6.1-sol*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-sol",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": 5.0,
+        "outputPerMillionUsd": 15.0
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 25.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 10.0,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 37.5
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6.1-sol-fast*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 5.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 6.25,
+      "outputPerMillionUsd": 25.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-sol",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 10.0,
+        "cacheReadPerMillionUsd": 1.0,
+        "cacheWritePerMillionUsd": 12.5,
+        "outputPerMillionUsd": 37.5
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.5,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 25.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 10.0,
+          "cacheReadPerMillionUsd": 1.0,
+          "cacheWritePerMillionUsd": 12.5,
+          "outputPerMillionUsd": 37.5
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
       "modelPattern": "gpt-6-luna",
       "matchMode": "Exact",
       "inputPerMillionUsd": 0.1,
@@ -264,6 +408,150 @@
       "outputPerMillionUsd": 1.0,
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
       "lastVerifiedAt": "2026-09-23",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.4,
+        "cacheReadPerMillionUsd": 0.04,
+        "cacheWritePerMillionUsd": 0.5,
+        "outputPerMillionUsd": 1.5
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.2,
+          "cacheReadPerMillionUsd": 0.02,
+          "cacheWritePerMillionUsd": 0.25,
+          "outputPerMillionUsd": 1.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.4,
+          "cacheReadPerMillionUsd": 0.04,
+          "cacheWritePerMillionUsd": 0.5,
+          "outputPerMillionUsd": 1.5
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6-luna*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.1,
+      "cacheReadPerMillionUsd": 0.01,
+      "cacheWritePerMillionUsd": 0.125,
+      "outputPerMillionUsd": 0.5,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+      "lastVerifiedAt": "2026-09-23",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.2,
+        "cacheReadPerMillionUsd": 0.02,
+        "cacheWritePerMillionUsd": 0.25,
+        "outputPerMillionUsd": 0.75
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.2,
+          "cacheReadPerMillionUsd": 0.02,
+          "cacheWritePerMillionUsd": 0.25,
+          "outputPerMillionUsd": 1.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.4,
+          "cacheReadPerMillionUsd": 0.04,
+          "cacheWritePerMillionUsd": 0.5,
+          "outputPerMillionUsd": 1.5
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6.1-luna",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 0.1,
+      "cacheReadPerMillionUsd": 0.01,
+      "cacheWritePerMillionUsd": 0.125,
+      "outputPerMillionUsd": 0.5,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.2,
+        "cacheReadPerMillionUsd": 0.02,
+        "cacheWritePerMillionUsd": 0.25,
+        "outputPerMillionUsd": 0.75
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.2,
+          "cacheReadPerMillionUsd": 0.02,
+          "cacheWritePerMillionUsd": 0.25,
+          "outputPerMillionUsd": 1.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.4,
+          "cacheReadPerMillionUsd": 0.04,
+          "cacheWritePerMillionUsd": 0.5,
+          "outputPerMillionUsd": 1.5
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6.1-luna*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.1,
+      "cacheReadPerMillionUsd": 0.01,
+      "cacheWritePerMillionUsd": 0.125,
+      "outputPerMillionUsd": 0.5,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.2,
+        "cacheReadPerMillionUsd": 0.02,
+        "cacheWritePerMillionUsd": 0.25,
+        "outputPerMillionUsd": 0.75
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.2,
+          "cacheReadPerMillionUsd": 0.02,
+          "cacheWritePerMillionUsd": 0.25,
+          "outputPerMillionUsd": 1.0
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 0.4,
+          "cacheReadPerMillionUsd": 0.04,
+          "cacheWritePerMillionUsd": 0.5,
+          "outputPerMillionUsd": 1.5
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6.1-luna-fast*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.2,
+      "cacheReadPerMillionUsd": 0.02,
+      "cacheWritePerMillionUsd": 0.25,
+      "outputPerMillionUsd": 1.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+      "lastVerifiedAt": "2026-10-11",
       "cacheSplitValidated": true,
       "longContextPrice": {
         "inputPerMillionUsd": 0.4,
@@ -903,7 +1191,46 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 7.5,
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "lastVerifiedAt": "2026-09-08",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "referenceBasis": "官方列示常规基准 $1.5/$0.15/$7.5；不采用截至 2026-12-31 的推广折扣"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.8-flash-n",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 7.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "referenceBasis": "官方列示常规基准 $1.5/$0.15/$7.5；不采用截至 2026-12-31 的推广折扣"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.8-flash-n*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 7.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "referenceBasis": "官方列示常规基准 $1.5/$0.15/$7.5；不采用截至 2026-12-31 的推广折扣"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-3.8-flash*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.15,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 7.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-10-11",
       "cacheSplitValidated": true,
       "referenceBasis": "官方列示常规基准 $1.5/$0.15/$7.5；不采用截至 2026-12-31 的推广折扣"
     },
@@ -1192,6 +1519,46 @@
     },
     {
       "provider": "Antigravity",
+      "modelPattern": "gpt-6.1-sol",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-sol",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": 5.0,
+        "outputPerMillionUsd": 15.0
+      },
+      "longContextThresholdTokens": 272000,
+      "referenceBasis": "非促销 Token 参考基准"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-6.1-sol*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-sol",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 4.0,
+        "cacheReadPerMillionUsd": 0.4,
+        "cacheWritePerMillionUsd": 5.0,
+        "outputPerMillionUsd": 15.0
+      },
+      "longContextThresholdTokens": 272000,
+      "referenceBasis": "非促销 Token 参考基准"
+    },
+    {
+      "provider": "Antigravity",
       "modelPattern": "gpt-6-luna",
       "matchMode": "Exact",
       "inputPerMillionUsd": 0.1,
@@ -1220,6 +1587,46 @@
       "outputPerMillionUsd": 0.5,
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
       "lastVerifiedAt": "2026-09-23",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.2,
+        "cacheReadPerMillionUsd": 0.02,
+        "cacheWritePerMillionUsd": 0.25,
+        "outputPerMillionUsd": 0.75
+      },
+      "longContextThresholdTokens": 272000,
+      "referenceBasis": "非促销 Token 参考基准"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-6.1-luna",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 0.1,
+      "cacheReadPerMillionUsd": 0.01,
+      "cacheWritePerMillionUsd": 0.125,
+      "outputPerMillionUsd": 0.5,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+      "lastVerifiedAt": "2026-10-11",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 0.2,
+        "cacheReadPerMillionUsd": 0.02,
+        "cacheWritePerMillionUsd": 0.25,
+        "outputPerMillionUsd": 0.75
+      },
+      "longContextThresholdTokens": 272000,
+      "referenceBasis": "非促销 Token 参考基准"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-6.1-luna*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 0.1,
+      "cacheReadPerMillionUsd": 0.01,
+      "cacheWritePerMillionUsd": 0.125,
+      "outputPerMillionUsd": 0.5,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+      "lastVerifiedAt": "2026-10-11",
       "cacheSplitValidated": true,
       "longContextPrice": {
         "inputPerMillionUsd": 0.2,

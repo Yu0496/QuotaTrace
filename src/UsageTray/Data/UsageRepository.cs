@@ -70,7 +70,7 @@ public sealed class UsageRepository
         {
             using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
-            insert.CommandText = @"INSERT INTO file_usage(provider,source_path,local_date,project_key,model_id,input_tokens,
+            insert.CommandText = @"INSERT OR REPLACE INTO file_usage(provider,source_path,local_date,project_key,model_id,input_tokens,
                 cached_input_tokens,cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,session_id,
                 service_tier,long_context_request_count,request_shape_uncertain_count,long_context_input_tokens,
                 long_context_cached_input_tokens,long_context_cache_write_input_tokens,long_context_output_tokens,cache_write_available)
@@ -857,7 +857,7 @@ public sealed class UsageRepository
     {
         using var insert = connection.CreateCommand();
         insert.Transaction = transaction;
-        insert.CommandText = @"INSERT INTO file_usage(provider,source_path,local_date,project_key,model_id,input_tokens,
+        insert.CommandText = @"INSERT OR REPLACE INTO file_usage(provider,source_path,local_date,project_key,model_id,input_tokens,
             cached_input_tokens,cache_write_input_tokens,output_tokens,request_count,data_quality,cost_quality,session_id,service_tier,
             long_context_request_count,request_shape_uncertain_count,long_context_input_tokens,long_context_cached_input_tokens,
             long_context_cache_write_input_tokens,long_context_output_tokens,cache_write_available)
