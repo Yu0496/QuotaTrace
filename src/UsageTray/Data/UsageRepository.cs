@@ -588,6 +588,7 @@ public sealed class UsageRepository
     public IReadOnlyList<UsageBucket> GetAntigravityUsageInPoolWindows(
         DateTimeOffset? geminiStartUtc, DateTimeOffset? geminiEndUtc,
         DateTimeOffset? threePStartUtc, DateTimeOffset? threePEndUtc,
+        DateTimeOffset? argonStartUtc = null, DateTimeOffset? argonEndUtc = null,
         IReadOnlyList<PricingRule>? pricingRules = null)
     {
         var allGens = GetAntigravityGenerations();
@@ -596,8 +597,12 @@ public sealed class UsageRepository
         var filtered = allGens.Where(gen =>
         {
             var pool = AntigravityQuotaEstimator.GetModelQuotaPool(gen.Model);
-            var start = pool == "gemini" ? geminiStartUtc : threePStartUtc;
-            var end = pool == "gemini" ? geminiEndUtc : threePEndUtc;
+            var (start, end) = pool switch
+            {
+                "gemini" => (geminiStartUtc, geminiEndUtc),
+                "argon" => (argonStartUtc, argonEndUtc),
+                _ => (threePStartUtc, threePEndUtc)
+            };
             return start.HasValue && end.HasValue && gen.Timestamp >= start.Value && gen.Timestamp < end.Value;
         }).ToList();
 

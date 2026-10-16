@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 8,
-  "lastVerifiedAt": "2026-10-08",
+  "schemaVersion": 11,
+  "lastVerifiedAt": "2026-10-17",
   "rules": [
     {
       "provider": "Codex",
@@ -1181,6 +1181,45 @@
       "lastVerifiedAt": "2026-09-08",
       "cacheSplitValidated": true,
       "unverifiedReason": "不同 Haiku 版本不能共用价格"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-4-argon*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/pricing",
+      "lastVerifiedAt": "2026-10-17",
+      "cacheSplitValidated": true,
+      "referenceBasis": "非促销 Token 参考基准"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "*argon*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/pricing",
+      "lastVerifiedAt": "2026-10-17",
+      "cacheSplitValidated": true,
+      "referenceBasis": "非促销 Token 参考基准"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "argon*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/pricing",
+      "lastVerifiedAt": "2026-10-17",
+      "cacheSplitValidated": true,
+      "referenceBasis": "非促销 Token 参考基准"
     },
     {
       "provider": "Antigravity",

@@ -81,5 +81,50 @@ public sealed class AntigravityQuotaParserTests
         Assert.Equal(0.999, claudeWeekly.RemainingFraction);
         Assert.Equal("Claude / GPT (周额度)", claudeWeekly.DisplayLabel);
     }
+
+    [Fact]
+    public void QuotaParserExtractsArgonGroupsAndBuckets()
+    {
+        using var document = JsonDocument.Parse("""
+        {
+          "response": {
+            "groups": [
+              {
+                "displayName": "Argon Models",
+                "buckets": [
+                  {
+                    "bucketId": "argon-weekly",
+                    "displayName": "Weekly Limit Remaining",
+                    "window": "weekly",
+                    "remainingFraction": 0.72,
+                    "resetTime": "2026-08-25T18:34:46Z"
+                  },
+                  {
+                    "bucketId": "argon-5h",
+                    "displayName": "Five Hour Limit Remaining",
+                    "window": "5h",
+                    "remainingFraction": 0.85,
+                    "resetTime": "2026-08-20T10:38:07Z"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        """);
+
+        var result = new AntigravityQuotaParser().Parse(document.RootElement, DateTimeOffset.UtcNow, "fixture");
+
+        Assert.Equal(2, result.Snapshots.Count);
+        var weekly = Assert.Single(result.Snapshots, s => s.ModelOrPoolId == "argon-weekly");
+        Assert.Equal(0.72, weekly.RemainingFraction);
+        Assert.Equal("Argon (周额度)", weekly.DisplayLabel);
+        Assert.Equal("weekly", weekly.WindowKind);
+
+        var fiveH = Assert.Single(result.Snapshots, s => s.ModelOrPoolId == "argon-5h");
+        Assert.Equal(0.85, fiveH.RemainingFraction);
+        Assert.Equal("Argon (5小时额度)", fiveH.DisplayLabel);
+        Assert.Equal("5h", fiveH.WindowKind);
+    }
 }
 

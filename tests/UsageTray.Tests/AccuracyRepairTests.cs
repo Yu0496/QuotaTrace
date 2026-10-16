@@ -106,11 +106,14 @@ public sealed class AccuracyRepairTests
             var path = workspace.File("source.db"); File.WriteAllText(path, "fixture");
             AntigravityGenerationUsage G(string id, string model, DateTimeOffset at) =>
                 new("c", id, id, at, model, null, 1000, 0, 0, 0, 100, 100, null, path, 1);
-            var gens = new[] { G("a", "gemini-3.7-flash", now), G("b", "claude-sonnet-4-6", now.AddDays(-30)) };
+            var gens = new[] { G("a", "gemini-3.7-flash", now), G("b", "claude-sonnet-4-6", now.AddDays(-30)), G("c", "argon-pro", now.AddDays(-5)) };
             repo.ReplaceAntigravitySource(new FileInfo(path), gens, [], null, null, null, null);
             Assert.Empty(repo.GetAntigravityUsageInPoolWindows(null, null, null, null));
             Assert.Empty(repo.GetAntigravityUsageInPoolWindows(now.AddHours(-1), now, null, null));
             Assert.Equal(1000, Assert.Single(repo.GetAntigravityUsageInPoolWindows(now, now.AddHours(1), null, null)).InputTokens);
+            var argonResult = repo.GetAntigravityUsageInPoolWindows(null, null, null, null, now.AddDays(-6), now.AddDays(-4));
+            Assert.Equal(1000, Assert.Single(argonResult).InputTokens);
+            Assert.Equal("argon-pro", Assert.Single(argonResult).ModelId);
         }
     }
 
@@ -203,5 +206,34 @@ public sealed class AccuracyRepairTests
         }
     }
 
+    [Fact]
+    public void DashboardCardsDisplayArgonWhenArgonActivityExists()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repo) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var settingsStore = new UsageTray.App.AppSettingsStore(workspace.File("settings.json"));
+            var pricing = Pricing();
+            using var coordinator = new RefreshCoordinator([], settingsStore, repo, pricing,
+                new UsageAggregator(repo, pricing), new UsageTray.App.AppSettings());
+            using var form = new MainForm(coordinator, settingsStore);
+            var now = DateTimeOffset.UtcNow;
+            form.ApplySnapshot(new DashboardSnapshot
+            {
+                CodexStandardApiEquivalentUsd = 10m,
+                CodexReserveApiEquivalentUsd = null,
+                AntigravityGeminiApiEquivalentUsd = 2m,
+                AntigravityClaudeApiEquivalentUsd = 3m,
+                AntigravityArgonApiEquivalentUsd = 5m,
+                Quotas = [new(new(ProviderKind.Antigravity, now, "argon-weekly", "Argon (周额度)", .8,
+                    now.AddDays(2), "weekly", "fixture"), false)]
+            });
+            IEnumerable<System.Windows.Forms.Control> Descendants(System.Windows.Forms.Control c) =>
+                c.Controls.Cast<System.Windows.Forms.Control>().SelectMany(child => Descendants(child).Prepend(child));
+            var labels = Descendants(form).OfType<System.Windows.Forms.Label>().Select(l => l.Text).ToList();
+            Assert.Contains("Antigravity: $2.00 | $3.00 | $5.00", labels);
+        }
+    }
 }
 

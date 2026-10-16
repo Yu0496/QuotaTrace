@@ -24,11 +24,13 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _pinQuotaMenuItem;
     private readonly ToolStripMenuItem _startupMenuItem;
     private readonly ToolStripMenuItem _settingsMenuItem;
+    private readonly ToolStripMenuItem _checkUpdatesMenuItem;
     private readonly ToolStripMenuItem _exitMenuItem;
 
     private MainForm? _mainForm;
     private QuotaPopupForm? _quotaPopup;
     private DashboardSnapshot _lastSnapshot;
+    private ReleaseInfo? _latestRelease;
     private bool _quotaPopupPinned;
     private bool _contextMenuOpen;
     private bool _disposed;
@@ -110,6 +112,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _startupMenuItem.Click += (_, _) => { try { new StartupManager().SetEnabled(_startupMenuItem.Checked); } catch { } };
 
         _settingsMenuItem = new ToolStripMenuItem(string.Empty, null, (_, _) => ShowSettings());
+        _checkUpdatesMenuItem = new ToolStripMenuItem(string.Empty, null, async (_, _) => await CheckForUpdatesManuallyAsync());
         _exitMenuItem = new ToolStripMenuItem(string.Empty, null, (_, _) => ExitApplication());
 
         menu.Items.Add(_openDashboardMenuItem);
@@ -118,9 +121,14 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_pinQuotaMenuItem);
         menu.Items.Add(_startupMenuItem);
         menu.Items.Add(_settingsMenuItem);
+        menu.Items.Add(_checkUpdatesMenuItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_exitMenuItem);
         _notifyIcon.ContextMenuStrip = menu;
+        _notifyIcon.BalloonTipClicked += (_, _) =>
+        {
+            if (_latestRelease != null) ShowUpdateDialog(_latestRelease);
+        };
 
         UpdateMenuTexts();
         I18n.LanguageChanged += HandleLanguageChanged;
@@ -132,6 +140,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         var now = DateTimeOffset.UtcNow;
         var isWeeklyFullScanDue = !settings.LastFullScanUtc.HasValue || (now - settings.LastFullScanUtc.Value).TotalDays >= 7;
         _ = RefreshAsync(isWeeklyFullScanDue);
+        _ = StartBackgroundUpdateCheckAsync();
     }
 
     private void HandleLanguageChanged() => _uiContext.Post(_ => UpdateMenuTexts(), null);
@@ -143,6 +152,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _pinQuotaMenuItem.Text = I18n.T("固定显示额度摘要", "Pin Quota Summary");
         _startupMenuItem.Text = I18n.T("开机启动", "Start with Windows");
         _settingsMenuItem.Text = I18n.T("设置", "Settings");
+        _checkUpdatesMenuItem.Text = I18n.T("检查更新...", "Check for Updates...");
         _exitMenuItem.Text = I18n.T("退出", "Exit");
         UpdateTooltip(_lastSnapshot);
     }
@@ -246,6 +256,75 @@ public sealed class TrayApplicationContext : ApplicationContext
         var text = QuotaDisplayFormatter.BuildCompactText(snapshot, _coordinator.Settings.EnableCodex, _coordinator.Settings.EnableAntigravity);
         _notifyIcon.Text = text.Length > 63 ? text[..63] : text;
         _quotaMenuItem.Text = $"{I18n.T("额度：", "Quota: ")}{text}";
+    }
+
+    private async Task StartBackgroundUpdateCheckAsync()
+    {
+        try
+        {
+            await Task.Delay(5000);
+            if (_disposed) return;
+            var settings = _settingsStore.Load();
+            if (!settings.CheckUpdatesOnStartup) return;
+
+            var result = await AppUpdateService.CheckForUpdateAsync();
+            if (result.IsUpdateAvailable && result.LatestRelease != null && !_disposed)
+            {
+                _latestRelease = result.LatestRelease;
+                _uiContext.Post(_ =>
+                {
+                    if (_disposed) return;
+                    _notifyIcon.BalloonTipTitle = "QuotaTrace " + I18n.T("发现新版本", "New Version Available");
+                    _notifyIcon.BalloonTipText = I18n.Format(
+                        "发现新版本 {0}，点击查看并升级。",
+                        "New version {0} is available. Click to view and update.",
+                        result.LatestRelease.TagName);
+                    _notifyIcon.ShowBalloonTip(6000);
+                }, null);
+            }
+        }
+        catch
+        {
+            // 忽略后台静默更新检测失败
+        }
+    }
+
+    private async Task CheckForUpdatesManuallyAsync()
+    {
+        try
+        {
+            var result = await AppUpdateService.CheckForUpdateAsync();
+            if (result.IsUpdateAvailable && result.LatestRelease != null)
+            {
+                ShowUpdateDialog(result.LatestRelease);
+            }
+            else if (string.IsNullOrEmpty(result.ErrorMessage))
+            {
+                MessageBox.Show(
+                    I18n.Format("当前已是最新版本 ({0})，暂无可用更新。",
+                                "You are running the latest version ({0}).",
+                                AppUpdateService.GetCurrentVersionString()),
+                    "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                MessageBox.Show(
+                    I18n.Format("检查更新失败：{0}\r\n请检查网络连接或稍后重试。",
+                                "Failed to check for updates: {0}",
+                                result.ErrorMessage),
+                    "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private void ShowUpdateDialog(ReleaseInfo release)
+    {
+        using var dlg = new UpdateDialog(release);
+        dlg.ShowDialog();
     }
 
     private void ExitApplication()

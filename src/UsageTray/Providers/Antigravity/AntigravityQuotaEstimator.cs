@@ -18,7 +18,11 @@ public sealed class AntigravityQuotaEstimator
     public static string GetModelQuotaPool(string modelId)
     {
         var model = modelId.Trim().ToLowerInvariant();
-        if (model.StartsWith("gemini", StringComparison.OrdinalIgnoreCase))
+        if (model.Contains("argon", StringComparison.OrdinalIgnoreCase))
+        {
+            return "argon";
+        }
+        if (model.StartsWith("gemini", StringComparison.OrdinalIgnoreCase) || model.Contains("gemini", StringComparison.OrdinalIgnoreCase))
         {
             return "gemini";
         }
@@ -32,10 +36,16 @@ public sealed class AntigravityQuotaEstimator
         {
             return id.Contains("gemini", StringComparison.OrdinalIgnoreCase);
         }
-        return id.Contains("3p", StringComparison.OrdinalIgnoreCase) ||
+        if (poolCategory == "argon")
+        {
+            return id.Contains("argon", StringComparison.OrdinalIgnoreCase);
+        }
+        return (id.Contains("3p", StringComparison.OrdinalIgnoreCase) ||
                id.Contains("claude", StringComparison.OrdinalIgnoreCase) ||
                id.Contains("gpt", StringComparison.OrdinalIgnoreCase) ||
-               id.Contains("other", StringComparison.OrdinalIgnoreCase);
+               id.Contains("other", StringComparison.OrdinalIgnoreCase)) &&
+               !id.Contains("gemini", StringComparison.OrdinalIgnoreCase) &&
+               !id.Contains("argon", StringComparison.OrdinalIgnoreCase);
     }
 
     public IReadOnlyList<AntigravityQuotaEstimate> EstimateAll(
@@ -44,11 +54,12 @@ public sealed class AntigravityQuotaEstimator
     {
         var results = new List<AntigravityQuotaEstimate>();
 
-        // Pools to estimate: gemini, 3p
+        // Pools to estimate: gemini, 3p, argon
         var pools = new[]
         {
             (Category: "gemini", Display: "Gemini Models"),
-            (Category: "3p", Display: "Claude and GPT models")
+            (Category: "3p", Display: "Claude and GPT models"),
+            (Category: "argon", Display: "Argon Models")
         };
 
         var windows = new[] { "5h", "weekly" };

@@ -1,5 +1,6 @@
 using UsageTray.App;
 using UsageTray.Core;
+using UsageTray.Providers.Antigravity;
 using UsageTray.Services;
 using UsageTray.UI.Controls;
 
@@ -486,8 +487,20 @@ public sealed class MainForm : Form
 
         var geminiCost = snapshot.AntigravityGeminiApiEquivalentUsd;
         var claudeCost = snapshot.AntigravityClaudeApiEquivalentUsd;
-        _antigravityApiValue.Text = $"Antigravity: {FormatCost(geminiCost)} | {FormatCost(claudeCost)}";
-        _toolTip.SetToolTip(_antigravityApiValue, $"Gemini: {FormatCost(geminiCost)}\r\nClaude: {FormatCost(claudeCost)}");
+        var argonCost = snapshot.AntigravityArgonApiEquivalentUsd;
+        var hasArgonActivity = (argonCost.HasValue && argonCost.Value > 0) ||
+            snapshot.Quotas.Any(q => q.Snapshot.Provider == ProviderKind.Antigravity && AntigravityQuotaEstimator.SnapshotMatchesPool(q.Snapshot, "argon"));
+
+        if (hasArgonActivity)
+        {
+            _antigravityApiValue.Text = $"Antigravity: {FormatCost(geminiCost)} | {FormatCost(claudeCost)} | {FormatCost(argonCost)}";
+            _toolTip.SetToolTip(_antigravityApiValue, $"Gemini: {FormatCost(geminiCost)}\r\nClaude: {FormatCost(claudeCost)}\r\nArgon: {FormatCost(argonCost)}");
+        }
+        else
+        {
+            _antigravityApiValue.Text = $"Antigravity: {FormatCost(geminiCost)} | {FormatCost(claudeCost)}";
+            _toolTip.SetToolTip(_antigravityApiValue, $"Gemini: {FormatCost(geminiCost)}\r\nClaude: {FormatCost(claudeCost)}");
+        }
 
         if (snapshot.IsWeeklyCycleWindow)
         {
@@ -528,6 +541,7 @@ public sealed class MainForm : Form
 
             var geminiEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && e.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase));
             var claudeEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && (e.DisplayName.Contains("Claude", StringComparison.OrdinalIgnoreCase) || e.DisplayName.Contains("3p", StringComparison.OrdinalIgnoreCase)));
+            var argonEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase));
 
             string geminiCycle = geminiEst?.ResetAt.HasValue == true
                 ? I18n.Format("Gemini: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Gemini: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", geminiEst.ResetAt.Value.AddDays(-7).ToLocalTime(), geminiEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(geminiEst.ResetAt.Value))
@@ -537,7 +551,18 @@ public sealed class MainForm : Form
                 ? I18n.Format("Claude: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Claude: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", claudeEst.ResetAt.Value.AddDays(-7).ToLocalTime(), claudeEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(claudeEst.ResetAt.Value))
                 : I18n.T("Claude: 暂无配额", "Claude: No quota");
 
-            _antigravityCycleNote.Text = I18n.T("周期：", "Cycle: ") + $"{geminiCycle} | {claudeCycle}";
+            string argonCycle = argonEst?.ResetAt.HasValue == true
+                ? I18n.Format("Argon: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Argon: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", argonEst.ResetAt.Value.AddDays(-7).ToLocalTime(), argonEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(argonEst.ResetAt.Value))
+                : I18n.T("Argon: 暂无配额", "Argon: No quota");
+
+            if (hasArgonActivity || argonEst != null)
+            {
+                _antigravityCycleNote.Text = I18n.T("周期：", "Cycle: ") + $"{geminiCycle} | {claudeCycle} | {argonCycle}";
+            }
+            else
+            {
+                _antigravityCycleNote.Text = I18n.T("周期：", "Cycle: ") + $"{geminiCycle} | {claudeCycle}";
+            }
         }
         else
         {
@@ -613,9 +638,20 @@ public sealed class MainForm : Form
                 {
                     _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = row.EstimateDetail;
                 }
-                else if (row.Provider == ProviderKind.Codex && !row.EstimatedWeeklyCostUsd.HasValue)
+                else if (!row.EstimatedWeeklyCostUsd.HasValue)
                 {
-                    _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = I18n.T("该模型暂无足够独立消耗样本测算周总额。", "Insufficient independent usage samples to estimate full weekly quota for this model.");
+                    if (!row.ApiEquivalentUsd.HasValue)
+                    {
+                        _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = I18n.T("该模型尚未匹配定价规则，无法测算参考金额与周满额。", "Model pricing rule not matched; cannot estimate reference cost and weekly quota.");
+                    }
+                    else if (row.ApiEquivalentUsd.Value == 0m)
+                    {
+                        _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = I18n.T("该模型当前周期参考金额为 $0.00，无需且无法外推周满额。", "Reference cost for this model in current cycle is $0.00; cannot extrapolate weekly quota.");
+                    }
+                    else
+                    {
+                        _models.Rows[rowIndex].Cells["推算周满额"].ToolTipText = I18n.T("该模型暂无足够独立消耗样本测算周总额（单模型需消耗额度 ≥ 2.5%）。", "Insufficient usage samples to estimate weekly quota (requires >= 2.5% quota drop).");
+                    }
                 }
             }
         }

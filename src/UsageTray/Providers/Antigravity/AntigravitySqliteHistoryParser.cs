@@ -152,6 +152,13 @@ public sealed class AntigravitySqliteHistoryParser
         if (name.Contains("luna")) return "gpt-6-luna";
         if (name.Contains("gpt-oss") || name.Contains("120b")) return "gpt-oss-120b-medium";
 
+        if (name.Contains("argon"))
+        {
+            if (name.Contains("pro")) return "argon-pro";
+            if (name.Contains("flash")) return "argon-flash";
+            return "argon";
+        }
+
         return displayName.Trim();
     }
 

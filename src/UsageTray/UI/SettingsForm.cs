@@ -12,6 +12,7 @@ public sealed class SettingsForm : Form
     private readonly CheckBox _enableCodex;
     private readonly CheckBox _enableAntigravity;
     private readonly CheckBox _startup;
+    private readonly CheckBox _checkUpdates;
     private readonly NumericUpDown _refresh;
     private readonly NumericUpDown _retention;
     private readonly TextBox _extraRoots;
@@ -76,6 +77,13 @@ public sealed class SettingsForm : Form
         {
             Text = I18n.T("开机启动", "Start with Windows"),
             Checked = settings.StartWithWindows,
+            AutoSize = true,
+            Margin = new Padding(0, 4, 0, 4)
+        };
+        _checkUpdates = new CheckBox
+        {
+            Text = I18n.T("启动时自动检测新版本", "Check for updates on startup"),
+            Checked = settings.CheckUpdatesOnStartup,
             AutoSize = true,
             Margin = new Padding(0, 4, 0, 8)
         };
@@ -244,8 +252,105 @@ public sealed class SettingsForm : Form
                 lastScanText),
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
-            Margin = new Padding(0, 8, 0, 6)
+            Margin = new Padding(0, 8, 0, 10)
         };
+
+        var updateTitle = new Label
+        {
+            Text = I18n.T("软件更新与关于", "Software Updates & About"),
+            AutoSize = true,
+            Font = new Font(Font, FontStyle.Bold),
+            Margin = new Padding(0, 12, 0, 6)
+        };
+
+        var versionLabel = new Label
+        {
+            Text = I18n.Format("当前版本：{0}", "Current Version: {0}", AppUpdateService.GetCurrentVersionString()),
+            AutoSize = true,
+            ForeColor = Color.FromArgb(15, 23, 42),
+            Margin = new Padding(0, 2, 0, 4)
+        };
+
+        var checkUpdateButton = new Button
+        {
+            Text = I18n.T("检查新版本", "Check for Updates"),
+            AutoSize = true,
+            Height = buttonHeight,
+            Padding = new Padding(10, 2, 10, 2),
+            Margin = new Padding(0, 0, 8, 0)
+        };
+
+        checkUpdateButton.Click += async (_, _) =>
+        {
+            if (!checkUpdateButton.Enabled) return;
+            checkUpdateButton.Enabled = false;
+            var originalText = checkUpdateButton.Text;
+            checkUpdateButton.Text = I18n.T("正在检查...", "Checking...");
+            try
+            {
+                var checkResult = await AppUpdateService.CheckForUpdateAsync();
+                if (IsDisposed || Disposing || !IsHandleCreated) return;
+                if (checkResult.IsUpdateAvailable && checkResult.LatestRelease != null)
+                {
+                    using var dlg = new UpdateDialog(checkResult.LatestRelease);
+                    dlg.ShowDialog(this);
+                }
+                else if (string.IsNullOrEmpty(checkResult.ErrorMessage))
+                {
+                    MessageBox.Show(this,
+                        I18n.Format("当前已是最新版本 ({0})，暂无可用更新。",
+                                    "You are running the latest version ({0}).",
+                                    AppUpdateService.GetCurrentVersionString()),
+                        "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show(this,
+                        I18n.Format("检查更新失败：{0}\r\n请检查网络连接或稍后重试。",
+                                    "Failed to check for updates: {0}",
+                                    checkResult.ErrorMessage),
+                        "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+            finally
+            {
+                if (!IsDisposed && !Disposing && IsHandleCreated)
+                {
+                    checkUpdateButton.Text = originalText;
+                    checkUpdateButton.Enabled = true;
+                }
+            }
+        };
+
+        var openReleasesButton = new Button
+        {
+            Text = I18n.T("打开 Releases 网页", "Open Releases Webpage"),
+            AutoSize = true,
+            Height = buttonHeight,
+            Padding = new Padding(10, 2, 10, 2),
+            Margin = Padding.Empty
+        };
+        openReleasesButton.Click += (_, _) => AppUpdateService.OpenUrl(AppUpdateService.GitHubReleasesUrl);
+
+        var updateButtonsPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0, 2, 0, 4)
+        };
+        updateButtonsPanel.Controls.Add(checkUpdateButton);
+        updateButtonsPanel.Controls.Add(openReleasesButton);
+
+        var githubRepoLink = new LinkLabel
+        {
+            Text = "GitHub: https://github.com/Yu0496/QuotaTrace",
+            AutoSize = true,
+            LinkColor = Color.FromArgb(2, 132, 199),
+            Margin = new Padding(0, 4, 0, 8)
+        };
+        githubRepoLink.LinkClicked += (_, _) => AppUpdateService.OpenUrl(AppUpdateService.GitHubRepoUrl);
 
         var saveButton = new Button
         {
@@ -365,7 +470,7 @@ public sealed class SettingsForm : Form
         {
             Dock = DockStyle.Top,
             ColumnCount = 1,
-            RowCount = 16,
+            RowCount = 21,
             AutoSize = true,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
@@ -387,6 +492,11 @@ public sealed class SettingsForm : Form
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 13: speedNoteTitle
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 14: speedNote
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 15: note
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 16: updateTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 17: versionLabel
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 18: _checkUpdates
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 19: updateButtonsPanel
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 20: githubRepoLink
 
         mainPanel.Controls.Add(title, 0, 0);
         mainPanel.Controls.Add(CreateLabel(I18n.T("监测提供商 (至少开启一项)：", "Monitored Providers (Enable at least one):")), 0, 1);
@@ -404,6 +514,11 @@ public sealed class SettingsForm : Form
         mainPanel.Controls.Add(speedNoteTitle, 0, 13);
         mainPanel.Controls.Add(speedNote, 0, 14);
         mainPanel.Controls.Add(note, 0, 15);
+        mainPanel.Controls.Add(updateTitle, 0, 16);
+        mainPanel.Controls.Add(versionLabel, 0, 17);
+        mainPanel.Controls.Add(_checkUpdates, 0, 18);
+        mainPanel.Controls.Add(updateButtonsPanel, 0, 19);
+        mainPanel.Controls.Add(githubRepoLink, 0, 20);
 
         contentPanel.Controls.Add(mainPanel);
 
@@ -475,6 +590,7 @@ public sealed class SettingsForm : Form
             _ => "auto"
         };
         settings.StartWithWindows = _startup.Checked;
+        settings.CheckUpdatesOnStartup = _checkUpdates.Checked;
         settings.RefreshSeconds = (int)_refresh.Value;
         settings.DataRetentionDays = (int)_retention.Value;
         settings.ExtraCodexRoots = _extraRoots.Lines.Where(line => !string.IsNullOrWhiteSpace(line)).ToList();

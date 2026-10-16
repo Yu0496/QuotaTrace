@@ -20,6 +20,8 @@ public sealed class AppSettings
     public int? SettingsWindowWidth { get; set; }
     public int? SettingsWindowHeight { get; set; }
     public DateTimeOffset? LastFullScanUtc { get; set; }
+    public bool CheckUpdatesOnStartup { get; set; } = true;
+    public DateTimeOffset? LastUpdateCheckUtc { get; set; }
     public Dictionary<string, int> ModelColumnWidths { get; set; } = new();
     public Dictionary<string, int> ProjectColumnWidths { get; set; } = new();
     public Dictionary<string, int> CodexHistoryColumnWidths { get; set; } = new();

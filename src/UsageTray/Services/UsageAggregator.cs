@@ -59,7 +59,9 @@ public sealed class UsageAggregator
             {
                 var gemini = Window(ProviderKind.Antigravity, q => AntigravityQuotaEstimator.SnapshotMatchesPool(q, "gemini"));
                 var other = Window(ProviderKind.Antigravity, q => AntigravityQuotaEstimator.SnapshotMatchesPool(q, "3p"));
-                cycleBuckets.AddRange(_repository.GetAntigravityUsageInPoolWindows(gemini.Start, gemini.End, other.Start, other.End, _pricing.Rules));
+                var hasArgon = quotas.Any(q => q.Snapshot.Provider == ProviderKind.Antigravity && AntigravityQuotaEstimator.SnapshotMatchesPool(q.Snapshot, "argon"));
+                var argon = hasArgon ? Window(ProviderKind.Antigravity, q => AntigravityQuotaEstimator.SnapshotMatchesPool(q, "argon")) : (null, null);
+                cycleBuckets.AddRange(_repository.GetAntigravityUsageInPoolWindows(gemini.Start, gemini.End, other.Start, other.End, argon.Start, argon.End, _pricing.Rules));
             }
             if (windows.Count > 0)
             {
@@ -81,6 +83,16 @@ public sealed class UsageAggregator
         var (codexWeeklyCycle, codexReserveCycle) = BuildCodexWeeklyCycles(quotas, warnings, codexHistoricalCycles);
         var codexModelProjections = codexWeeklyCycle?.ModelProjections ?? [];
         var modelProjDict = codexModelProjections.ToDictionary(p => p.ModelId, StringComparer.OrdinalIgnoreCase);
+
+        var antigravityEstimates = BuildAntigravityEstimates(quotas);
+        var agModelProjections = BuildAntigravityModelProjections(quotas, antigravityEstimates);
+        foreach (var pair in agModelProjections)
+        {
+            if (!modelProjDict.ContainsKey(pair.Key))
+            {
+                modelProjDict[pair.Key] = pair.Value;
+            }
+        }
 
         var aggregate = _pricing.CalculateAggregate(buckets);
         foreach (var warning in aggregate.Warnings) warnings.Add(warning);
@@ -114,13 +126,14 @@ public sealed class UsageAggregator
         var agCost = agBuckets.Count > 0 ? _pricing.CalculateAggregate(agBuckets).PricedCostUsd : 0m;
         var agGeminiBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) == "gemini").ToList();
         var agGeminiCost = agGeminiBuckets.Count > 0 ? _pricing.CalculateAggregate(agGeminiBuckets).PricedCostUsd : 0m;
-        var agClaudeBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) != "gemini").ToList();
+        var agClaudeBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) == "3p").ToList();
         var agClaudeCost = agClaudeBuckets.Count > 0 ? _pricing.CalculateAggregate(agClaudeBuckets).PricedCostUsd : 0m;
+        var agArgonBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) == "argon").ToList();
+        var agArgonCost = agArgonBuckets.Count > 0 ? _pricing.CalculateAggregate(agArgonBuckets).PricedCostUsd : 0m;
 
         var codexWeeklyCycles = new List<CodexCycleUsageView>();
         if (codexWeeklyCycle != null) codexWeeklyCycles.Add(codexWeeklyCycle);
         if (codexReserveCycle != null) codexWeeklyCycles.Add(codexReserveCycle);
-        var antigravityEstimates = BuildAntigravityEstimates(quotas);
 
         return new DashboardSnapshot
         {
@@ -137,6 +150,7 @@ public sealed class UsageAggregator
             AntigravityApiEquivalentUsd = agCost,
             AntigravityGeminiApiEquivalentUsd = agGeminiCost,
             AntigravityClaudeApiEquivalentUsd = agClaudeCost,
+            AntigravityArgonApiEquivalentUsd = agArgonCost,
             InputTokens = buckets.Sum(bucket => bucket.InputTokens),
             CachedTokens = buckets.Sum(bucket => bucket.CachedInputTokens),
             CacheCreationTokens = buckets.Sum(bucket => bucket.CacheWriteInputTokens),
@@ -586,4 +600,152 @@ public sealed class UsageAggregator
     }
 
     private static bool IsRecent(DateTimeOffset capturedAt) => DateTimeOffset.UtcNow - capturedAt.ToUniversalTime() < TimeSpan.FromMinutes(15);
+
+    private IReadOnlyDictionary<string, ModelQuotaProjectionView> BuildAntigravityModelProjections(
+        IReadOnlyList<QuotaView> quotas,
+        IReadOnlyList<AntigravityQuotaEstimate> estimates)
+    {
+        var result = new Dictionary<string, ModelQuotaProjectionView>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var agSnapshots = _repository.GetQuotaSnapshots(ProviderKind.Antigravity).ToList();
+            var latestFromQuotas = quotas.Where(q => q.Snapshot.Provider == ProviderKind.Antigravity).Select(q => q.Snapshot).ToList();
+            foreach (var q in latestFromQuotas)
+            {
+                if (!agSnapshots.Any(s => s.ModelOrPoolId == q.ModelOrPoolId && s.CapturedAt == q.CapturedAt))
+                {
+                    agSnapshots.Add(q);
+                }
+            }
+
+            var agGenerations = _repository.GetAntigravityGenerations();
+
+            var pools = new[] { "gemini", "3p", "argon" };
+            foreach (var pool in pools)
+            {
+                var matchingSnapshots = agSnapshots
+                    .Where(s => AntigravityQuotaEstimator.SnapshotMatchesPool(s, pool) && IsWeekly(s) && s.RemainingFraction.HasValue)
+                    .OrderBy(s => s.CapturedAt)
+                    .ToList();
+
+                if (matchingSnapshots.Count == 0) continue;
+                var latestSnapshot = matchingSnapshots.Last();
+
+                var poolGenerations = agGenerations
+                    .Where(g => AntigravityQuotaEstimator.GetModelQuotaPool(g.Model) == pool)
+                    .OrderBy(g => g.Timestamp)
+                    .ToList();
+
+                // 1. 先尝试基于切片的单模型精准外推
+                var modelProjections = QuotaProjector.EstimateModelProjections(
+                    latestSnapshot,
+                    matchingSnapshots,
+                    (start, end) =>
+                    {
+                        var inWindow = poolGenerations.Where(g => g.Timestamp >= start && g.Timestamp < end).ToList();
+                        if (inWindow.Count == 0) return new Dictionary<string, decimal>();
+
+                        var modelBuckets = inWindow.Select(gen =>
+                        {
+                            var rule = PricingMatcher.Find(_pricing.Rules, ProviderKind.Antigravity, gen.Model);
+                            var isLong = rule?.LongContextPrice is not null && gen.TotalInputTokens > rule.LongContextThresholdTokens;
+                            return new UsageBucket(ProviderKind.Antigravity, DateOnly.FromDateTime(gen.Timestamp.LocalDateTime),
+                                gen.ProjectKey, gen.Model, gen.TotalInputTokens, gen.CacheReadTokens, gen.OutputTokens, 1,
+                                gen.Quality, gen.SourceDbPath, gen.ConversationId, gen.CacheWriteTokens, CostQuality.ExactTokenSplit,
+                                null, isLong ? 1 : 0, 0, isLong ? gen.TotalInputTokens : 0, isLong ? gen.CacheReadTokens : 0,
+                                isLong ? gen.CacheWriteTokens : 0, isLong ? gen.OutputTokens : 0, true);
+                        }).GroupBy(b => b.ModelId ?? "Unknown");
+
+                        var dict = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var grp in modelBuckets)
+                        {
+                            var cost = _pricing.CalculateAggregate(grp).PricedCostUsd;
+                            if (cost.HasValue && cost.Value > 0)
+                            {
+                                dict[grp.Key] = cost.Value;
+                            }
+                        }
+                        return dict;
+                    },
+                    agSnapshots);
+
+                foreach (var proj in modelProjections)
+                {
+                    result[proj.ModelId] = proj;
+                }
+
+                // 2. 回退机制：若池本身已有周满额预估，为池内产生过消耗但未获得切片外推的模型赋予池级参考周满额
+                var poolEst = estimates.FirstOrDefault(e => e.WindowKind == "weekly" &&
+                    (string.Equals(e.PoolId, pool, StringComparison.OrdinalIgnoreCase) ||
+                     e.PoolId.StartsWith(pool, StringComparison.OrdinalIgnoreCase) ||
+                     e.DisplayName.Contains(pool, StringComparison.OrdinalIgnoreCase) ||
+                     (pool == "3p" && (e.DisplayName.Contains("Claude", StringComparison.OrdinalIgnoreCase) || e.DisplayName.Contains("3p", StringComparison.OrdinalIgnoreCase))) ||
+                     (pool == "argon" && e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase))));
+
+                if (poolEst != null)
+                {
+                    var duration = TimeSpan.FromDays(7);
+                    var cycleStart = latestSnapshot.ResetAt?.Subtract(duration);
+                    var resetAt = latestSnapshot.ResetAt;
+                    var cycleGens = (cycleStart.HasValue && resetAt.HasValue)
+                        ? poolGenerations.Where(g => g.Timestamp >= cycleStart.Value && g.Timestamp < resetAt.Value).ToList()
+                        : [];
+
+                    var activeModels = cycleGens.Select(g => g.Model).Distinct(StringComparer.OrdinalIgnoreCase);
+                    foreach (var model in activeModels)
+                    {
+                        if (result.ContainsKey(model)) continue;
+
+                        var modelGens = cycleGens.Where(g => string.Equals(g.Model, model, StringComparison.OrdinalIgnoreCase)).ToList();
+                        var modelBuckets = modelGens.Select(gen =>
+                        {
+                            var rule = PricingMatcher.Find(_pricing.Rules, ProviderKind.Antigravity, gen.Model);
+                            var isLong = rule?.LongContextPrice is not null && gen.TotalInputTokens > rule.LongContextThresholdTokens;
+                            return new UsageBucket(ProviderKind.Antigravity, DateOnly.FromDateTime(gen.Timestamp.LocalDateTime),
+                                gen.ProjectKey, gen.Model, gen.TotalInputTokens, gen.CacheReadTokens, gen.OutputTokens, 1,
+                                gen.Quality, gen.SourceDbPath, gen.ConversationId, gen.CacheWriteTokens, CostQuality.ExactTokenSplit,
+                                null, isLong ? 1 : 0, 0, isLong ? gen.TotalInputTokens : 0, isLong ? gen.CacheReadTokens : 0,
+                                isLong ? gen.CacheWriteTokens : 0, isLong ? gen.OutputTokens : 0, true);
+                        });
+                        var modelCost = _pricing.CalculateAggregate(modelBuckets).PricedCostUsd ?? 0m;
+
+                        if (poolEst.EstimatedFullQuotaUsd.HasValue && poolEst.EstimatedFullQuotaUsd.Value > 0)
+                        {
+                            var fullUsd = poolEst.EstimatedFullQuotaUsd.Value;
+                            var drop = poolEst.ConsumedFraction ?? 0.0;
+                            result[model] = new ModelQuotaProjectionView(
+                                model,
+                                fullUsd,
+                                drop,
+                                modelCost,
+                                "按所属模型池外推",
+                                $"本周测算：所属【{poolEst.DisplayName}】累计消耗额度 {drop:P1}，该模型周期产生参考金额 ${modelCost:F2}，外推池周满额 ${fullUsd:N2}。",
+                                true
+                            );
+                        }
+                        else if (poolEst.ConsumedFraction.HasValue && poolEst.ConsumedFraction.Value >= 0.025 && poolEst.ObservedCostUsd.HasValue && poolEst.ObservedCostUsd.Value > 0)
+                        {
+                            var drop = poolEst.ConsumedFraction.Value;
+                            var fullUsd = Math.Round(poolEst.ObservedCostUsd.Value / (decimal)drop, 2, MidpointRounding.AwayFromZero);
+                            result[model] = new ModelQuotaProjectionView(
+                                model,
+                                fullUsd,
+                                drop,
+                                modelCost,
+                                "按所属模型池外推",
+                                $"本周测算：所属【{poolEst.DisplayName}】累计消耗额度 {drop:P1}，该模型周期产生参考金额 ${modelCost:F2}，外推池周满额 ${fullUsd:N2}。",
+                                true
+                            );
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
+        catch
+        {
+            return result;
+        }
+    }
 }

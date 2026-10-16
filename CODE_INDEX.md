@@ -34,7 +34,7 @@ graph TD
 | 项目 / 目录 | 输出类型 | 核心职责 |
 | :--- | :--- | :--- |
 | [`src/UsageTray/`](src/UsageTray) | WinExe (WinForms) | 主应用程序，包含托盘交互、高 DPI 界面、数据解析、SQLite 存储、计价引擎与调度。 |
-| [`tests/UsageTray.Tests/`](tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码与损坏输入拒绝、Antigravity 令牌端口隔离、会话归一化、额度周期预估、Codex 周历史重构、抖动聚合与提前重置防分裂、分模型独立测算、锚点切片用量防丢失、跨设备断层样本过滤、周历史集成、GPT-6.1 Sol/Luna 与 Gemini 3.8 Flash N 规则、DisplayName 推断及多语言/Provider 开关测试等 191 项测试。 |
+| [`tests/UsageTray.Tests/`](tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套器，涵盖计价、Protobuf 解码与损坏输入拒绝、Antigravity 令牌端口隔离、会话归一化、额度周期预估、Codex 周历史重构、抖动聚合与提前重置防分裂、分模型独立测算、锚点切片用量防丢失、跨设备断层样本过滤、周历史集成、GPT-6.1 Sol/Luna 与 Gemini 3.8 Flash N 规则、Antigravity Argon 独立额度与模型池隔离测算、Antigravity 分模型周满额投影、GitHub Release 自动升级解析与版本比对、DisplayName 推断及多语言/Provider 开关测试等 201 项测试。 |
 | [`tools/AntigravityStatusRecorder/`](tools/AntigravityStatusRecorder) | Exe (Console) | 独立控制台工具，读取官方 status-line stdin JSON 并记录到本地存储。 |
 | [`tools/CodexAudit/`](tools/CodexAudit) | Exe (Console) | 离线 Codex 审计与 CSV 导出工具。 |
 
@@ -107,7 +107,7 @@ graph TD
 | [`AntigravityQuotaParser`](src/UsageTray/Providers/Antigravity/AntigravityQuotaParser.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaParser.cs` | 解析 `RetrieveUserQuotaSummary` 嵌套的 Protobuf/JSON 配额载荷。 |
 | [`AntigravityLocalApi`](src/UsageTray/Providers/Antigravity/AntigravityLocalApi.cs) | `src/UsageTray/Providers/Antigravity/AntigravityLocalApi.cs` | 与 loopback 本地 language_server 通信，发送 CSRF Token 获取实时配额。 |
 | [`AntigravityPortDiscovery`](src/UsageTray/Providers/Antigravity/AntigravityPortDiscovery.cs) | `src/UsageTray/Providers/Antigravity/AntigravityPortDiscovery.cs` | 基于进程 PID 探测 language_server 动态绑定的 HTTP/HTTPS 端口，不枚举无关 loopback 服务；Provider 将 CSRF Token 与同一进程的端口配对。 |
-| [`AntigravityQuotaEstimator`](src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs` | 按 Gemini 与 Claude 双模型池独立周期聚合 Token，推算周本轮金额与满额订阅参考价值。 |
+| [`AntigravityQuotaEstimator`](src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs` | 按 Gemini、Claude/3P 与 Argon 独立模型池周期聚合 Token，推算周本轮金额与满额订阅参考价值。 |
 | [`AntigravityProjectResolver`](src/UsageTray/Providers/Antigravity/AntigravityProjectResolver.cs) | `src/UsageTray/Providers/Antigravity/AntigravityProjectResolver.cs` | 从 summary 数据库与 trajectory blob 中解析项目物理根路径。 |
 | [`AntigravityStatusRecorder`](src/UsageTray/Providers/Antigravity/AntigravityStatusRecorder.cs) | `src/UsageTray/Providers/Antigravity/AntigravityStatusRecorder.cs` | 官方 status-line stdin 增量处理器。 |
 
@@ -125,12 +125,13 @@ graph TD
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
 | [`RefreshCoordinator`](src/UsageTray/Services/RefreshCoordinator.cs) | `src/UsageTray/Services/RefreshCoordinator.cs` | 刷新主调度器，协调并发锁、增量/全量扫描、价格更新与快照广播。 |
-| `QuotaProjector` | `src/UsageTray/Services/QuotaProjection.cs` | Codex/Antigravity 共用的同周期快照差分外推（快照陈旧时平滑保留金额并标记“快照待更新”）；并提供 `EstimateModelProjections` 基于额度变动锚点驱动的微区间切片归因与多模型测算算法（防止中间快照额度未变导致 Token 漏计，识别主导模型、差分外推各模型周满额价值与历史同套餐回溯兜底）。 |
-| [`UsageAggregator`](src/UsageTray/Services/UsageAggregator.cs) | `src/UsageTray/Services/UsageAggregator.cs` | 聚合引擎，按日期区间/双额度周周期汇总 Token、计算订阅参考金额及缓存命中率；主力通用模型与 Reserve 备用额度双通道解耦聚合；构建周历史周期时按 `ResetAt` 12 小时容差聚类消除并发会话交替导致的虚假分裂，并建立 100% 完整额度周期基准；调度主力池分模型测算并分发至视图模型；为历史周周期切片计算独立分模型测算并在当前周期不足 5% 时平滑继承。 |
+| `QuotaProjector` | `src/UsageTray/Services/QuotaProjection.cs` | Codex/Antigravity 共用的同周期快照差分外推（快照陈旧时平滑保留金额并标记“快照待更新”）；引入 2% API 抖动容忍（`JitterTolerance`）避免微小浮动清空有效切片；提供 `EstimateModelProjections` 基于额度变动锚点驱动的微区间切片归因与多模型测算算法（防止中间快照额度未变导致 Token 漏计，识别主导模型、差分外推各模型周满额价值与历史同套餐回溯兜底）。 |
+| [`UsageAggregator`](src/UsageTray/Services/UsageAggregator.cs) | `src/UsageTray/Services/UsageAggregator.cs` | 聚合引擎，按日期区间/双额度周周期汇总 Token、计算订阅参考金额及缓存命中率；主力通用模型与 Reserve 备用额度双通道解耦聚合；构建周历史周期时按 `ResetAt` 12 小时容差聚类消除并发会话交替导致的虚假分裂，并建立 100% 完整额度周期基准；调度主力池分模型测算并分发至视图模型；集成 Antigravity 分模型推算周满额计算（切片单模型外推与所属模型池满额回退绑定）；为历史周周期切片计算独立分模型测算并在当前周期不足 5% 时平滑继承。 |
 | [`UsageViews`](src/UsageTray/Services/UsageViews.cs) | `src/UsageTray/Services/UsageViews.cs` | 视图数据模型，包含 `DashboardSnapshot`（支持分池订阅参考金额、双周周期列表 `CodexWeeklyCycles` 与分模型周满额测算 `CodexModelProjections`）、`ModelUsageView`（携带单模型推算周满额）、`ModelQuotaProjectionView` 及 `CodexHistoricalCycleView`（包含 `ModelProjections` 分模型测算列表、100% 周期额度基准与全周期消耗比例）等。 |
 | [`MemoryOptimizer`](src/UsageTray/Services/MemoryOptimizer.cs) | `src/UsageTray/Services/MemoryOptimizer.cs` | 执行 LOH 压缩、GC 及 Windows 原生 `SetProcessWorkingSetSize` 深度回收常驻内存。 |
 | [`DiagnosticsService`](src/UsageTray/Services/DiagnosticsService.cs) | `src/UsageTray/Services/DiagnosticsService.cs` | 输出提供商状态、数据库统计与解析诊断报告。 |
 | [`ProjectService`](src/UsageTray/Services/ProjectService.cs) | `src/UsageTray/Services/ProjectService.cs` | 项目名称别名与路径美化服务。 |
+| [`AppUpdateService`](src/UsageTray/Services/AppUpdateService.cs) | `src/UsageTray/Services/AppUpdateService.cs` | 软件自动更新服务，负责 GitHub 最新 Release 检测、语义版本对比、安装包资产优选匹配、后台异步检测、流式下载进度汇报、临时目录解压及无缝自更新批处理脚本触发。 |
 
 ### 2.7 用户界面与交互控件 (`UsageTray.UI`)
 
@@ -138,13 +139,14 @@ graph TD
 
 | 类名 / 控件 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
-| [`TrayApplicationContext`](src/UsageTray/UI/TrayApplicationContext.cs) | `src/UsageTray/UI/TrayApplicationContext.cs` | 托盘主上下文，管理托盘图标、右键菜单、单击/双击防冲突计时器及定时刷新。 |
-| [`MainForm`](src/UsageTray/UI/MainForm.cs) | `src/UsageTray/UI/MainForm.cs` | 主仪表盘窗口，展示多通道订阅参考金额卡片、趋势图表、模型表（含各模型「推算周满额」列与悬浮说明 Tooltip）、项目表及额度面板；采用异步独立加载（Task.Run）、请求序列防竞态与 DataGridView 双缓冲，实现秒级响应与零卡顿。 |
+| [`TrayApplicationContext`](src/UsageTray/UI/TrayApplicationContext.cs) | `src/UsageTray/UI/TrayApplicationContext.cs` | 托盘主上下文，管理托盘图标、右键菜单（集成“检查更新...”）、气泡升级通知点击、单击/双击防冲突计时器及定时刷新。 |
+| [`MainForm`](src/UsageTray/UI/MainForm.cs) | `src/UsageTray/UI/MainForm.cs` | 主仪表盘窗口，展示多通道订阅参考金额卡片、趋势图表、模型表（含各模型「推算周满额」列与细化原因 Tooltip）、项目表及额度面板；采用异步独立加载（Task.Run）、请求序列防竞态与 DataGridView 双缓冲，实现秒级响应与零卡顿。 |
+| [`UpdateDialog`](src/UsageTray/UI/UpdateDialog.cs) | `src/UsageTray/UI/UpdateDialog.cs` | 独立软件升级对话框，展示新版本号、发布日期与更新日志说明，提供【在软件内直接升级】（带下载与解压进度条）、【前往 GitHub 下载】（网页跳转）及【稍后提醒】等操作。 |
 | [`QuotaPopupForm`](src/UsageTray/UI/QuotaPopupForm.cs) | `src/UsageTray/UI/QuotaPopupForm.cs` | 单击托盘弹出的高清额度摘要窗口，直接宿主承载 `QuotaSummaryControl` 保证与主窗口 100% 同源同布，支持拖拽移动锁定、主动点击/Esc 关闭、失焦防误关及工作区限高滚动。 |
 | [`QuotaSummaryControl`](src/UsageTray/UI/Controls/QuotaSummaryControl.cs) | `src/UsageTray/UI/Controls/QuotaSummaryControl.cs` | 复用的额度摘要自绘控件（主窗口额度 Tab 与悬浮窗共用；主窗口额度 Tab 下在主力池满额预估后额外展开各模型独立测算分支树；快照陈旧时平滑显示测算金额并标记“（待更新）”）。 |
 | [`CodexHistoryControl`](src/UsageTray/UI/Controls/CodexHistoryControl.cs) | `src/UsageTray/UI/Controls/CodexHistoryControl.cs` | 独立的 Codex 周历史主面板页面控件，展示过去数次区间的周额度（非固定 7 天动态判定、进行中/已重置状态高亮、标准 100% 基准额度变化 `100% → {minRem:P0}`、订阅参考金额、满额预估、第 9 列「模型独立测算」及 4 行底部明细面板）。 |
 | [`DailyBarChartControl`](src/UsageTray/UI/Controls/DailyBarChartControl.cs) | `src/UsageTray/UI/Controls/DailyBarChartControl.cs` | 自绘每日用量柱状图，支持动态 DPI 刻度与图例排版。 |
-| [`SettingsForm`](src/UsageTray/UI/SettingsForm.cs) | `src/UsageTray/UI/SettingsForm.cs` | 可缩放的设置窗口，包含刷新间隔、每周全量扫描开关、价格更新与维护入口。 |
+| [`SettingsForm`](src/UsageTray/UI/SettingsForm.cs) | `src/UsageTray/UI/SettingsForm.cs` | 可缩放的设置窗口，包含刷新间隔、每周全量扫描开关、模型价格查看/更新内置基准、软件关于与 GitHub 仓库/Release 跳转、开机自动检测更新开关及“立即检查更新”交互。 |
 | [`PricingViewerForm`](src/UsageTray/UI/PricingViewerForm.cs) | `src/UsageTray/UI/PricingViewerForm.cs` | 独立模型价格查看窗口，支持按提供商筛选与实时搜索。 |
 | [`DateRangeDialog`](src/UsageTray/UI/DateRangeDialog.cs) | `src/UsageTray/UI/DateRangeDialog.cs` | 自定义起止日期选择对话框。 |
 | [`QuotaDisplayFormatter`](src/UsageTray/UI/QuotaDisplayFormatter.cs) | `src/UsageTray/UI/QuotaDisplayFormatter.cs` | 托盘紧凑单行 Tooltip 格式化工具，呈现主力模型周额度与 Reserve 备用额度。 |

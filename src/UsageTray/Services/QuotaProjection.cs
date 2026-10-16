@@ -6,6 +6,8 @@ public sealed record QuotaProjection(decimal? FullValue, string Note);
 
 public static class QuotaProjector
 {
+    private const double JitterTolerance = 0.02; // 允许最多 2% 的偶发 API 浮点/网络抖动回升，避免误清空切片与基线
+
     // Estimate from matching observations, never from an assumed 100% cycle baseline.
     public static QuotaProjection Estimate(QuotaSnapshot latest, IEnumerable<QuotaSnapshot> history,
         Func<DateTimeOffset, DateTimeOffset, decimal?> intervalCost, DateTimeOffset? now = null)
@@ -28,7 +30,7 @@ public static class QuotaProjector
         foreach (var sample in samples)
         {
             if (previous is null || sample.PlanTier != previous.PlanTier ||
-                sample.RemainingFraction > previous.RemainingFraction + 0.000001 ||
+                sample.RemainingFraction > previous.RemainingFraction + JitterTolerance ||
                 sample.CapturedAt - previous.CapturedAt > TimeSpan.FromHours(36)) baseline = sample;
             baseline ??= sample;
             previous = sample;
@@ -73,7 +75,7 @@ public static class QuotaProjector
             if (anchor is not null)
             {
                 if (sample.PlanTier != anchor.PlanTier ||
-                    sample.RemainingFraction > anchor.RemainingFraction + 0.000001 ||
+                    sample.RemainingFraction > anchor.RemainingFraction + JitterTolerance ||
                     sample.CapturedAt - anchor.CapturedAt > TimeSpan.FromHours(36))
                 {
                     slices.Clear();
@@ -166,7 +168,7 @@ public static class QuotaProjector
                     if (cAnchor != null)
                     {
                         if (cs.PlanTier != cAnchor.PlanTier ||
-                            cs.RemainingFraction > cAnchor.RemainingFraction + 0.000001)
+                            cs.RemainingFraction > cAnchor.RemainingFraction + JitterTolerance)
                         {
                             cSlices.Clear();
                             cAnchor = cs;
