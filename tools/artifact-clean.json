@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "roots": [
+    ".validation/runs",
+    ".validation/discard"
+  ]
+}

@@ -34,3 +34,6 @@ scratch/
 docs/videos/
 *.mp4
 *.zip
+
+# Disposable validation outputs and local cleanup state
+.validation/

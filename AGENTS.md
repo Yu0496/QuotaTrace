@@ -6,3 +6,6 @@
 
 ## 自动本地发布
 每次完成代码修改与功能验证后，必须自动执行 Release 发布（`dotnet publish -c Release`，当前环境可使用 `& "$env:USERPROFILE\.dotnet8\dotnet.exe" publish -c Release`），确保本地交付产物目录（`publish`）始终保持最新。
+
+## 手动验证产物清理
+仅将可丢弃的技术验证产物放入 `.validation/runs` 或 `.validation/discard`；长期材料、源数据、数据库、采集历史、日志及发布交付物不得放入。使用根目录 `清理验证产物.bat` 预览并由用户手动确认；代理完成用途后用 `python -B tools/artifacts.py mark <文件>` 标记可删，复核时可补标。同步命令可用 `python -B tools/artifacts.py run -- <命令>` 登记活动范围；接入真实输入输出前须核实路径，不能声称现有业务流程已接入。详见项目文档。

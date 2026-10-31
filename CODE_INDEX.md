@@ -203,3 +203,9 @@ sequenceDiagram
 2. **数据库结构变更**: 在 [`DatabaseMigrations.cs`](src/UsageTray/Data/DatabaseMigrations.cs) 增加递增迁移脚本，切勿直接修改历史迁移步骤。
 3. **解析器升级**: 若修改了 Token 提取算法，递增对应 Provider 的 `ParserVersion`，使系统自动清理旧缓存并触发一次全量重新计算。
 4. **测试覆盖**: 任何涉及数据解析、计价或周窗口计算的代码修改，必须在 [`tests/UsageTray.Tests`](tests/UsageTray.Tests) 补充对应的单元测试。
+
+## 5. 手动验证产物治理
+
+`tools/artifacts.py` 是本地同步运行、登记输入及清理命令的薄入口；`tools/artifact_runtime.py` 管理活动范围，`tools/artifact_clean.py` 实施逐文件预览和交互清理，`tools/artifact-clean.json` 声明可丢弃根目录。根目录 `清理验证产物.bat` 调用交互清理；现有 CI、应用及采集路径未接入。具体边界和用法见项目文档。
+
+`tools/run_preview_test.py` 仅在已登记 run 内将 `TEST_PREVIEW_DIR` 指向 work，以运行现有可选离屏预览测试。
