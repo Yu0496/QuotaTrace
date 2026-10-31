@@ -11,7 +11,7 @@ import subprocess
 import sys
 import uuid
 
-TOOL_VERSION = '2026-10-31.manual.2'
+TOOL_VERSION = '2026-10-31.manual.5'
 sys.dont_write_bytecode = True
 
 LOCAL_ENTRY_SHA256 = '0cf3edb562d944529f0132f4c808e35e21fc2f22d25cd715337eb3700177ba8c'
@@ -38,7 +38,7 @@ def safe_path(path):
     return path
 
 
-def inside(base, relative):
+def inside(base, relative, *, check_links=True):
     if (not isinstance(relative, str) or not relative or '\\' in relative or
             any(c in relative for c in ':*?"<>|\x00') or any(ord(c) < 32 for c in relative)):
         raise Blocked('只接受项目内正斜线相对路径')
@@ -48,7 +48,9 @@ def inside(base, relative):
             re.fullmatch(r'(?i)(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?', part)
             for part in rel.parts)):
         raise Blocked('非法相对路径: ' + relative)
-    p = safe_path(Path(base).joinpath(*rel.parts))
+    p = Path(base).joinpath(*rel.parts)
+    if check_links:
+        p = safe_path(p)
     if p == base or not p.is_relative_to(base):
         raise Blocked('路径越界: ' + relative)
     return p
@@ -73,10 +75,18 @@ def verify_local_bridge(root):
 def write_json(path, row):
     path = safe_path(path)
     safe_path(path.parent).mkdir(parents=True, exist_ok=True)
-    temp = safe_path(path.with_suffix('.writing'))
-    with temp.open('x', encoding='utf-8', newline='\n') as stream:
-        stream.write(json.dumps(row, ensure_ascii=False, indent=2) + '\n')
-    os.replace(temp, path)
+    # A killed prior writer must not leave a fixed .writing name that blocks
+    # reruns. Only remove the private temporary file created by this call.
+    temp = safe_path(path.with_name(path.name + '.' + uuid.uuid4().hex + '.writing'))
+    created = False
+    try:
+        with temp.open('x', encoding='utf-8', newline='\n') as stream:
+            created = True
+            stream.write(json.dumps(row, ensure_ascii=False, indent=2) + '\n')
+        os.replace(temp, path)
+    finally:
+        if created:
+            safe_path(temp).unlink(missing_ok=True)
 
 
 def process_identity(pid):
