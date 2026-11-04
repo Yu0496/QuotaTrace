@@ -588,7 +588,6 @@ public sealed class UsageRepository
     public IReadOnlyList<UsageBucket> GetAntigravityUsageInPoolWindows(
         DateTimeOffset? geminiStartUtc, DateTimeOffset? geminiEndUtc,
         DateTimeOffset? threePStartUtc, DateTimeOffset? threePEndUtc,
-        DateTimeOffset? argonStartUtc = null, DateTimeOffset? argonEndUtc = null,
         IReadOnlyList<PricingRule>? pricingRules = null)
     {
         var allGens = GetAntigravityGenerations();
@@ -600,7 +599,6 @@ public sealed class UsageRepository
             var (start, end) = pool switch
             {
                 "gemini" => (geminiStartUtc, geminiEndUtc),
-                "argon" => (argonStartUtc, argonEndUtc),
                 _ => (threePStartUtc, threePEndUtc)
             };
             return start.HasValue && end.HasValue && gen.Timestamp >= start.Value && gen.Timestamp < end.Value;
@@ -611,6 +609,10 @@ public sealed class UsageRepository
 
     public IReadOnlyList<QuotaSnapshot> GetQuotaSnapshots(ProviderKind provider, string? modelOrPoolId = null)
     {
+        if (provider == ProviderKind.Antigravity)
+        {
+            CleanupArgonSnapshots();
+        }
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
         var sql = "SELECT provider,captured_at_utc,model_or_pool_id,label,remaining_fraction,reset_at_utc,window_kind,source,plan_tier FROM quota_snapshots WHERE provider=$provider";
@@ -623,7 +625,7 @@ public sealed class UsageRepository
         var list = new List<QuotaSnapshot>();
         while (reader.Read())
         {
-            list.Add(new QuotaSnapshot(
+            var snap = new QuotaSnapshot(
                 provider,
                 DateTimeOffset.Parse(reader.GetString(1)),
                 reader.GetString(2),
@@ -633,7 +635,14 @@ public sealed class UsageRepository
                 reader.GetString(6),
                 reader.GetString(7),
                 reader.IsDBNull(8) ? null : reader.GetString(8)
-            ));
+            );
+            if (provider == ProviderKind.Antigravity &&
+                (snap.ModelOrPoolId.Contains("argon", StringComparison.OrdinalIgnoreCase) ||
+                 snap.DisplayLabel.Contains("argon", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+            list.Add(snap);
         }
         return list;
     }
@@ -678,6 +687,10 @@ public sealed class UsageRepository
             CleanupStaleReserveSnapshots();
             CleanupSparkSnapshots();
         }
+        else if (provider == ProviderKind.Antigravity)
+        {
+            CleanupArgonSnapshots();
+        }
         using var connection = _database.OpenConnection();
         using var command = connection.CreateCommand();
         if (provider == ProviderKind.Codex)
@@ -700,7 +713,11 @@ public sealed class UsageRepository
         {
             command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
                 q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
-                WHERE q.provider=$provider AND q.captured_at_utc=(SELECT MAX(captured_at_utc) FROM quota_snapshots WHERE provider=$provider)
+                WHERE q.provider=$provider
+                AND q.model_or_pool_id NOT LIKE '%argon%' AND q.label NOT LIKE '%argon%'
+                AND q.captured_at_utc=(
+                    SELECT MAX(captured_at_utc) FROM quota_snapshots
+                    WHERE provider=$provider AND model_or_pool_id NOT LIKE '%argon%' AND label NOT LIKE '%argon%')
                 ORDER BY q.model_or_pool_id,q.window_kind";
         }
         command.Parameters.AddWithValue("$provider", provider.ToStorageString());
@@ -719,12 +736,34 @@ public sealed class UsageRepository
             list.RemoveAll(item => item.ModelOrPoolId.Contains("spark", StringComparison.OrdinalIgnoreCase) ||
                                    item.DisplayLabel.Contains("spark", StringComparison.OrdinalIgnoreCase));
         }
+        else if (provider == ProviderKind.Antigravity)
+        {
+            list.RemoveAll(item => item.ModelOrPoolId.Contains("argon", StringComparison.OrdinalIgnoreCase) ||
+                                   item.DisplayLabel.Contains("argon", StringComparison.OrdinalIgnoreCase));
+        }
 
         return list
             .GroupBy(item => $"{item.ModelOrPoolId}_{item.WindowKind}")
             .Select(group => group.OrderByDescending(item => item.CapturedAt).First())
             .OrderBy(item => item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
             .ToList();
+    }
+
+    public void CleanupArgonSnapshots()
+    {
+        try
+        {
+            using var connection = _database.OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                DELETE FROM quota_snapshots
+                WHERE provider='Antigravity' AND (model_or_pool_id LIKE '%argon%' OR label LIKE '%argon%')";
+            command.ExecuteNonQuery();
+        }
+        catch
+        {
+            // 忽略非关键清理异常
+        }
     }
 
     public void CleanupSparkSnapshots()

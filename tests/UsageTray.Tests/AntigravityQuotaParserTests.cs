@@ -83,28 +83,33 @@ public sealed class AntigravityQuotaParserTests
     }
 
     [Fact]
-    public void QuotaParserExtractsArgonGroupsAndBuckets()
+    public void QuotaParserIgnoresObsoleteArgonGroupsAndBuckets()
     {
         using var document = JsonDocument.Parse("""
         {
           "response": {
             "groups": [
               {
-                "displayName": "Argon Models",
+                "displayName": "Gemini Models",
                 "buckets": [
                   {
-                    "bucketId": "argon-weekly",
+                    "bucketId": "gemini-weekly",
                     "displayName": "Weekly Limit Remaining",
                     "window": "weekly",
-                    "remainingFraction": 0.72,
-                    "resetTime": "2026-08-25T18:34:46Z"
-                  },
+                    "remainingFraction": 0.84,
+                    "resetTime": "2026-11-07T05:51:07Z"
+                  }
+                ]
+              },
+              {
+                "displayName": "Gemini 4 Argon",
+                "buckets": [
                   {
-                    "bucketId": "argon-5h",
-                    "displayName": "Five Hour Limit Remaining",
-                    "window": "5h",
-                    "remainingFraction": 0.85,
-                    "resetTime": "2026-08-20T10:38:07Z"
+                    "bucketId": "gemini-argon-wtu-weekly",
+                    "displayName": "Weekly Limit Remaining",
+                    "window": "weekly",
+                    "remainingFraction": 0.998,
+                    "resetTime": "2026-11-07T05:50:41Z"
                   }
                 ]
               }
@@ -115,16 +120,9 @@ public sealed class AntigravityQuotaParserTests
 
         var result = new AntigravityQuotaParser().Parse(document.RootElement, DateTimeOffset.UtcNow, "fixture");
 
-        Assert.Equal(2, result.Snapshots.Count);
-        var weekly = Assert.Single(result.Snapshots, s => s.ModelOrPoolId == "argon-weekly");
-        Assert.Equal(0.72, weekly.RemainingFraction);
-        Assert.Equal("Argon (周额度)", weekly.DisplayLabel);
-        Assert.Equal("weekly", weekly.WindowKind);
-
-        var fiveH = Assert.Single(result.Snapshots, s => s.ModelOrPoolId == "argon-5h");
-        Assert.Equal(0.85, fiveH.RemainingFraction);
-        Assert.Equal("Argon (5小时额度)", fiveH.DisplayLabel);
-        Assert.Equal("5h", fiveH.WindowKind);
+        var geminiWeekly = Assert.Single(result.Snapshots);
+        Assert.Equal("gemini-weekly", geminiWeekly.ModelOrPoolId);
+        Assert.Equal(0.84, geminiWeekly.RemainingFraction);
     }
 }
 

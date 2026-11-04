@@ -18,11 +18,9 @@ public sealed class AntigravityQuotaEstimator
     public static string GetModelQuotaPool(string modelId)
     {
         var model = modelId.Trim().ToLowerInvariant();
-        if (model.Contains("argon", StringComparison.OrdinalIgnoreCase))
-        {
-            return "argon";
-        }
-        if (model.StartsWith("gemini", StringComparison.OrdinalIgnoreCase) || model.Contains("gemini", StringComparison.OrdinalIgnoreCase))
+        if (model.StartsWith("gemini", StringComparison.OrdinalIgnoreCase) ||
+            model.Contains("gemini", StringComparison.OrdinalIgnoreCase) ||
+            model.Contains("argon", StringComparison.OrdinalIgnoreCase))
         {
             return "gemini";
         }
@@ -32,20 +30,19 @@ public sealed class AntigravityQuotaEstimator
     public static bool SnapshotMatchesPool(QuotaSnapshot snapshot, string poolCategory)
     {
         var id = $"{snapshot.ModelOrPoolId} {snapshot.DisplayLabel}".ToLowerInvariant();
+        if (id.Contains("argon", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
         if (poolCategory == "gemini")
         {
             return id.Contains("gemini", StringComparison.OrdinalIgnoreCase);
-        }
-        if (poolCategory == "argon")
-        {
-            return id.Contains("argon", StringComparison.OrdinalIgnoreCase);
         }
         return (id.Contains("3p", StringComparison.OrdinalIgnoreCase) ||
                id.Contains("claude", StringComparison.OrdinalIgnoreCase) ||
                id.Contains("gpt", StringComparison.OrdinalIgnoreCase) ||
                id.Contains("other", StringComparison.OrdinalIgnoreCase)) &&
-               !id.Contains("gemini", StringComparison.OrdinalIgnoreCase) &&
-               !id.Contains("argon", StringComparison.OrdinalIgnoreCase);
+               !id.Contains("gemini", StringComparison.OrdinalIgnoreCase);
     }
 
     public IReadOnlyList<AntigravityQuotaEstimate> EstimateAll(
@@ -54,12 +51,11 @@ public sealed class AntigravityQuotaEstimator
     {
         var results = new List<AntigravityQuotaEstimate>();
 
-        // Pools to estimate: gemini, 3p, argon
+        // Pools to estimate: gemini (含 Argon), 3p
         var pools = new[]
         {
             (Category: "gemini", Display: "Gemini Models"),
-            (Category: "3p", Display: "Claude and GPT models"),
-            (Category: "argon", Display: "Argon Models")
+            (Category: "3p", Display: "Claude and GPT models")
         };
 
         var windows = new[] { "5h", "weekly" };

@@ -59,9 +59,7 @@ public sealed class UsageAggregator
             {
                 var gemini = Window(ProviderKind.Antigravity, q => AntigravityQuotaEstimator.SnapshotMatchesPool(q, "gemini"));
                 var other = Window(ProviderKind.Antigravity, q => AntigravityQuotaEstimator.SnapshotMatchesPool(q, "3p"));
-                var hasArgon = quotas.Any(q => q.Snapshot.Provider == ProviderKind.Antigravity && AntigravityQuotaEstimator.SnapshotMatchesPool(q.Snapshot, "argon"));
-                var argon = hasArgon ? Window(ProviderKind.Antigravity, q => AntigravityQuotaEstimator.SnapshotMatchesPool(q, "argon")) : (null, null);
-                cycleBuckets.AddRange(_repository.GetAntigravityUsageInPoolWindows(gemini.Start, gemini.End, other.Start, other.End, argon.Start, argon.End, _pricing.Rules));
+                cycleBuckets.AddRange(_repository.GetAntigravityUsageInPoolWindows(gemini.Start, gemini.End, other.Start, other.End, _pricing.Rules));
             }
             if (windows.Count > 0)
             {
@@ -128,8 +126,6 @@ public sealed class UsageAggregator
         var agGeminiCost = agGeminiBuckets.Count > 0 ? _pricing.CalculateAggregate(agGeminiBuckets).PricedCostUsd : 0m;
         var agClaudeBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) == "3p").ToList();
         var agClaudeCost = agClaudeBuckets.Count > 0 ? _pricing.CalculateAggregate(agClaudeBuckets).PricedCostUsd : 0m;
-        var agArgonBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty) == "argon").ToList();
-        var agArgonCost = agArgonBuckets.Count > 0 ? _pricing.CalculateAggregate(agArgonBuckets).PricedCostUsd : 0m;
 
         var codexWeeklyCycles = new List<CodexCycleUsageView>();
         if (codexWeeklyCycle != null) codexWeeklyCycles.Add(codexWeeklyCycle);
@@ -150,7 +146,6 @@ public sealed class UsageAggregator
             AntigravityApiEquivalentUsd = agCost,
             AntigravityGeminiApiEquivalentUsd = agGeminiCost,
             AntigravityClaudeApiEquivalentUsd = agClaudeCost,
-            AntigravityArgonApiEquivalentUsd = agArgonCost,
             InputTokens = buckets.Sum(bucket => bucket.InputTokens),
             CachedTokens = buckets.Sum(bucket => bucket.CachedInputTokens),
             CacheCreationTokens = buckets.Sum(bucket => bucket.CacheWriteInputTokens),
@@ -620,7 +615,7 @@ public sealed class UsageAggregator
 
             var agGenerations = _repository.GetAntigravityGenerations();
 
-            var pools = new[] { "gemini", "3p", "argon" };
+            var pools = new[] { "gemini", "3p" };
             foreach (var pool in pools)
             {
                 var matchingSnapshots = agSnapshots
@@ -679,8 +674,7 @@ public sealed class UsageAggregator
                     (string.Equals(e.PoolId, pool, StringComparison.OrdinalIgnoreCase) ||
                      e.PoolId.StartsWith(pool, StringComparison.OrdinalIgnoreCase) ||
                      e.DisplayName.Contains(pool, StringComparison.OrdinalIgnoreCase) ||
-                     (pool == "3p" && (e.DisplayName.Contains("Claude", StringComparison.OrdinalIgnoreCase) || e.DisplayName.Contains("3p", StringComparison.OrdinalIgnoreCase))) ||
-                     (pool == "argon" && e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase))));
+                     (pool == "3p" && (e.DisplayName.Contains("Claude", StringComparison.OrdinalIgnoreCase) || e.DisplayName.Contains("3p", StringComparison.OrdinalIgnoreCase)))));
 
                 if (poolEst != null)
                 {

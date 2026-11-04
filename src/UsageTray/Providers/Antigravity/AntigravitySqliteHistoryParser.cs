@@ -154,6 +154,8 @@ public sealed class AntigravitySqliteHistoryParser
 
         if (name.Contains("argon"))
         {
+            if (name.Contains("trial")) return "gemini-4-argon-trial";
+            if (name.Contains("gemini") || name.Contains("4")) return "gemini-4-argon";
             if (name.Contains("pro")) return "argon-pro";
             if (name.Contains("flash")) return "argon-flash";
             return "argon";

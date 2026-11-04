@@ -45,7 +45,7 @@ public static class AppUpdateService
     public static Version GetCurrentVersion()
     {
         var ver = typeof(AppUpdateService).Assembly.GetName().Version;
-        return ver != null ? new Version(ver.Major, ver.Minor, Math.Max(0, ver.Build)) : new Version(1, 4, 0);
+        return ver != null ? new Version(ver.Major, ver.Minor, Math.Max(0, ver.Build)) : new Version(1, 6, 0);
     }
 
     public static string GetCurrentVersionString() => $"v{GetCurrentVersion().ToString(3)}";

@@ -28,7 +28,7 @@ public static class QuotaDisplayFormatter
         if (enableAntigravity)
         {
             var antigravitySnapshots = snapshot.Quotas
-                .Where(item => item.Snapshot.Provider == ProviderKind.Antigravity)
+                .Where(item => item.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(item.Snapshot))
                 .Select(item => item.Snapshot).ToList();
             var ag5h = antigravitySnapshots.Where(IsFiveHour).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
             var agWeekly = antigravitySnapshots.Where(IsWeekly).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
@@ -147,7 +147,7 @@ public static class QuotaDisplayFormatter
     private static string BuildAntigravitySection(DashboardSnapshot snapshot)
     {
         var models = snapshot.Models.Where(item => item.Provider == ProviderKind.Antigravity).ToList();
-        var snapshots = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity)
+        var snapshots = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(item.Snapshot))
             .Select(item => item.Snapshot).ToList();
         var plan = snapshots
             .Where(item => !string.IsNullOrWhiteSpace(item.PlanTier))
@@ -341,6 +341,10 @@ public static class QuotaDisplayFormatter
     private static bool IsSpark(QuotaSnapshot snapshot) =>
         snapshot.ModelOrPoolId.Contains("spark", StringComparison.OrdinalIgnoreCase) ||
         snapshot.DisplayLabel.Contains("spark", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsArgon(QuotaSnapshot snapshot) =>
+        snapshot.ModelOrPoolId.Contains("argon", StringComparison.OrdinalIgnoreCase) ||
+        snapshot.DisplayLabel.Contains("argon", StringComparison.OrdinalIgnoreCase);
 
     private static decimal? GetKnownCost(IReadOnlyList<ModelUsageView> models) =>
         models.Count > 0 && models.All(item => item.ApiEquivalentUsd.HasValue)

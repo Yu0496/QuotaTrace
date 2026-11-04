@@ -34,7 +34,7 @@ graph TD
 | 项目 / 目录 | 输出类型 | 核心职责 |
 | :--- | :--- | :--- |
 | [`src/UsageTray/`](src/UsageTray) | WinExe (WinForms) | 主应用程序，包含托盘交互、高 DPI 界面、数据解析、SQLite 存储、计价引擎与调度。 |
-| [`tests/UsageTray.Tests/`](tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套器，涵盖计价、Protobuf 解码与损坏输入拒绝、Antigravity 令牌端口隔离、会话归一化、额度周期预估、Codex 周历史重构、抖动聚合与提前重置防分裂、分模型独立测算、锚点切片用量防丢失、跨设备断层样本过滤、周历史集成、GPT-6.1 Sol/Luna 与 Gemini 3.8 Flash N 规则、Antigravity Argon 独立额度与模型池隔离测算、Antigravity 分模型周满额投影、GitHub Release 自动升级解析与版本比对、DisplayName 推断及多语言/Provider 开关测试等 201 项测试。 |
+| [`tests/UsageTray.Tests/`](tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码与损坏输入拒绝、Antigravity 令牌端口隔离、会话归一化、额度周期预估、Codex 周历史重构、抖动聚合与提前重置防分裂、分模型独立测算、锚点切片用量防丢失、跨设备断层样本过滤、周历史集成、GPT-6.1 Sol/Luna 与 Gemini 3.8 Flash N 规则、Antigravity Argon 并入 Gemini 主额度池与遗留试用快照清理、Antigravity 分模型周满额投影、GitHub Release 自动升级解析与版本比对、DisplayName 推断及多语言/Provider 开关测试等 201 项测试。 |
 | [`tools/AntigravityStatusRecorder/`](tools/AntigravityStatusRecorder) | Exe (Console) | 独立控制台工具，读取官方 status-line stdin JSON 并记录到本地存储。 |
 | [`tools/CodexAudit/`](tools/CodexAudit) | Exe (Console) | 离线 Codex 审计与 CSV 导出工具。 |
 
@@ -81,7 +81,7 @@ graph TD
 | :--- | :--- | :--- |
 | [`UsageDatabase`](src/UsageTray/Data/UsageDatabase.cs) | `src/UsageTray/Data/UsageDatabase.cs` | SQLite 连接工厂与连接池管理，配置 `PRAGMA cache_size = -2000` 限制内存。 |
 | [`DatabaseMigrations`](src/UsageTray/Data/DatabaseMigrations.cs) | `src/UsageTray/Data/DatabaseMigrations.cs` | 数据库版本管理与 DDL 迁移（`sources`、`raw_snapshots`、`usage_buckets`、`quotas` 等表）。 |
-| [`UsageRepository`](src/UsageTray/Data/UsageRepository.cs) | `src/UsageTray/Data/UsageRepository.cs` | 提供高效的批量写入、增量查询、按模型池与窗口复合键（`${ModelOrPoolId}_${WindowKind}`）获取标准/Reserve最新快照（含 Reserve 动态活跃触发检测与 Spark 历史遗留快照自动清理）、各池 Token 窗口隔离及已删除源清理。 |
+| [`UsageRepository`](src/UsageTray/Data/UsageRepository.cs) | `src/UsageTray/Data/UsageRepository.cs` | 提供高效的批量写入、增量查询、按模型池与窗口复合键（`${ModelOrPoolId}_${WindowKind}`）获取标准/Reserve最新快照（含 Reserve 动态活跃触发检测与 Spark / Argon 历史遗留配额快照自动清理）、各池 Token 窗口隔离及已删除源清理。 |
 
 ### 2.4 定价与抓取体系 (`UsageTray.Pricing`)
 
@@ -104,10 +104,10 @@ graph TD
 | [`AntigravityProvider`](src/UsageTray/Providers/Antigravity/AntigravityProvider.cs) | `src/UsageTray/Providers/Antigravity/AntigravityProvider.cs` | 统一驱动 Antigravity 历史解析、状态流记录、配额探测及已删除源清理。 |
 | [`AntigravitySqliteHistoryParser`](src/UsageTray/Providers/Antigravity/AntigravitySqliteHistoryParser.cs) | `src/UsageTray/Providers/Antigravity/AntigravitySqliteHistoryParser.cs` | 从 `conversations/*.db` 读取 `gen_metadata` 与 `steps`，提取 Protobuf 结构化 Token 与时间戳；显示名缺少原始模型 ID 时按具体 Claude 版本推断。 |
 | [`AntigravityProtobufReader`](src/UsageTray/Providers/Antigravity/AntigravityProtobufReader.cs) | `src/UsageTray/Providers/Antigravity/AntigravityProtobufReader.cs` | 基于 `ReadOnlySpan<byte>` 与 `ref struct` 的流式零分配 Protobuf Wire 解码器；拒绝无效 Varint、字段号及越界长度。 |
-| [`AntigravityQuotaParser`](src/UsageTray/Providers/Antigravity/AntigravityQuotaParser.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaParser.cs` | 解析 `RetrieveUserQuotaSummary` 嵌套的 Protobuf/JSON 配额载荷。 |
+| [`AntigravityQuotaParser`](src/UsageTray/Providers/Antigravity/AntigravityQuotaParser.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaParser.cs` | 解析 `RetrieveUserQuotaSummary` 嵌套的 Protobuf/JSON 配额载荷，并自动忽略已下线的独立 Argon 试用配额桶。 |
 | [`AntigravityLocalApi`](src/UsageTray/Providers/Antigravity/AntigravityLocalApi.cs) | `src/UsageTray/Providers/Antigravity/AntigravityLocalApi.cs` | 与 loopback 本地 language_server 通信，发送 CSRF Token 获取实时配额。 |
 | [`AntigravityPortDiscovery`](src/UsageTray/Providers/Antigravity/AntigravityPortDiscovery.cs) | `src/UsageTray/Providers/Antigravity/AntigravityPortDiscovery.cs` | 基于进程 PID 探测 language_server 动态绑定的 HTTP/HTTPS 端口，不枚举无关 loopback 服务；Provider 将 CSRF Token 与同一进程的端口配对。 |
-| [`AntigravityQuotaEstimator`](src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs` | 按 Gemini、Claude/3P 与 Argon 独立模型池周期聚合 Token，推算周本轮金额与满额订阅参考价值。 |
+| [`AntigravityQuotaEstimator`](src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs) | `src/UsageTray/Providers/Antigravity/AntigravityQuotaEstimator.cs` | 按 Gemini（含 Argon 系列模型）与 Claude/3P 双模型池周期聚合 Token，推算周本轮金额与满额订阅参考价值，并拦截已废弃的 Argon 试用配额快照防止污染 Gemini 主池。 |
 | [`AntigravityProjectResolver`](src/UsageTray/Providers/Antigravity/AntigravityProjectResolver.cs) | `src/UsageTray/Providers/Antigravity/AntigravityProjectResolver.cs` | 从 summary 数据库与 trajectory blob 中解析项目物理根路径。 |
 | [`AntigravityStatusRecorder`](src/UsageTray/Providers/Antigravity/AntigravityStatusRecorder.cs) | `src/UsageTray/Providers/Antigravity/AntigravityStatusRecorder.cs` | 官方 status-line stdin 增量处理器。 |
 
