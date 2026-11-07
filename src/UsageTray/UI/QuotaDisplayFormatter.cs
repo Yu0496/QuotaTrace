@@ -147,7 +147,7 @@ public static class QuotaDisplayFormatter
     private static string BuildAntigravitySection(DashboardSnapshot snapshot)
     {
         var models = snapshot.Models.Where(item => item.Provider == ProviderKind.Antigravity).ToList();
-        var snapshots = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(item.Snapshot))
+        var snapshots = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity)
             .Select(item => item.Snapshot).ToList();
         var plan = snapshots
             .Where(item => !string.IsNullOrWhiteSpace(item.PlanTier))

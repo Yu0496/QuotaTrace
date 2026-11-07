@@ -487,9 +487,20 @@ public sealed class MainForm : Form
 
         var geminiCost = snapshot.AntigravityGeminiApiEquivalentUsd;
         var claudeCost = snapshot.AntigravityClaudeApiEquivalentUsd;
+        var argonCost = snapshot.AntigravityArgonApiEquivalentUsd;
+        var hasArgonActivity = (argonCost.HasValue && argonCost.Value > 0) ||
+            snapshot.Quotas.Any(q => q.Snapshot.Provider == ProviderKind.Antigravity && AntigravityQuotaEstimator.SnapshotMatchesPool(q.Snapshot, "argon"));
 
-        _antigravityApiValue.Text = $"Antigravity: {FormatCost(geminiCost)} | {FormatCost(claudeCost)}";
-        _toolTip.SetToolTip(_antigravityApiValue, $"Gemini: {FormatCost(geminiCost)}\r\nClaude: {FormatCost(claudeCost)}");
+        if (hasArgonActivity)
+        {
+            _antigravityApiValue.Text = $"Antigravity: {FormatCost(geminiCost)} | {FormatCost(claudeCost)} | {FormatCost(argonCost)}";
+            _toolTip.SetToolTip(_antigravityApiValue, $"Gemini: {FormatCost(geminiCost)}\r\nClaude: {FormatCost(claudeCost)}\r\nArgon: {FormatCost(argonCost)}");
+        }
+        else
+        {
+            _antigravityApiValue.Text = $"Antigravity: {FormatCost(geminiCost)} | {FormatCost(claudeCost)}";
+            _toolTip.SetToolTip(_antigravityApiValue, $"Gemini: {FormatCost(geminiCost)}\r\nClaude: {FormatCost(claudeCost)}");
+        }
 
         if (snapshot.IsWeeklyCycleWindow)
         {
@@ -530,6 +541,7 @@ public sealed class MainForm : Form
 
             var geminiEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && e.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase));
             var claudeEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && (e.DisplayName.Contains("Claude", StringComparison.OrdinalIgnoreCase) || e.DisplayName.Contains("3p", StringComparison.OrdinalIgnoreCase)));
+            var argonEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase));
 
             string geminiCycle = geminiEst?.ResetAt.HasValue == true
                 ? I18n.Format("Gemini: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Gemini: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", geminiEst.ResetAt.Value.AddDays(-7).ToLocalTime(), geminiEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(geminiEst.ResetAt.Value))
@@ -539,7 +551,18 @@ public sealed class MainForm : Form
                 ? I18n.Format("Claude: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Claude: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", claudeEst.ResetAt.Value.AddDays(-7).ToLocalTime(), claudeEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(claudeEst.ResetAt.Value))
                 : I18n.T("Claude: 暂无配额", "Claude: No quota");
 
-            _antigravityCycleNote.Text = I18n.T("周期：", "Cycle: ") + $"{geminiCycle} | {claudeCycle}";
+            string argonCycle = argonEst?.ResetAt.HasValue == true
+                ? I18n.Format("Argon: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Argon: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", argonEst.ResetAt.Value.AddDays(-7).ToLocalTime(), argonEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(argonEst.ResetAt.Value))
+                : I18n.T("Argon: 暂无配额", "Argon: No quota");
+
+            if (hasArgonActivity || argonEst != null)
+            {
+                _antigravityCycleNote.Text = I18n.T("周期：", "Cycle: ") + $"{geminiCycle} | {claudeCycle} | {argonCycle}";
+            }
+            else
+            {
+                _antigravityCycleNote.Text = I18n.T("周期：", "Cycle: ") + $"{geminiCycle} | {claudeCycle}";
+            }
         }
         else
         {

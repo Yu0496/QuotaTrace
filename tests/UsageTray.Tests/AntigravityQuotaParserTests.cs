@@ -83,7 +83,7 @@ public sealed class AntigravityQuotaParserTests
     }
 
     [Fact]
-    public void QuotaParserIgnoresObsoleteArgonGroupsAndBuckets()
+    public void QuotaParserCorrectlyExtractsArgonGroupsAndBuckets()
     {
         using var document = JsonDocument.Parse("""
         {
@@ -108,7 +108,7 @@ public sealed class AntigravityQuotaParserTests
                     "bucketId": "gemini-argon-wtu-weekly",
                     "displayName": "Weekly Limit Remaining",
                     "window": "weekly",
-                    "remainingFraction": 0.998,
+                    "remainingFraction": 0.6138,
                     "resetTime": "2026-11-07T05:50:41Z"
                   }
                 ]
@@ -120,9 +120,13 @@ public sealed class AntigravityQuotaParserTests
 
         var result = new AntigravityQuotaParser().Parse(document.RootElement, DateTimeOffset.UtcNow, "fixture");
 
-        var geminiWeekly = Assert.Single(result.Snapshots);
-        Assert.Equal("gemini-weekly", geminiWeekly.ModelOrPoolId);
+        Assert.Equal(2, result.Snapshots.Count);
+        var geminiWeekly = Assert.Single(result.Snapshots, s => s.ModelOrPoolId == "gemini-weekly");
         Assert.Equal(0.84, geminiWeekly.RemainingFraction);
+
+        var argonWeekly = Assert.Single(result.Snapshots, s => s.ModelOrPoolId == "gemini-argon-wtu-weekly");
+        Assert.Equal(0.6138, argonWeekly.RemainingFraction);
+        Assert.Contains("Argon", argonWeekly.DisplayLabel);
     }
 }
 

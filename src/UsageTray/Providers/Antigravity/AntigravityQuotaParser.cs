@@ -30,10 +30,6 @@ public sealed class AntigravityQuotaParser
             }
             var model = JsonValueReader.FindString(item, "model_id", "modelId", "model", "model_name", "modelName", "quota_id", "quotaId") ?? "unknown";
             var label = JsonValueReader.FindString(item, "display_name", "displayName", "label", "name") ?? model;
-            if (model.Contains("argon", StringComparison.OrdinalIgnoreCase) || label.Contains("argon", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
             var window = JsonValueReader.FindString(item, "window_kind", "windowKind", "window", "kind") ?? "unknown";
             var resetText = JsonValueReader.FindString(item, "reset_time", "resetTime", "reset_at", "resetAt");
             DateTimeOffset? reset = DateTimeOffset.TryParse(resetText, out var parsedReset) ? parsedReset : null;
@@ -57,10 +53,6 @@ public sealed class AntigravityQuotaParser
                 foreach (var group in groupsElement.EnumerateArray())
                 {
                     var groupName = JsonValueReader.FindString(group, "display_name", "displayName", "name") ?? "Antigravity";
-                    if (groupName.Contains("argon", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
                     if (JsonValueReader.TryGetProperty(group, out var bucketsElement, "buckets") &&
                         bucketsElement.ValueKind == JsonValueKind.Array)
                     {
@@ -76,11 +68,6 @@ public sealed class AntigravityQuotaParser
                             var bucketId = JsonValueReader.FindString(bucket, "bucket_id", "bucketId", "id", "model_id", "modelId") ?? "unknown";
                             var window = JsonValueReader.FindString(bucket, "window", "window_kind", "windowKind", "kind") ?? "unknown";
                             var bucketDisplayName = JsonValueReader.FindString(bucket, "display_name", "displayName", "name") ?? window;
-                            if (bucketId.Contains("argon", StringComparison.OrdinalIgnoreCase) ||
-                                bucketDisplayName.Contains("argon", StringComparison.OrdinalIgnoreCase))
-                            {
-                                continue;
-                            }
                             var resetText = JsonValueReader.FindString(bucket, "reset_time", "resetTime", "reset_at", "resetAt");
                             DateTimeOffset? reset = DateTimeOffset.TryParse(resetText, out var parsedReset) ? parsedReset : null;
 

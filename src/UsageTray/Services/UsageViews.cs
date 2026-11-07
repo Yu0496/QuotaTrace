@@ -110,6 +110,7 @@ public sealed record DashboardSnapshot
     public decimal? AntigravityApiEquivalentUsd { get; init; }
     public decimal? AntigravityGeminiApiEquivalentUsd { get; init; }
     public decimal? AntigravityClaudeApiEquivalentUsd { get; init; }
+    public decimal? AntigravityArgonApiEquivalentUsd { get; init; }
     // InputTokens 保留数据源原始总 input，便于追溯；界面和 Sub2API 兼容口径使用 NonCachedInputTokens。
 
     public long InputTokens { get; init; }
