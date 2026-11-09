@@ -41,7 +41,7 @@ public static class QuotaProjector
         var cost = intervalCost(baseline.CapturedAt.AddTicks(1), latest.CapturedAt.AddTicks(1));
         if (cost is null) return new(null, "样本含未定价用量");
         if (cost <= 0) return new(null, "缺少对应本机用量");
-        var fullValue = Math.Round(cost.Value / (decimal)fraction, 2, MidpointRounding.AwayFromZero);
+        var fullValue = Math.Max(cost.Value, Math.Round(cost.Value / (decimal)fraction, 2, MidpointRounding.AwayFromZero));
         var isStale = latest.IsStale(at);
         var note = isStale ? "快照待更新" : "仅本机样本外推";
         return new(fullValue, note);
@@ -125,7 +125,7 @@ public static class QuotaProjector
             modelDrop = Math.Round(modelDrop, 6);
             if (modelDrop >= 0.025 && modelCost > 0)
             {
-                var fullUsd = Math.Round(modelCost / (decimal)modelDrop, 2, MidpointRounding.AwayFromZero);
+                var fullUsd = Math.Max(modelCost, Math.Round(modelCost / (decimal)modelDrop, 2, MidpointRounding.AwayFromZero));
                 if (fullUsd > 0)
                 {
                     evaluatedModels.Add(model);
@@ -214,7 +214,7 @@ public static class QuotaProjector
                     hDrop = Math.Round(hDrop, 6);
                     if (hDrop >= 0.03 && hCost > 0)
                     {
-                        var fullUsd = Math.Round(hCost / (decimal)hDrop, 2, MidpointRounding.AwayFromZero);
+                        var fullUsd = Math.Max(hCost, Math.Round(hCost / (decimal)hDrop, 2, MidpointRounding.AwayFromZero));
                         if (fullUsd > 0)
                         {
                             evaluatedModels.Add(model);

@@ -233,9 +233,35 @@ public sealed class AntigravityQuotaEstimator
         var consumedFraction = remaining.HasValue ? Math.Round(1 - remaining.Value, 6) : (double?)null;
         var projection = UsageTray.Services.QuotaProjector.Estimate(latestSnapshot, matchingSnapshots, (start, end) =>
             Calculate(poolGenerations.Where(g => g.Timestamp >= start && g.Timestamp < end)));
+
+        decimal? fullValue = projection.FullValue;
+        string? note = projection.Note;
+
+        // 全周期宏观基准外推与防污染校准：
+        // 当切片外推为 null、发生倒挂（fullValue < cost）、或严重受断层污染（如远低于合理阈值且宏观基准正常）时，
+        // 若全周期已有有效额度消耗（consumedFraction >= 0.05）且有对应消费（cost > 0），采用宏观基准外推并保底。
+        if (consumedFraction.HasValue && consumedFraction.Value >= 0.05 && cost.HasValue && cost.Value > 0)
+        {
+            var macroFull = Math.Round(cost.Value / (decimal)consumedFraction.Value, 2, MidpointRounding.AwayFromZero);
+            var isContaminated = !fullValue.HasValue || fullValue.Value < cost.Value || (macroFull >= 15.0m && fullValue < 15.0m);
+            if (isContaminated)
+            {
+                fullValue = Math.Max(macroFull, cost.Value);
+                note = "按全周期累计消耗外推";
+            }
+            else
+            {
+                fullValue = Math.Max(fullValue!.Value, cost.Value);
+            }
+        }
+        else if (fullValue.HasValue && cost.HasValue && fullValue.Value < cost.Value)
+        {
+            fullValue = cost.Value;
+        }
+
         return new AntigravityQuotaEstimate(latestSnapshot.ModelOrPoolId, windowKind, poolDisplayName,
-            remaining, resetAt, cost, consumedFraction, projection.FullValue, QuotaEstimateConfidence.Low,
-            cycleGens.Count, null, null, null, projection.Note);
+            remaining, resetAt, cost, consumedFraction, fullValue, QuotaEstimateConfidence.Low,
+            cycleGens.Count, null, null, null, note);
     }
 
     private decimal? Calculate(IEnumerable<AntigravityGenerationUsage> generations)

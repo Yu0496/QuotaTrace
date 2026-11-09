@@ -38,7 +38,7 @@ public sealed class StartupManager
         if (enabled)
         {
             var targetPath = GetCanonicalExecutablePath();
-            key.SetValue(ValueName, $"\"{targetPath}\"");
+            key.SetValue(ValueName, $"\"{targetPath}\" --autostart");
         }
         else
         {
@@ -56,7 +56,7 @@ public sealed class StartupManager
 
             using var key = Registry.CurrentUser.CreateSubKey(RunKey, true);
             var currentVal = key?.GetValue(ValueName) as string;
-            var expectedVal = $"\"{targetPath}\"";
+            var expectedVal = $"\"{targetPath}\" --autostart";
             if (!string.Equals(currentVal, expectedVal, StringComparison.OrdinalIgnoreCase))
             {
                 key?.SetValue(ValueName, expectedVal);

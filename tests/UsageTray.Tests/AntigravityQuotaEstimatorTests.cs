@@ -294,4 +294,101 @@ public sealed class AntigravityQuotaEstimatorTests
             Assert.Contains("Gemini 4 Argon", argonModel.EstimateDetail);
         }
     }
+
+    [Fact]
+    public void AntigravityQuotaEstimator_PreventsInvertedQuota_WhenFirstSnapshotDelayed()
+    {
+        var estimator = new AntigravityQuotaEstimator(_pricing);
+        var now = DateTimeOffset.UtcNow;
+        var resetAt = now.AddDays(5);
+        var cycleStart = resetAt.AddDays(-7);
+
+        // 模拟真实场景：
+        // 1. cycleStart (resetAt - 7d) 开始后，用户在首个快照前产生了大量消耗：191条请求共 $18.17 (约 6M input, 1.2M output)
+        // 2. 首个快照在 cycleStart + 2.5 小时后才记录，剩余额度已掉至 0.5562
+        // 3. 首个快照后仅产生 4 条微量请求共 $0.56，快照随之下跌至 0.4303 (降幅 12.59%)
+        // 4. 若机械切片外推: $0.56 / 0.1259 = $4.44，产生严重倒挂 ($4.44 << $18.73)！
+        var snapshots = new List<QuotaSnapshot>
+        {
+            new(ProviderKind.Antigravity, cycleStart.AddHours(2.5), "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.5562, resetAt, "weekly", "local_api", "Pro"),
+            new(ProviderKind.Antigravity, cycleStart.AddHours(4.0), "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.4303, resetAt, "weekly", "local_api", "Pro")
+        };
+
+        // 构造生成请求：
+        // 周期前部：$18.17 (输入 6,000,000 @ $2/M = $12.00, 输出 617,000 @ $10/M = $6.17 -> $18.17)
+        // 首快照后：$0.56 (输入 80,000 @ $2/M = $0.16, 输出 40,000 @ $10/M = $0.40 -> $0.56)
+        var generations = new List<AntigravityGenerationUsage>
+        {
+            new("c1", "g1", "r1", cycleStart.AddHours(1.0), "gemini-4-argon-r", null, 6_000_000, 0, 0, 0, 617_000, 617_000, null, "db", 1),
+            new("c1", "g2", "r2", cycleStart.AddHours(3.0), "gemini-4-argon-r", null, 80_000, 0, 0, 0, 40_000, 40_000, null, "db", 2)
+        };
+
+        var estimates = estimator.EstimateAll(snapshots, generations);
+        var argonWeekly = Assert.Single(estimates, e => e.WindowKind == "weekly" && e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(0.4303, argonWeekly.RemainingFraction);
+        Assert.NotNull(argonWeekly.ConsumedFraction);
+        // 全周期总降幅: 1 - 0.4303 = 0.5697
+        Assert.Equal(0.5697, argonWeekly.ConsumedFraction.Value, 4);
+        Assert.NotNull(argonWeekly.ObservedCostUsd);
+        Assert.Equal(18.73m, argonWeekly.ObservedCostUsd.Value);
+
+        Assert.NotNull(argonWeekly.EstimatedFullQuotaUsd);
+        // 绝对防倒挂：推算周满额绝不能低于已产生的 $18.73
+        Assert.True(argonWeekly.EstimatedFullQuotaUsd.Value >= argonWeekly.ObservedCostUsd.Value,
+            $"推算周满额 ${argonWeekly.EstimatedFullQuotaUsd.Value} 绝不能小于已观测金额 ${argonWeekly.ObservedCostUsd.Value}");
+
+        // 科学外推：$18.73 / 0.5697 = $32.88，绝不为 $4.44
+        Assert.Equal(32.88m, Math.Round(argonWeekly.EstimatedFullQuotaUsd.Value, 2));
+        Assert.Equal("按全周期累计消耗外推", argonWeekly.CalculationDetails);
+    }
+
+    [Fact]
+    public void Aggregator_CalibratesInflatedSlices_WhenSlicesLoseDenominator()
+    {
+        using var workspace = new TempWorkspace();
+        var (database, repository) = RepositoryFactory.Create(workspace);
+        using (database)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var resetAt = now.AddDays(5);
+            var cycleStart = resetAt.AddDays(-7);
+
+            // 全周期池真实 drop 为 20% (1.0 -> 0.80)
+            repository.AddQuotaSnapshots([
+                new QuotaSnapshot(ProviderKind.Antigravity, cycleStart.AddHours(1), "gemini-weekly", "Gemini (周额度)", 1.0, resetAt, "weekly", "local_api", "Pro"),
+                // 切片中间快照：额度在无请求时提前 drop 了一部分，导致切片累加仅捕捉到 9% 的降幅
+                new QuotaSnapshot(ProviderKind.Antigravity, cycleStart.AddHours(2), "gemini-weekly", "Gemini (周额度)", 0.95, resetAt, "weekly", "local_api", "Pro"),
+                new QuotaSnapshot(ProviderKind.Antigravity, cycleStart.AddHours(3), "gemini-weekly", "Gemini (周额度)", 0.89, resetAt, "weekly", "local_api", "Pro"),
+                new QuotaSnapshot(ProviderKind.Antigravity, cycleStart.AddHours(4), "gemini-weekly", "Gemini (周额度)", 0.80, resetAt, "weekly", "local_api", "Pro")
+            ]);
+
+            var date = DateOnly.FromDateTime(now.LocalDateTime);
+            var infoPath = workspace.File("test_calibrate.db");
+            File.WriteAllText(infoPath, "fixture");
+            var file = new FileInfo(infoPath);
+
+            // 全周期总消耗: 产生 $30.00 (输入 20M @ $1.5/M = $30.00)
+            // 分配在 cycleStart.AddHours(3.5)，即 0.89 -> 0.80 的切片 (切片 drop 仅 9%，外推原本膨胀至 $30 / 0.09 = $333.33)
+            var gen = new AntigravityGenerationUsage("c1", "g1", "r1", cycleStart.AddHours(3.5), "gemini-3.8-flash-n", null, 20_000_000, 0, 0, 0, 0, 0, null, infoPath, 1);
+            var bucket = new UsageBucket(ProviderKind.Antigravity, date, null, "gemini-3.8-flash-n", 20_000_000, 0, 0, 1, DataQuality.Exact, infoPath);
+            repository.ReplaceAntigravitySource(file, [gen], [bucket], "c1", null, "gemini-3.8-flash-n", null);
+
+            var pricing = new PricingService(workspace.File("pricing.json"), PricingService.BuiltInDefaults());
+            var estimator = new AntigravityQuotaEstimator(pricing);
+            var aggregator = new UsageAggregator(repository, pricing, estimator);
+
+            var snapshot = aggregator.BuildSnapshot(new DateRange(date, date));
+            var flashModel = Assert.Single(snapshot.Models, m => m.ModelId == "gemini-3.8-flash-n");
+
+            Assert.NotNull(flashModel.ApiEquivalentUsd);
+            Assert.Equal(30.00m, flashModel.ApiEquivalentUsd.Value);
+
+            Assert.NotNull(flashModel.EstimatedWeeklyCostUsd);
+            // 真实宏观外推: $30.00 / 0.20 = $150.00
+            // 经校准后应平滑收敛至真实基准 $150.00，而不是膨胀的 $333.33
+            Assert.Equal(150.00m, flashModel.EstimatedWeeklyCostUsd.Value);
+            Assert.Contains("结合全周期实际消耗校准", flashModel.EstimateNote);
+        }
+    }
 }

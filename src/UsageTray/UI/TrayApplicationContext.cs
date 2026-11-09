@@ -35,7 +35,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private bool _contextMenuOpen;
     private bool _disposed;
 
-    public TrayApplicationContext()
+    public TrayApplicationContext(bool isAutoStart = false)
     {
         _uiContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         AppPaths.EnsureDirectories();
@@ -141,6 +141,25 @@ public sealed class TrayApplicationContext : ApplicationContext
         var isWeeklyFullScanDue = !settings.LastFullScanUtc.HasValue || (now - settings.LastFullScanUtc.Value).TotalDays >= 7;
         _ = RefreshAsync(isWeeklyFullScanDue);
         _ = StartBackgroundUpdateCheckAsync();
+
+        if (!isAutoStart)
+        {
+            _uiContext.Post(_ => ShowMainForm(), null);
+        }
+    }
+
+    public void ActivateMainForm()
+    {
+        _uiContext.Post(_ =>
+        {
+            ShowMainForm();
+            if (_mainForm is { IsDisposed: false })
+            {
+                _mainForm.WindowState = FormWindowState.Normal;
+                _mainForm.BringToFront();
+                _mainForm.Activate();
+            }
+        }, null);
     }
 
     private void HandleLanguageChanged() => _uiContext.Post(_ => UpdateMenuTexts(), null);

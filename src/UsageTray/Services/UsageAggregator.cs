@@ -646,6 +646,13 @@ public sealed class UsageAggregator
                     .OrderBy(g => g.Timestamp)
                     .ToList();
 
+                var duration = TimeSpan.FromDays(7);
+                var cycleStart = latestSnapshot.ResetAt?.Subtract(duration);
+                var resetAt = latestSnapshot.ResetAt;
+                var cycleGens = (cycleStart.HasValue && resetAt.HasValue)
+                    ? poolGenerations.Where(g => g.Timestamp >= cycleStart.Value && g.Timestamp < resetAt.Value).ToList()
+                    : [];
+
                 // 1. 先尝试基于切片的单模型精准外推
                 var modelProjections = QuotaProjector.EstimateModelProjections(
                     latestSnapshot,
@@ -679,12 +686,7 @@ public sealed class UsageAggregator
                     },
                     agSnapshots);
 
-                foreach (var proj in modelProjections)
-                {
-                    result[proj.ModelId] = proj;
-                }
-
-                // 2. 回退机制：若池本身已有周满额预估，为池内产生过消耗但未获得切片外推的模型赋予池级参考周满额
+                var poolDrop = latestSnapshot.RemainingFraction.HasValue ? Math.Max(0.0, 1.0 - latestSnapshot.RemainingFraction.Value) : 0.0;
                 var poolEst = estimates.FirstOrDefault(e => e.WindowKind == "weekly" &&
                     (string.Equals(e.PoolId, pool, StringComparison.OrdinalIgnoreCase) ||
                      e.PoolId.StartsWith(pool, StringComparison.OrdinalIgnoreCase) ||
@@ -692,62 +694,81 @@ public sealed class UsageAggregator
                      (pool == "3p" && (e.DisplayName.Contains("Claude", StringComparison.OrdinalIgnoreCase) || e.DisplayName.Contains("3p", StringComparison.OrdinalIgnoreCase))) ||
                      (pool == "argon" && e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase))));
 
-                if (poolEst != null)
+                var effectivePoolDrop = poolEst?.ConsumedFraction ?? poolDrop;
+                var poolDisplayName = poolEst?.DisplayName ?? pool;
+
+                foreach (var proj in modelProjections)
                 {
-                    var duration = TimeSpan.FromDays(7);
-                    var cycleStart = latestSnapshot.ResetAt?.Subtract(duration);
-                    var resetAt = latestSnapshot.ResetAt;
-                    var cycleGens = (cycleStart.HasValue && resetAt.HasValue)
-                        ? poolGenerations.Where(g => g.Timestamp >= cycleStart.Value && g.Timestamp < resetAt.Value).ToList()
-                        : [];
+                    var mGens = cycleGens.Where(g => string.Equals(g.Model, proj.ModelId, StringComparison.OrdinalIgnoreCase)).ToList();
+                    var mCost = CalculateAntigravityCost(mGens);
+                    var fullUsd = proj.EstimatedWeeklyCostUsd;
+                    var drop = proj.ConsumedFraction;
+                    var detail = proj.DetailText;
+                    var note = proj.EstimateNote;
 
-                    var activeModels = cycleGens.Select(g => g.Model).Distinct(StringComparer.OrdinalIgnoreCase);
-                    foreach (var model in activeModels)
+                    // 1.1 常识保底：周满额理论物理下限绝不能低于该模型本周期已产生的实际消费
+                    fullUsd = Math.Max(fullUsd, mCost);
+
+                    // 1.2 异步入账分母丢失校准（例如切片收集到的 drop 远低于全周期真实池 drop，导致满额被放大）：
+                    if (effectivePoolDrop >= 0.05 && mCost > 0)
                     {
-                        if (result.ContainsKey(model)) continue;
-
-                        var modelGens = cycleGens.Where(g => string.Equals(g.Model, model, StringComparison.OrdinalIgnoreCase)).ToList();
-                        var modelBuckets = modelGens.Select(gen =>
+                        var macroFull = Math.Round(mCost / (decimal)effectivePoolDrop, 2, MidpointRounding.AwayFromZero);
+                        if (fullUsd > macroFull * 1.6m && drop < effectivePoolDrop * 0.7)
                         {
-                            var rule = PricingMatcher.Find(_pricing.Rules, ProviderKind.Antigravity, gen.Model);
-                            var isLong = rule?.LongContextPrice is not null && gen.TotalInputTokens > rule.LongContextThresholdTokens;
-                            return new UsageBucket(ProviderKind.Antigravity, DateOnly.FromDateTime(gen.Timestamp.LocalDateTime),
-                                gen.ProjectKey, gen.Model, gen.TotalInputTokens, gen.CacheReadTokens, gen.OutputTokens, 1,
-                                gen.Quality, gen.SourceDbPath, gen.ConversationId, gen.CacheWriteTokens, CostQuality.ExactTokenSplit,
-                                null, isLong ? 1 : 0, 0, isLong ? gen.TotalInputTokens : 0, isLong ? gen.CacheReadTokens : 0,
-                                isLong ? gen.CacheWriteTokens : 0, isLong ? gen.OutputTokens : 0, true);
-                        });
-                        var modelCost = _pricing.CalculateAggregate(modelBuckets).PricedCostUsd ?? 0m;
-
-                        if (poolEst.EstimatedFullQuotaUsd.HasValue && poolEst.EstimatedFullQuotaUsd.Value > 0)
-                        {
-                            var fullUsd = poolEst.EstimatedFullQuotaUsd.Value;
-                            var drop = poolEst.ConsumedFraction ?? 0.0;
-                            result[model] = new ModelQuotaProjectionView(
-                                model,
-                                fullUsd,
-                                drop,
-                                modelCost,
-                                "按所属模型池外推",
-                                $"本周测算：所属【{poolEst.DisplayName}】累计消耗额度 {drop:P1}，该模型周期产生参考金额 ${modelCost:F2}，外推池周满额 ${fullUsd:N2}。",
-                                true
-                            );
-                        }
-                        else if (poolEst.ConsumedFraction.HasValue && poolEst.ConsumedFraction.Value >= 0.025 && poolEst.ObservedCostUsd.HasValue && poolEst.ObservedCostUsd.Value > 0)
-                        {
-                            var drop = poolEst.ConsumedFraction.Value;
-                            var fullUsd = Math.Round(poolEst.ObservedCostUsd.Value / (decimal)drop, 2, MidpointRounding.AwayFromZero);
-                            result[model] = new ModelQuotaProjectionView(
-                                model,
-                                fullUsd,
-                                drop,
-                                modelCost,
-                                "按所属模型池外推",
-                                $"本周测算：所属【{poolEst.DisplayName}】累计消耗额度 {drop:P1}，该模型周期产生参考金额 ${modelCost:F2}，外推池周满额 ${fullUsd:N2}。",
-                                true
-                            );
+                            fullUsd = Math.Max(macroFull, mCost);
+                            drop = effectivePoolDrop;
+                            note = "结合全周期实际消耗校准";
+                            detail = $"本周测算：所属【{poolDisplayName}】累计消耗额度 {drop:P1}，该模型周期产生参考金额 ${mCost:F2}，校准后推算周满额 ${fullUsd:N2}。";
                         }
                     }
+
+                    result[proj.ModelId] = new ModelQuotaProjectionView(
+                        proj.ModelId,
+                        fullUsd,
+                        drop,
+                        mCost > 0 ? mCost : proj.IntervalCostUsd,
+                        note,
+                        detail,
+                        proj.IsFromCurrentCycle
+                    );
+                }
+
+                // 2. 回退机制：若模型产生过消耗但未获得切片外推（例如被污染切片过滤、或首快照断层导致无法切片）
+                var activeModels = cycleGens.Select(g => g.Model).Distinct(StringComparer.OrdinalIgnoreCase);
+                foreach (var model in activeModels)
+                {
+                    if (result.ContainsKey(model)) continue;
+
+                    var modelGens = cycleGens.Where(g => string.Equals(g.Model, model, StringComparison.OrdinalIgnoreCase)).ToList();
+                    var modelCost = CalculateAntigravityCost(modelGens);
+                    if (modelCost <= 0) continue;
+
+                    decimal fullUsd;
+                    if (poolEst?.EstimatedFullQuotaUsd.HasValue == true && poolEst.EstimatedFullQuotaUsd.Value >= modelCost)
+                    {
+                        fullUsd = poolEst.EstimatedFullQuotaUsd.Value;
+                    }
+                    else if (effectivePoolDrop >= 0.025)
+                    {
+                        fullUsd = Math.Round(modelCost / (decimal)effectivePoolDrop, 2, MidpointRounding.AwayFromZero);
+                    }
+                    else
+                    {
+                        fullUsd = modelCost;
+                    }
+
+                    // 严密防倒挂保底
+                    fullUsd = Math.Max(fullUsd, modelCost);
+
+                    result[model] = new ModelQuotaProjectionView(
+                        model,
+                        fullUsd,
+                        effectivePoolDrop,
+                        modelCost,
+                        "按所属模型池外推",
+                        $"本周测算：所属【{poolDisplayName}】累计消耗额度 {effectivePoolDrop:P1}，该模型周期产生参考金额 ${modelCost:F2}，外推池周满额 ${fullUsd:N2}。",
+                        true
+                    );
                 }
             }
 
@@ -757,5 +778,20 @@ public sealed class UsageAggregator
         {
             return result;
         }
+    }
+
+    private decimal CalculateAntigravityCost(IEnumerable<AntigravityGenerationUsage> gens)
+    {
+        var modelBuckets = gens.Select(gen =>
+        {
+            var rule = PricingMatcher.Find(_pricing.Rules, ProviderKind.Antigravity, gen.Model);
+            var isLong = rule?.LongContextPrice is not null && gen.TotalInputTokens > rule.LongContextThresholdTokens;
+            return new UsageBucket(ProviderKind.Antigravity, DateOnly.FromDateTime(gen.Timestamp.LocalDateTime),
+                gen.ProjectKey, gen.Model, gen.TotalInputTokens, gen.CacheReadTokens, gen.OutputTokens, 1,
+                gen.Quality, gen.SourceDbPath, gen.ConversationId, gen.CacheWriteTokens, CostQuality.ExactTokenSplit,
+                null, isLong ? 1 : 0, 0, isLong ? gen.TotalInputTokens : 0, isLong ? gen.CacheReadTokens : 0,
+                isLong ? gen.CacheWriteTokens : 0, isLong ? gen.OutputTokens : 0, true);
+        });
+        return _pricing.CalculateAggregate(modelBuckets).PricedCostUsd ?? 0m;
     }
 }
