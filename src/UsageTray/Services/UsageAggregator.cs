@@ -126,12 +126,15 @@ public sealed class UsageAggregator
         var agBuckets = buckets.Where(b => b.Provider == ProviderKind.Antigravity).ToList();
         var agCost = agBuckets.Count > 0 ? _pricing.CalculateAggregate(agBuckets).PricedCostUsd : 0m;
         var agSnapshotsForPool = _repository.GetQuotaSnapshots(ProviderKind.Antigravity);
-        var agGensForPool = _repository.GetAntigravityGenerations();
-        var agGeminiBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty, agSnapshotsForPool, agGensForPool) == "gemini").ToList();
+        var hasArgonInBuckets = agBuckets.Any(b => AntigravityQuotaEstimator.IsArgon(b.ModelId ?? string.Empty));
+        var argonPoolForBuckets = AntigravityQuotaEstimator.ResolveArgonQuotaPool(
+            agSnapshotsForPool,
+            hasArgonInBuckets ? [new AntigravityGenerationUsage(string.Empty, null, null, DateTimeOffset.UtcNow, "gemini-4-argon", null, 0, 0, 0, 0, 0, 0, null, string.Empty, 0, DataQuality.Exact)] : null);
+        var agGeminiBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty, argonPoolForBuckets) == "gemini").ToList();
         var agGeminiCost = agGeminiBuckets.Count > 0 ? _pricing.CalculateAggregate(agGeminiBuckets).PricedCostUsd : 0m;
-        var agClaudeBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty, agSnapshotsForPool, agGensForPool) == "3p").ToList();
+        var agClaudeBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty, argonPoolForBuckets) == "3p").ToList();
         var agClaudeCost = agClaudeBuckets.Count > 0 ? _pricing.CalculateAggregate(agClaudeBuckets).PricedCostUsd : 0m;
-        var agArgonBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty, agSnapshotsForPool, agGensForPool) == "argon").ToList();
+        var agArgonBuckets = agBuckets.Where(b => AntigravityQuotaEstimator.GetModelQuotaPool(b.ModelId ?? string.Empty, argonPoolForBuckets) == "argon").ToList();
         var agArgonCost = agArgonBuckets.Count > 0 ? _pricing.CalculateAggregate(agArgonBuckets).PricedCostUsd : 0m;
 
         var codexWeeklyCycles = new List<CodexCycleUsageView>();
@@ -190,7 +193,8 @@ public sealed class UsageAggregator
                     agSnapshots.Add(q);
                 }
             }
-            var agGenerations = _repository.GetAntigravityGenerations();
+            var startUtc = DateTimeOffset.UtcNow.AddDays(-30);
+            var agGenerations = _repository.GetAntigravityGenerations(startUtc);
             return _antigravityQuotaEstimator.EstimateAll(agSnapshots, agGenerations);
         }
         catch
@@ -621,10 +625,11 @@ public sealed class UsageAggregator
                 }
             }
 
-            var agGenerations = _repository.GetAntigravityGenerations();
+            var startUtc = DateTimeOffset.UtcNow.AddDays(-30);
+            var agGenerations = _repository.GetAntigravityGenerations(startUtc);
 
             var pools = new List<string> { "gemini", "3p" };
-            var argonPool = AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon", agSnapshots, agGenerations);
+            var argonPool = AntigravityQuotaEstimator.ResolveArgonQuotaPool(agSnapshots, agGenerations);
             var hasArgonSnapshot = agSnapshots.Any(s => AntigravityQuotaEstimator.SnapshotMatchesPool(s, "argon"));
             if (hasArgonSnapshot && argonPool == "argon")
             {
@@ -642,7 +647,7 @@ public sealed class UsageAggregator
                 var latestSnapshot = matchingSnapshots.Last();
 
                 var poolGenerations = agGenerations
-                    .Where(g => AntigravityQuotaEstimator.GetModelQuotaPool(g.Model, agSnapshots, agGenerations) == pool)
+                    .Where(g => AntigravityQuotaEstimator.GetModelQuotaPool(g.Model, argonPool) == pool)
                     .OrderBy(g => g.Timestamp)
                     .ToList();
 

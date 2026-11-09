@@ -592,12 +592,20 @@ public sealed class UsageRepository
         IReadOnlyList<PricingRule>? pricingRules = null,
         IReadOnlyList<QuotaSnapshot>? snapshots = null)
     {
-        var allGens = GetAntigravityGenerations();
+        var starts = new[] { geminiStartUtc, threePStartUtc, argonStartUtc }.Where(d => d.HasValue).Select(d => d!.Value).ToList();
+        if (starts.Count == 0) return [];
+        var minStart = starts.Min();
+        var ends = new[] { geminiEndUtc, threePEndUtc, argonEndUtc }.Where(d => d.HasValue).Select(d => d!.Value).ToList();
+        var maxEnd = ends.Count > 0 ? ends.Max() : DateTimeOffset.UtcNow;
+
+        var allGens = GetAntigravityGenerations(minStart, maxEnd);
         if (allGens.Count == 0) return [];
+
+        var argonPool = AntigravityQuotaEstimator.ResolveArgonQuotaPool(snapshots, allGens);
 
         var filtered = allGens.Where(gen =>
         {
-            var pool = AntigravityQuotaEstimator.GetModelQuotaPool(gen.Model, snapshots, allGens);
+            var pool = AntigravityQuotaEstimator.GetModelQuotaPool(gen.Model, argonPool);
             var (start, end) = pool switch
             {
                 "argon" when argonStartUtc.HasValue && argonEndUtc.HasValue => (argonStartUtc, argonEndUtc),

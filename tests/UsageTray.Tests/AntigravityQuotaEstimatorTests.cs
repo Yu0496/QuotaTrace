@@ -391,4 +391,38 @@ public sealed class AntigravityQuotaEstimatorTests
             Assert.Contains("结合全周期实际消耗校准", flashModel.EstimateNote);
         }
     }
+
+    [Fact]
+    public void EstimateAll_WithLargeGenerationDataset_ExecutesInstantly()
+    {
+        using var workspace = new TempWorkspace();
+        var pricing = new PricingService(workspace.File("pricing.json"), PricingService.BuiltInDefaults());
+        var now = DateTimeOffset.UtcNow;
+        var resetAt = now.AddDays(3);
+        var cycleStart = resetAt.AddDays(-7);
+
+        var snapshots = new List<QuotaSnapshot>();
+        for (int i = 0; i < 200; i++)
+        {
+            snapshots.Add(new QuotaSnapshot(ProviderKind.Antigravity, cycleStart.AddMinutes(i * 10), "gemini-weekly", "Gemini", 1.0 - (i * 0.002), resetAt, "weekly", "local_api", "Pro"));
+            snapshots.Add(new QuotaSnapshot(ProviderKind.Antigravity, cycleStart.AddMinutes(i * 10), "gemini-argon-wtu-weekly", "Argon", 1.0 - (i * 0.001), resetAt, "weekly", "local_api", "Pro"));
+            snapshots.Add(new QuotaSnapshot(ProviderKind.Antigravity, cycleStart.AddMinutes(i * 10), "claude-weekly", "Claude", 1.0 - (i * 0.003), resetAt, "weekly", "local_api", "Pro"));
+        }
+
+        var gens = new List<AntigravityGenerationUsage>();
+        for (int i = 0; i < 5000; i++)
+        {
+            var model = (i % 3) switch { 0 => "gemini-3.8-flash-n", 1 => "gemini-4-argon", _ => "claude-3-7-sonnet" };
+            gens.Add(new AntigravityGenerationUsage($"conv_{i}", $"gen_{i}", $"resp_{i}", cycleStart.AddMinutes(i), model, null, 1000, 0, 0, 0, 0, 100, null, "test.db", i, DataQuality.Exact));
+        }
+
+        var estimator = new AntigravityQuotaEstimator(pricing);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var results = estimator.EstimateAll(snapshots, gens);
+        sw.Stop();
+
+        Assert.NotEmpty(results);
+        // 5000 条 generation 与 600 条快照，优化前需上万次 ResolveArgonQuotaPool 耗时几十秒，优化后应在 500ms 以内秒级完成
+        Assert.True(sw.ElapsedMilliseconds < 1500, $"EstimateAll took too long: {sw.ElapsedMilliseconds}ms");
+    }
 }

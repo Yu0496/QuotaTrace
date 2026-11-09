@@ -36,6 +36,19 @@ public sealed class AntigravityQuotaEstimator
     public static string GetModelQuotaPool(string modelId) =>
         GetModelQuotaPool(modelId, null, null);
 
+    public static string GetModelQuotaPool(string modelId, string argonPool)
+    {
+        if (IsClaudeOrGpt(modelId))
+        {
+            return "3p";
+        }
+        if (IsArgon(modelId))
+        {
+            return argonPool;
+        }
+        return "gemini";
+    }
+
     public static string GetModelQuotaPool(
         string modelId,
         IReadOnlyList<QuotaSnapshot>? snapshots = null,
@@ -170,7 +183,7 @@ public sealed class AntigravityQuotaEstimator
     {
         var results = new List<AntigravityQuotaEstimate>();
 
-        var argonPool = GetModelQuotaPool("gemini-4-argon", allSnapshots, allGenerations);
+        var argonPool = ResolveArgonQuotaPool(allSnapshots, allGenerations);
         var hasArgonSnapshot = allSnapshots.Any(s => SnapshotMatchesPool(s, "argon"));
 
         var poolList = new List<(string Category, string Display)>
@@ -190,7 +203,7 @@ public sealed class AntigravityQuotaEstimator
         {
             foreach (var win in windows)
             {
-                var estimate = EstimatePoolWindow(pool.Category, pool.Display, win, allSnapshots, allGenerations);
+                var estimate = EstimatePoolWindow(pool.Category, pool.Display, win, allSnapshots, allGenerations, argonPool);
                 if (estimate is not null)
                 {
                     results.Add(estimate);
@@ -206,8 +219,11 @@ public sealed class AntigravityQuotaEstimator
         string poolDisplayName,
         string windowKind,
         IReadOnlyList<QuotaSnapshot> allSnapshots,
-        IReadOnlyList<AntigravityGenerationUsage> allGenerations)
+        IReadOnlyList<AntigravityGenerationUsage> allGenerations,
+        string? resolvedArgonPool = null)
     {
+        var argonPool = resolvedArgonPool ?? ResolveArgonQuotaPool(allSnapshots, allGenerations);
+
         // Filter snapshots
         var matchingSnapshots = allSnapshots
             .Where(s => SnapshotMatchesPool(s, poolCategory) && IsMatchingWindow(s, windowKind) && s.RemainingFraction.HasValue)
@@ -218,7 +234,7 @@ public sealed class AntigravityQuotaEstimator
 
         var latestSnapshot = matchingSnapshots.Last();
         var poolGenerations = allGenerations
-            .Where(g => GetModelQuotaPool(g.Model, allSnapshots, allGenerations) == poolCategory)
+            .Where(g => GetModelQuotaPool(g.Model, argonPool) == poolCategory)
             .OrderBy(g => g.Timestamp)
             .ToList();
 
