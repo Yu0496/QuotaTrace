@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 11,
-  "lastVerifiedAt": "2026-10-17",
+  "schemaVersion": 12,
+  "lastVerifiedAt": "2026-11-10",
   "rules": [
     {
       "provider": "Codex",
@@ -358,6 +358,114 @@
           "cacheReadPerMillionUsd": 1.0,
           "cacheWritePerMillionUsd": 12.5,
           "outputPerMillionUsd": 37.5
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6.1-terra",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 1.0,
+      "cacheReadPerMillionUsd": 0.05,
+      "cacheWritePerMillionUsd": 1.25,
+      "outputPerMillionUsd": 5.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+      "lastVerifiedAt": "2026-11-10",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 2.0,
+        "cacheReadPerMillionUsd": 0.1,
+        "cacheWritePerMillionUsd": 2.5,
+        "outputPerMillionUsd": 7.5
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 2.5,
+          "cacheReadPerMillionUsd": 0.125,
+          "cacheWritePerMillionUsd": 3.125,
+          "outputPerMillionUsd": 12.5
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.25,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 18.75
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6.1-terra*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.0,
+      "cacheReadPerMillionUsd": 0.05,
+      "cacheWritePerMillionUsd": 1.25,
+      "outputPerMillionUsd": 5.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+      "lastVerifiedAt": "2026-11-10",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 2.0,
+        "cacheReadPerMillionUsd": 0.1,
+        "cacheWritePerMillionUsd": 2.5,
+        "outputPerMillionUsd": 7.5
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 2.5,
+          "cacheReadPerMillionUsd": 0.125,
+          "cacheWritePerMillionUsd": 3.125,
+          "outputPerMillionUsd": 12.5
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.25,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 18.75
+        }
+      },
+      "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
+    },
+    {
+      "provider": "Codex",
+      "modelPattern": "gpt-6.1-terra-fast*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.5,
+      "cacheReadPerMillionUsd": 0.125,
+      "cacheWritePerMillionUsd": 3.125,
+      "outputPerMillionUsd": 12.5,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+      "lastVerifiedAt": "2026-11-10",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 5.0,
+        "cacheReadPerMillionUsd": 0.25,
+        "cacheWritePerMillionUsd": 6.25,
+        "outputPerMillionUsd": 18.75
+      },
+      "longContextThresholdTokens": 272000,
+      "serviceTierPrices": {
+        "fast": {
+          "inputPerMillionUsd": 2.5,
+          "cacheReadPerMillionUsd": 0.125,
+          "cacheWritePerMillionUsd": 3.125,
+          "outputPerMillionUsd": 12.5
+        }
+      },
+      "serviceTierLongContextPrices": {
+        "fast": {
+          "inputPerMillionUsd": 5.0,
+          "cacheReadPerMillionUsd": 0.25,
+          "cacheWritePerMillionUsd": 6.25,
+          "outputPerMillionUsd": 18.75
         }
       },
       "referenceBasis": "非促销 Token 基准；Fast 采用订阅倍率"
@@ -1592,6 +1700,46 @@
         "cacheReadPerMillionUsd": 0.4,
         "cacheWritePerMillionUsd": 5.0,
         "outputPerMillionUsd": 15.0
+      },
+      "longContextThresholdTokens": 272000,
+      "referenceBasis": "非促销 Token 参考基准"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-6.1-terra",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 1.0,
+      "cacheReadPerMillionUsd": 0.05,
+      "cacheWritePerMillionUsd": 1.25,
+      "outputPerMillionUsd": 5.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+      "lastVerifiedAt": "2026-11-10",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 2.0,
+        "cacheReadPerMillionUsd": 0.1,
+        "cacheWritePerMillionUsd": 2.5,
+        "outputPerMillionUsd": 7.5
+      },
+      "longContextThresholdTokens": 272000,
+      "referenceBasis": "非促销 Token 参考基准"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gpt-6.1-terra*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.0,
+      "cacheReadPerMillionUsd": 0.05,
+      "cacheWritePerMillionUsd": 1.25,
+      "outputPerMillionUsd": 5.0,
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+      "lastVerifiedAt": "2026-11-10",
+      "cacheSplitValidated": true,
+      "longContextPrice": {
+        "inputPerMillionUsd": 2.0,
+        "cacheReadPerMillionUsd": 0.1,
+        "cacheWritePerMillionUsd": 2.5,
+        "outputPerMillionUsd": 7.5
       },
       "longContextThresholdTokens": 272000,
       "referenceBasis": "非促销 Token 参考基准"

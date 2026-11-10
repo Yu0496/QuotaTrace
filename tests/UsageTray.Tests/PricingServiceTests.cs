@@ -1,6 +1,9 @@
+using System.Drawing;
+using System.Windows.Forms;
 using UsageTray.Core;
 using UsageTray.Pricing;
 using UsageTray.Providers.Codex;
+using UsageTray.UI;
 
 namespace UsageTray.Tests;
  
@@ -116,11 +119,17 @@ public sealed class PricingServiceTests
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-astra");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-sol");
+        Assert.Contains(loaded.Rules, r => r.Provider == "Codex" && r.ModelPattern == "gpt-6.1-terra" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Codex" && r.ModelPattern == "gpt-6.1-terra*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Codex" && r.ModelPattern == "gpt-6.1-terra-fast*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gpt-6.1-terra" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gpt-6.1-terra*" && r.MatchMode == MatchMode.Wildcard);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-luna");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.8-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-4-6*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-5-5*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-opus-5-5*");
+        Assert.Equal(12, loaded.Document.SchemaVersion);
         Assert.Equal(PricingService.DefaultDocumentVersion, loaded.Document.SchemaVersion);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-pro-default*");
@@ -140,6 +149,9 @@ public sealed class PricingServiceTests
         Assert.Equal("gemini-3.1-pro", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.1 Pro (High)"));
         Assert.Equal("gpt-6-astra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Astra (Preview)"));
         Assert.Equal("gpt-6-sol", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Sol (Preview)"));
+        Assert.Equal("gpt-6.1-terra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6.1 Terra (Thinking)"));
+        Assert.Equal("gpt-6.1-terra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Terra"));
+        Assert.Equal("gpt-5.6-terra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-5.6 Terra"));
         Assert.Equal("gpt-6-luna", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Luna (Thinking)"));
         Assert.Equal("gpt-6-sol", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Sol"));
         Assert.Equal("gpt-6-luna", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Luna"));
@@ -298,6 +310,196 @@ public sealed class PricingServiceTests
         // 4. InferModelFromDisplayName parses "Gemini 3.8 Flash N"
         var inferred = UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.8 Flash N");
         Assert.Equal("gemini-3.8-flash-n", inferred);
+    }
+
+    [Fact]
+    public void Gpt61TerraCalculatesAccurateStandardLongContextAndFastCost()
+    {
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+
+        // 1. Codex 标准档: 2M input (1M uncached @ $1, 1M cached @ $0.05) + 1M output @ $5 = $6.05
+        var stdBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 11, 10), null, "gpt-6.1-terra",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        Assert.Equal(6.05m, pricing.Calculate(stdBucket).CostUsd);
+
+        // 2. Codex 含 cache write: 1M uncached @ $1 + 500k read @ $0.05 + 500k write @ $1.25 + 1M output @ $5 = $6.65
+        var cacheWriteBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 11, 10), null, "gpt-6.1-terra",
+            2_000_000, 500_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 500_000, CostQuality.ExactTokenSplit);
+        Assert.Equal(6.65m, pricing.Calculate(cacheWriteBucket).CostUsd);
+
+        // 3. Codex Fast / priority 档位 (2.5x): 1M uncached @ $2.5 + 1M cached @ $0.125 + 1M output @ $12.5 = $15.125
+        Assert.Equal(15.125m, pricing.Calculate(stdBucket with { ServiceTier = "fast" }).CostUsd);
+        Assert.Equal(15.125m, pricing.Calculate(stdBucket with { ServiceTier = "priority" }).CostUsd);
+
+        // 4. gpt-6.1-terra-fast 模型前缀匹配: 1M uncached @ $2.5 + 500k read @ $0.125 + 500k write @ $3.125 + 1M output @ $12.5 = $16.625
+        Assert.Equal(16.625m, pricing.Calculate(cacheWriteBucket with { ModelId = "gpt-6.1-terra-fast" }).CostUsd);
+
+        // 5. Codex 长上下文 (>272K): 500k input (300k uncached @ $2, 200k cached @ $0.1) + 100k output @ $7.5 = $1.37
+        var longBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 11, 10), null, "gpt-6.1-terra",
+            500_000, 200_000, 100_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit,
+            null, 1, 0, 500_000, 200_000, 0, 100_000, true);
+        Assert.Equal(1.37m, pricing.Calculate(longBucket).CostUsd);
+
+        // 6. Codex 长上下文 Fast: 500k input (300k uncached @ $5, 200k cached @ $0.25) + 100k output @ $18.75 = $3.425
+        Assert.Equal(3.425m, pricing.Calculate(longBucket with { ServiceTier = "fast" }).CostUsd);
+
+        // 7. Antigravity gpt-6.1-terra 与变体后缀通配
+        var agBucket = stdBucket with { Provider = ProviderKind.Antigravity };
+        Assert.Equal(6.05m, pricing.Calculate(agBucket).CostUsd);
+        Assert.Equal(6.05m, pricing.Calculate(agBucket with { ModelId = "gpt-6.1-terra-preview" }).CostUsd);
+    }
+
+    [Fact]
+    public void MigrateDocumentPreservesWildcardAndDeduplicatesClonedGpt6Rules()
+    {
+        using var workspace = new TempWorkspace();
+        var defaults = PricingService.BuiltInDefaults();
+        var codexGpt6 = defaults.Rules.Single(r => r.Provider == "Codex" && r.ModelPattern == "gpt-6" && r.MatchMode == MatchMode.Exact);
+
+        // 1. 模拟 schema v11 中出现多次重复的 Codex | gpt-6 | Exact 规则，确认迁移后会自动去重且补齐 gpt-6.1-terra
+        var duplicatedV11 = new PricingDocument(11, new DateOnly(2026, 10, 17), [
+            codexGpt6,
+            codexGpt6 with { },
+            codexGpt6 with { }
+        ]);
+        var migratedFromV11 = new PricingService(workspace.File("v11.json"), duplicatedV11);
+        Assert.Equal(1, migratedFromV11.Rules.Count(r => r.Provider == "Codex" && r.ModelPattern == "gpt-6" && r.MatchMode == MatchMode.Exact));
+        Assert.Contains(migratedFromV11.Rules, r => r.Provider == "Codex" && r.ModelPattern == "gpt-6.1-terra");
+
+        // 2. 模拟 legacy v2 文档包含旧版 gpt-6* Wildcard，确认不会被错误映射为 gpt-6 Exact 克隆体
+        var legacyGpt6Wildcard = new PricingRule(
+            "Codex",
+            "gpt-6*",
+            MatchMode.Wildcard,
+            10.0m,
+            1.0m,
+            12.5m,
+            50.0m,
+            "https://developers.openai.com/api/docs/models/gpt-6-astra",
+            new DateOnly(2026, 9, 5),
+            true,
+            new TokenPriceSet(20.0m, 2.0m, 25.0m, 75.0m),
+            272000);
+        var legacyDoc = new PricingDocument(2, new DateOnly(2026, 9, 5), [legacyGpt6Wildcard]);
+        var migratedFromV2 = new PricingService(workspace.File("v2.json"), legacyDoc);
+
+        var gpt6Wildcard = Assert.Single(migratedFromV2.Rules, r => r.Provider == "Codex" && r.ModelPattern == "gpt-6*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.NotNull(gpt6Wildcard.UnverifiedReason);
+        Assert.Equal(1, migratedFromV2.Rules.Count(r => r.Provider == "Codex" && r.ModelPattern == "gpt-6" && r.MatchMode == MatchMode.Exact));
+    }
+
+    [Fact]
+    public void PricingViewerForm_LayoutPreventsTextTruncation()
+    {
+        Exception? threadEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var largeFont = new Font("Segoe UI", 18F);
+                using var restoredFont = new Font("Segoe UI", 9F);
+                using var form = new PricingViewerForm(() => PricingService.BuiltInDefaults().Rules)
+                {
+                    StartPosition = FormStartPosition.Manual,
+                    Location = new Point(-32000, -32000),
+                    ShowInTaskbar = false
+                };
+                form.Show();
+                Application.DoEvents();
+
+                var topPanel = form.Controls.OfType<FlowLayoutPanel>().Single();
+                var combo = topPanel.Controls.OfType<ComboBox>().Single();
+                var searchBox = topPanel.Controls.OfType<TextBox>().Single();
+                var refreshBtn = topPanel.Controls.OfType<Button>().Single();
+                var grid = form.Controls.OfType<DataGridView>().Single();
+                var bottomPanel = form.Controls.OfType<Panel>().First(p => p is not FlowLayoutPanel);
+                var statusLabel = bottomPanel.Controls.OfType<Label>().Single();
+                var closeBtn = bottomPanel.Controls.OfType<Button>().Single();
+
+                static void AssertLayoutFits(Form targetForm, FlowLayoutPanel topPanel, ComboBox combo, TextBox searchBox,
+                    Button refreshBtn, DataGridView grid, Label statusLabel, Button closeBtn)
+                {
+                    Assert.True(combo.Width >= TextRenderer.MeasureText("全部 Provider", combo.Font).Width + 20,
+                        $"ComboBox 宽度不足以完整显示文字: Width={combo.Width}");
+                    Assert.True(searchBox.Width >= TextRenderer.MeasureText("按模型名称搜索…", searchBox.Font).Width + 12,
+                        $"搜索框宽度不足: Width={searchBox.Width}");
+                    Assert.True(refreshBtn.Width >= TextRenderer.MeasureText(refreshBtn.Text, refreshBtn.Font).Width + 12,
+                        $"刷新按钮宽度不足: Width={refreshBtn.Width}");
+                    Assert.True(combo.Bottom <= topPanel.ClientSize.Height, $"ComboBox 底部超出顶部工具栏: Bottom={combo.Bottom}, TopH={topPanel.ClientSize.Height}");
+                    Assert.True(searchBox.Bottom <= topPanel.ClientSize.Height, $"搜索框底部超出顶部工具栏: Bottom={searchBox.Bottom}, TopH={topPanel.ClientSize.Height}");
+                    Assert.True(refreshBtn.Bottom <= topPanel.ClientSize.Height, $"刷新按钮底部超出顶部工具栏: Bottom={refreshBtn.Bottom}, TopH={topPanel.ClientSize.Height}");
+
+                    var headerFont = grid.ColumnHeadersDefaultCellStyle.Font ?? grid.Font;
+                    var headerTextH = TextRenderer.MeasureText("模型模式 (Pattern)", headerFont).Height;
+                    Assert.True(grid.ColumnHeadersHeight >= headerTextH + grid.ColumnHeadersDefaultCellStyle.Padding.Vertical,
+                        $"表头高度不足导致裁剪: HeaderH={grid.ColumnHeadersHeight}, TextH={headerTextH}");
+
+                    foreach (DataGridViewColumn col in grid.Columns)
+                    {
+                        var textW = TextRenderer.MeasureText(col.HeaderText, headerFont).Width;
+                        Assert.True(col.Width >= textW + grid.ColumnHeadersDefaultCellStyle.Padding.Horizontal,
+                            $"列 {col.HeaderText} 宽度不足: Width={col.Width}, TextW={textW}");
+                    }
+
+                    var cellFont = grid.DefaultCellStyle.Font ?? grid.Font;
+                    var cellTextH = TextRenderer.MeasureText("Agpy0123", cellFont).Height;
+                    Assert.True(grid.Rows.Count > 0);
+                    foreach (DataGridViewRow row in grid.Rows)
+                    {
+                        Assert.True(row.Height >= cellTextH + grid.DefaultCellStyle.Padding.Vertical,
+                            $"第 {row.Index} 行高不足导致文字截断: RowH={row.Height}, TextH={cellTextH}");
+                    }
+
+                    Assert.True(closeBtn.Width >= TextRenderer.MeasureText(closeBtn.Text, closeBtn.Font).Width + 12);
+                    Assert.True(statusLabel.Right <= closeBtn.Left + 2);
+                    Assert.True(closeBtn.Bottom <= targetForm.ClientSize.Height);
+                }
+
+                AssertLayoutFits(form, topPanel, combo, searchBox, refreshBtn, grid, statusLabel, closeBtn);
+
+                var terraRow = grid.Rows.Cast<DataGridViewRow>()
+                    .FirstOrDefault(r => string.Equals(r.Cells[0].Value?.ToString(), "Codex", StringComparison.Ordinal) &&
+                                         string.Equals(r.Cells[1].Value?.ToString(), "gpt-6.1-terra", StringComparison.Ordinal));
+                Assert.NotNull(terraRow);
+                Assert.Equal("$1", terraRow!.Cells[3].Value);
+                Assert.Equal("$0.05", terraRow.Cells[4].Value);
+                Assert.Equal("$1.25", terraRow.Cells[5].Value);
+                Assert.Equal("$5", terraRow.Cells[6].Value);
+
+                var terraFastRow = grid.Rows.Cast<DataGridViewRow>()
+                    .FirstOrDefault(r => string.Equals(r.Cells[0].Value?.ToString(), "Codex", StringComparison.Ordinal) &&
+                                         string.Equals(r.Cells[1].Value?.ToString(), "gpt-6.1-terra-fast*", StringComparison.Ordinal));
+                Assert.NotNull(terraFastRow);
+                Assert.Equal("$0.125", terraFastRow!.Cells[4].Value);
+                Assert.Equal("$3.125", terraFastRow.Cells[5].Value);
+
+                form.Font = largeFont;
+                Application.DoEvents();
+                AssertLayoutFits(form, topPanel, combo, searchBox, refreshBtn, grid, statusLabel, closeBtn);
+                form.Font = restoredFont;
+
+                searchBox.Text = "gpt-6.1-terra";
+                Application.DoEvents();
+                Assert.Equal(5, grid.Rows.Count);
+                Assert.All(grid.Rows.Cast<DataGridViewRow>(), r =>
+                    Assert.Contains("gpt-6.1-terra", r.Cells[1].Value?.ToString(), StringComparison.OrdinalIgnoreCase));
+
+                using var bmp = new Bitmap(form.Width, form.Height);
+                form.DrawToBitmap(bmp, new Rectangle(0, 0, form.Width, form.Height));
+                form.Close();
+                Application.DoEvents();
+            }
+            catch (Exception ex)
+            {
+                threadEx = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (threadEx is not null)
+            throw new Exception("PricingViewerForm layout test failed", threadEx);
     }
 }
 

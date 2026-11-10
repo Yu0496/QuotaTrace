@@ -20,7 +20,7 @@ public sealed class PricingService
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public const int DefaultDocumentVersion = 11;
+    public const int DefaultDocumentVersion = 12;
 
     public string FilePath { get; }
     public PricingDocument Document { get; private set; }
@@ -176,26 +176,39 @@ public sealed class PricingService
         var legacy = ReadEmbedded("legacy-pricing.json");
         var rules = new List<PricingRule>();
         var custom = new List<PricingRule>();
+        static bool SameKey(PricingRule a, PricingRule b) =>
+            a.Provider.Equals(b.Provider, StringComparison.OrdinalIgnoreCase) &&
+            a.ModelPattern.Equals(b.ModelPattern, StringComparison.OrdinalIgnoreCase) &&
+            a.MatchMode == b.MatchMode;
+
         foreach (var rule in document.Rules)
         {
             // Upgrade only shipped rates; retain separately configured user rates.
-            var old = legacy.Rules.FirstOrDefault(r => r.Provider.Equals(rule.Provider, StringComparison.OrdinalIgnoreCase) &&
-                r.ModelPattern.Equals(rule.ModelPattern, StringComparison.OrdinalIgnoreCase) && r.MatchMode == rule.MatchMode &&
+            var old = legacy.Rules.FirstOrDefault(r => SameKey(r, rule) &&
                 r.InputPerMillionUsd == rule.InputPerMillionUsd && r.CacheReadPerMillionUsd == rule.CacheReadPerMillionUsd &&
                 r.CacheWritePerMillionUsd == rule.CacheWritePerMillionUsd && r.OutputPerMillionUsd == rule.OutputPerMillionUsd &&
                 r.SourceUrl == rule.SourceUrl && SamePrices(r, rule));
             if (document.SchemaVersion < DefaultDocumentVersion && old is not null)
             {
-                var replacement = template.Rules.FirstOrDefault(r => r.Provider == rule.Provider &&
-                    (r.ModelPattern == rule.ModelPattern || r.ModelPattern == rule.ModelPattern.TrimEnd('*')));
-                if (replacement is not null) { rules.Add(replacement); continue; }
+                var replacement =
+                    template.Rules.FirstOrDefault(r => SameKey(r, rule)) ??
+                    template.Rules.FirstOrDefault(r => r.Provider.Equals(rule.Provider, StringComparison.OrdinalIgnoreCase) &&
+                        r.ModelPattern.Equals(rule.ModelPattern.TrimEnd('*'), StringComparison.OrdinalIgnoreCase));
+                if (replacement is not null)
+                {
+                    if (!rules.Any(r => SameKey(r, replacement))) rules.Add(replacement);
+                    continue;
+                }
             }
-            rules.Add(rule);
-            if (old is null && !template.Rules.Any(r => SamePrices(r, rule) && r.ModelPattern == rule.ModelPattern)) custom.Add(rule);
+            if (!rules.Any(r => SameKey(r, rule)))
+            {
+                rules.Add(rule);
+                if (old is null && !template.Rules.Any(r => SamePrices(r, rule) && r.ModelPattern == rule.ModelPattern)) custom.Add(rule);
+            }
         }
         foreach (var rule in template.Rules)
-            if (!rules.Any(r => r.Provider == rule.Provider && r.ModelPattern == rule.ModelPattern && r.MatchMode == rule.MatchMode) &&
-                !custom.Any(r => r.Provider == rule.Provider && PricingMatcher.Matches(r, rule.ModelPattern.TrimEnd('*'))))
+            if (!rules.Any(r => SameKey(r, rule)) &&
+                !custom.Any(r => r.Provider.Equals(rule.Provider, StringComparison.OrdinalIgnoreCase) && PricingMatcher.Matches(r, rule.ModelPattern.TrimEnd('*'))))
                 rules.Add(rule);
         return new PricingDocument(Math.Max(DefaultDocumentVersion, document.SchemaVersion), template.LastVerifiedAt, rules);
     }
