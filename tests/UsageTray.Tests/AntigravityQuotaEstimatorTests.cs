@@ -23,6 +23,8 @@ public sealed class AntigravityQuotaEstimatorTests
     {
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-3.7-flash"));
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-2.5-pro"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-hydrogen"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-carbon"));
         Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon"));
         Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon-trial"));
         Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("argon"));

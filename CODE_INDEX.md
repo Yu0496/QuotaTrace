@@ -34,7 +34,7 @@ graph TD
 | 项目 / 目录 | 输出类型 | 核心职责 |
 | :--- | :--- | :--- |
 | [`src/UsageTray/`](src/UsageTray) | WinExe (WinForms) | 主应用程序，包含托盘交互、高 DPI 界面、数据解析、SQLite 存储、计价引擎与调度。 |
-| [`tests/UsageTray.Tests/`](tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码与损坏输入拒绝、Antigravity 令牌端口隔离、会话归一化、额度周期预估、Codex 周历史重构、抖动聚合与提前重置防分裂、分模型独立测算、锚点切片用量防丢失、跨设备断层样本过滤、周历史集成、GPT-6.1 Sol/Luna/Terra 与 Gemini 3.8 Flash N 规则及迁移去重、`PricingViewerForm` 高 DPI 防截断布局、Antigravity Argon 专属额度恢复与基于实际扣减额度自动区分模型池、Antigravity 延迟首快照防满额倒挂与分母丢失平滑校准、Antigravity 大数据集秒级估算性能基准、Antigravity 分模型周满额投影、GitHub Release 自动升级解析与版本比对、DisplayName 推断及多语言/Provider 开关测试等 209 项测试。 |
+| [`tests/UsageTray.Tests/`](tests/UsageTray.Tests) | Class Library (xUnit) | 单元与回归测试套件，涵盖计价、Protobuf 解码与损坏输入拒绝、Antigravity 令牌端口隔离、会话归一化、额度周期预估、Codex 周历史重构、抖动聚合与提前重置防分裂、分模型独立测算、锚点切片用量防丢失、跨设备断层样本过滤、周历史集成、GPT-6.1 Sol/Luna/Terra 与 Gemini 3.8 Flash N / Gemini 4 Hydrogen / Carbon 规则及迁移去重、`PricingViewerForm` 高 DPI 防截断布局、Antigravity Argon 专属额度恢复与基于实际扣减额度自动区分模型池、Antigravity 延迟首快照防满额倒挂与分母丢失平滑校准、Antigravity 大数据集秒级估算性能基准、Antigravity 分模型周满额投影、GitHub Release 自动升级解析与版本比对、DisplayName 推断及多语言/Provider 开关测试等 210 项测试。 |
 | [`tools/AntigravityStatusRecorder/`](tools/AntigravityStatusRecorder) | Exe (Console) | 独立控制台工具，读取官方 status-line stdin JSON 并记录到本地存储。 |
 | [`tools/CodexAudit/`](tools/CodexAudit) | Exe (Console) | 离线 Codex 审计与 CSV 导出工具。 |
 
@@ -89,7 +89,7 @@ graph TD
 
 | 类名 | 路径 | 核心职责 |
 | :--- | :--- | :--- |
-| [`PricingService`](src/UsageTray/Pricing/PricingService.cs) | `src/UsageTray/Pricing/PricingService.cs` | 维护内存价格文档（Schema 12），提供通配符与别名精确匹配、模型阶梯加价计算、精确键优先热升级及重复键自动去重。 |
+| [`PricingService`](src/UsageTray/Pricing/PricingService.cs) | `src/UsageTray/Pricing/PricingService.cs` | 维护内存价格文档（Schema 13），提供通配符与别名精确匹配、模型阶梯加价计算、精确键优先热升级及重复键自动去重。 |
 | [`PricingMatcher`](src/UsageTray/Pricing/PricingMatcher.cs) | `src/UsageTray/Pricing/PricingMatcher.cs` | 模型名称规范化、别名映射与模式匹配引擎。 |
 | [`PricingUpdateService`](src/UsageTray/Pricing/PricingUpdateService.cs) | `src/UsageTray/Pricing/PricingUpdateService.cs` | 合并软件内置参考基准，保留自定义规则；不抓取 API 促销价覆盖订阅参考。 |
 

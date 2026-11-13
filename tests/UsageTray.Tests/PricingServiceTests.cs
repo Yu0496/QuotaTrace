@@ -126,10 +126,14 @@ public sealed class PricingServiceTests
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gpt-6.1-terra*" && r.MatchMode == MatchMode.Wildcard);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gpt-6-luna");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.8-flash");
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-hydrogen" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-hydrogen*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-carbon" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-carbon*" && r.MatchMode == MatchMode.Wildcard);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-4-6*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-5-5*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-opus-5-5*");
-        Assert.Equal(12, loaded.Document.SchemaVersion);
+        Assert.Equal(13, loaded.Document.SchemaVersion);
         Assert.Equal(PricingService.DefaultDocumentVersion, loaded.Document.SchemaVersion);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-pro-default*");
@@ -145,6 +149,11 @@ public sealed class PricingServiceTests
         Assert.Equal("claude-sonnet-4-5", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Claude Sonnet 4.5"));
         Assert.Equal("claude-opus", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Claude Opus"));
         Assert.Equal("gemini-3.8-flash", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.8 Flash (High)"));
+        Assert.Equal("gemini-4-hydrogen", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Hydrogen (XHigh)"));
+        Assert.Equal("gemini-4-hydrogen", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Hydrogen (High)"));
+        Assert.Equal("gemini-4-hydrogen", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Hydrogen"));
+        Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Carbon (High)"));
+        Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Carbon"));
         Assert.Equal("gemini-3.5-flash", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.5 Flash (High)"));
         Assert.Equal("gemini-3.1-pro", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.1 Pro (High)"));
         Assert.Equal("gpt-6-astra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Astra (Preview)"));
@@ -350,6 +359,47 @@ public sealed class PricingServiceTests
     }
 
     [Fact]
+    public void Gemini4HydrogenAndCarbonCalculateAccurateCostsAndMigrateCleanly()
+    {
+        using var workspace = new TempWorkspace();
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+
+        // 1. gemini-4-hydrogen: 2M input (1M uncached @ $1.5, 1M cacheRead @ $0.075) + 1M output @ $7.5 = $9.075
+        var hydrogenBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 13), null, "gemini-4-hydrogen",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        Assert.Equal(9.075m, pricing.Calculate(hydrogenBucket).CostUsd);
+
+        // 2. gemini-4-hydrogen with cache write + normalized/wildcard variants:
+        // 500k uncached @ $1.5 ($0.75) + 1M read @ $0.075 + 500k write @ $1.875 ($0.9375) + 1M output @ $7.5 = $9.2625
+        var hydrogenWriteBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 13), null, "gemini-4-hydrogen-xhigh",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 500_000, CostQuality.ExactTokenSplit);
+        Assert.Equal(9.2625m, pricing.Calculate(hydrogenWriteBucket).CostUsd);
+        Assert.Equal(9.075m, pricing.Calculate(hydrogenBucket with { ModelId = "Gemini 4 Hydrogen" }).CostUsd);
+
+        // 3. gemini-4-carbon: 2M input (1M uncached @ $4.0, 1M cacheRead @ $0.20) + 1M output @ $20.0 = $24.20
+        var carbonBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 13), null, "gemini-4-carbon",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        Assert.Equal(24.2m, pricing.Calculate(carbonBucket).CostUsd);
+        Assert.Equal(24.2m, pricing.Calculate(carbonBucket with { ModelId = "gemini-4-carbon-preview" }).CostUsd);
+
+        // 4. Schema 12 -> 13 迁移测试：自动补齐 gemini-4-hydrogen* 与 gemini-4-carbon* 且不重复规则
+        var v12Doc = PricingService.BuiltInDefaults() with
+        {
+            SchemaVersion = 12,
+            Rules = PricingService.BuiltInDefaults().Rules
+                .Where(r => !r.ModelPattern.StartsWith("gemini-4-hydrogen", StringComparison.OrdinalIgnoreCase) &&
+                            !r.ModelPattern.StartsWith("gemini-4-carbon", StringComparison.OrdinalIgnoreCase))
+                .ToList()
+        };
+        var migrated = new PricingService(workspace.File("v12.json"), v12Doc);
+        Assert.Equal(PricingService.DefaultDocumentVersion, migrated.Document.SchemaVersion);
+        Assert.Equal(1, migrated.Rules.Count(r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-hydrogen" && r.MatchMode == MatchMode.Exact));
+        Assert.Equal(1, migrated.Rules.Count(r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-hydrogen*" && r.MatchMode == MatchMode.Wildcard));
+        Assert.Equal(1, migrated.Rules.Count(r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-carbon" && r.MatchMode == MatchMode.Exact));
+        Assert.Equal(1, migrated.Rules.Count(r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-carbon*" && r.MatchMode == MatchMode.Wildcard));
+    }
+
+    [Fact]
     public void MigrateDocumentPreservesWildcardAndDeduplicatesClonedGpt6Rules()
     {
         using var workspace = new TempWorkspace();
@@ -472,6 +522,15 @@ public sealed class PricingServiceTests
                 Assert.NotNull(terraFastRow);
                 Assert.Equal("$0.125", terraFastRow!.Cells[4].Value);
                 Assert.Equal("$3.125", terraFastRow.Cells[5].Value);
+
+                var hydrogenRow = grid.Rows.Cast<DataGridViewRow>()
+                    .FirstOrDefault(r => string.Equals(r.Cells[0].Value?.ToString(), "Antigravity", StringComparison.Ordinal) &&
+                                         string.Equals(r.Cells[1].Value?.ToString(), "gemini-4-hydrogen", StringComparison.Ordinal));
+                Assert.NotNull(hydrogenRow);
+                Assert.Equal("$1.5", hydrogenRow!.Cells[3].Value);
+                Assert.Equal("$0.075", hydrogenRow.Cells[4].Value);
+                Assert.Equal("$1.875", hydrogenRow.Cells[5].Value);
+                Assert.Equal("$7.5", hydrogenRow.Cells[6].Value);
 
                 form.Font = largeFont;
                 Application.DoEvents();

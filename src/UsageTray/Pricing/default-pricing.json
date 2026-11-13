@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 12,
-  "lastVerifiedAt": "2026-11-10",
+  "schemaVersion": 13,
+  "lastVerifiedAt": "2026-11-13",
   "rules": [
     {
       "provider": "Codex",
@@ -1289,6 +1289,58 @@
       "lastVerifiedAt": "2026-09-08",
       "cacheSplitValidated": true,
       "unverifiedReason": "不同 Haiku 版本不能共用价格"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-4-hydrogen",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": 1.875,
+      "outputPerMillionUsd": 7.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-11-13",
+      "cacheSplitValidated": true,
+      "referenceBasis": "官方常规基准 $1.5/$0.075/$1.875/$7.5（1M 上下文统一费率）"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-4-hydrogen*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": 1.875,
+      "outputPerMillionUsd": 7.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-11-13",
+      "cacheSplitValidated": true,
+      "referenceBasis": "官方常规基准 $1.5/$0.075/$1.875/$7.5（1M 上下文统一费率）"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-4-carbon",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 4.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 20.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-11-13",
+      "cacheSplitValidated": true,
+      "referenceBasis": "官方常规基准 $4.0/$0.2/$20.0（1M 上下文统一费率，不采用截至 2026-11-30 的推广折扣）"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-4-carbon*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 4.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 20.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-11-13",
+      "cacheSplitValidated": true,
+      "referenceBasis": "官方常规基准 $4.0/$0.2/$20.0（1M 上下文统一费率，不采用截至 2026-11-30 的推广折扣）"
     },
     {
       "provider": "Antigravity",
