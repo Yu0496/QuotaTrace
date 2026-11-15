@@ -142,6 +142,22 @@ public sealed class AntigravitySqliteHistoryParser
         if (name.Contains("3.1") && name.Contains("pro")) return "gemini-3.1-pro";
         if (name.Contains("2.5") && name.Contains("pro")) return "gemini-2.5-pro";
         if (name.Contains("2.5") && name.Contains("flash")) return "gemini-2.5-flash";
+        if (name.Contains("orchestrator worker", StringComparison.Ordinal) ||
+            name.Contains("worker-agy", StringComparison.Ordinal) ||
+            string.Equals(name, "gemini flash", StringComparison.Ordinal))
+        {
+            return "gemini-flash-worker-agy";
+        }
+        if (name.Contains("orchestrator", StringComparison.Ordinal))
+        {
+            if (name.Contains("argon", StringComparison.Ordinal))
+            {
+                return name.Contains("g1-pro", StringComparison.Ordinal)
+                    ? "gemini-pro-orchestrator-g1-pro"
+                    : "gemini-pro-orchestrator-argon";
+            }
+            return "gemini-pro-orchestrator";
+        }
         if (name.Contains("hydrogen", StringComparison.Ordinal)) return "gemini-4-hydrogen";
         if (name.Contains("carbon", StringComparison.Ordinal)) return "gemini-4-carbon";
         if (name.Contains("gemini") && name.Contains("pro")) return "gemini-3.1-pro";

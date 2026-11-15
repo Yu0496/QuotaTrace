@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 13,
-  "lastVerifiedAt": "2026-11-13",
+  "schemaVersion": 14,
+  "lastVerifiedAt": "2026-11-15",
   "rules": [
     {
       "provider": "Codex",
@@ -1318,6 +1318,32 @@
     },
     {
       "provider": "Antigravity",
+      "modelPattern": "gemini-flash-worker-agy",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": 1.875,
+      "outputPerMillionUsd": 7.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-11-15",
+      "cacheSplitValidated": true,
+      "referenceBasis": "Orchestrator 委托 Worker 模型，按 Gemini 4 Hydrogen 官方常规基准 $1.5/$0.075/$1.875/$7.5（1M 上下文统一费率）"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-flash-worker-agy*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 1.5,
+      "cacheReadPerMillionUsd": 0.075,
+      "cacheWritePerMillionUsd": 1.875,
+      "outputPerMillionUsd": 7.5,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-11-15",
+      "cacheSplitValidated": true,
+      "referenceBasis": "Orchestrator 委托 Worker 模型，按 Gemini 4 Hydrogen 官方常规基准 $1.5/$0.075/$1.875/$7.5（1M 上下文统一费率）"
+    },
+    {
+      "provider": "Antigravity",
       "modelPattern": "gemini-4-carbon",
       "matchMode": "Exact",
       "inputPerMillionUsd": 4.0,
@@ -1344,6 +1370,19 @@
     },
     {
       "provider": "Antigravity",
+      "modelPattern": "gemini-pro-orchestrator",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 4.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 20.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-11-15",
+      "cacheSplitValidated": true,
+      "referenceBasis": "Ultra 订阅 Orchestrator (Carbon) 模式，按 Gemini 4 Carbon 官方常规基准 $4.0/$0.2/$20.0（1M 上下文统一费率）"
+    },
+    {
+      "provider": "Antigravity",
       "modelPattern": "gemini-4-argon*",
       "matchMode": "Wildcard",
       "inputPerMillionUsd": 2.0,
@@ -1354,6 +1393,58 @@
       "lastVerifiedAt": "2026-10-17",
       "cacheSplitValidated": true,
       "referenceBasis": "非促销 Token 参考基准"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro-orchestrator-g1-pro",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/pricing",
+      "lastVerifiedAt": "2026-11-15",
+      "cacheSplitValidated": true,
+      "referenceBasis": "Pro 订阅 Orchestrator (Argon) 模式，按 Gemini 4 Argon 非促销 Token 参考基准计价（$2.0/$0.5/$2.5/$10.0）"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro-orchestrator-g1-pro*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/pricing",
+      "lastVerifiedAt": "2026-11-15",
+      "cacheSplitValidated": true,
+      "referenceBasis": "Pro 订阅 Orchestrator (Argon) 模式，按 Gemini 4 Argon 非促销 Token 参考基准计价（$2.0/$0.5/$2.5/$10.0）"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro-orchestrator-argon",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/pricing",
+      "lastVerifiedAt": "2026-11-15",
+      "cacheSplitValidated": true,
+      "referenceBasis": "Ultra 订阅 Orchestrator (Argon) 模式，按 Gemini 4 Argon 非促销 Token 参考基准计价（$2.0/$0.5/$2.5/$10.0）"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro-orchestrator-argon*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 2.0,
+      "cacheReadPerMillionUsd": 0.5,
+      "cacheWritePerMillionUsd": 2.5,
+      "outputPerMillionUsd": 10.0,
+      "sourceUrl": "https://ai.google.dev/pricing",
+      "lastVerifiedAt": "2026-11-15",
+      "cacheSplitValidated": true,
+      "referenceBasis": "Ultra 订阅 Orchestrator (Argon) 模式，按 Gemini 4 Argon 非促销 Token 参考基准计价（$2.0/$0.5/$2.5/$10.0）"
     },
     {
       "provider": "Antigravity",

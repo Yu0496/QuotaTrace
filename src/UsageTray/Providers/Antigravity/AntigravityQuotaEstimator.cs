@@ -19,7 +19,8 @@ public sealed class AntigravityQuotaEstimator
     {
         if (string.IsNullOrWhiteSpace(modelId)) return false;
         var model = modelId.Trim();
-        return model.Contains("argon", StringComparison.OrdinalIgnoreCase);
+        return model.Contains("argon", StringComparison.OrdinalIgnoreCase)
+            || model.Equals("gemini-pro-orchestrator-g1-pro", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsClaudeOrGpt(string modelId)

@@ -128,12 +128,20 @@ public sealed class PricingServiceTests
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.8-flash");
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-hydrogen" && r.MatchMode == MatchMode.Exact);
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-hydrogen*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-flash-worker-agy" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-flash-worker-agy*" && r.MatchMode == MatchMode.Wildcard);
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-carbon" && r.MatchMode == MatchMode.Exact);
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-carbon*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator" && r.MatchMode == MatchMode.Exact);
+        Assert.DoesNotContain(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-g1-pro" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-g1-pro*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-argon" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-argon*" && r.MatchMode == MatchMode.Wildcard);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-4-6*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-5-5*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-opus-5-5*");
-        Assert.Equal(13, loaded.Document.SchemaVersion);
+        Assert.Equal(14, loaded.Document.SchemaVersion);
         Assert.Equal(PricingService.DefaultDocumentVersion, loaded.Document.SchemaVersion);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-pro-default*");
@@ -154,6 +162,11 @@ public sealed class PricingServiceTests
         Assert.Equal("gemini-4-hydrogen", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Hydrogen"));
         Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Carbon (High)"));
         Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Carbon"));
+        Assert.Equal("gemini-flash-worker-agy", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini Flash"));
+        Assert.Equal("gemini-flash-worker-agy", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini Flash (Orchestrator Worker)"));
+        Assert.Equal("gemini-pro-orchestrator", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Orchestrator"));
+        Assert.Equal("gemini-pro-orchestrator", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Orchestrator (Carbon)"));
+        Assert.Equal("gemini-pro-orchestrator-argon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Orchestrator (Argon)"));
         Assert.Equal("gemini-3.5-flash", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.5 Flash (High)"));
         Assert.Equal("gemini-3.1-pro", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 3.1 Pro (High)"));
         Assert.Equal("gpt-6-astra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Astra (Preview)"));
@@ -400,6 +413,63 @@ public sealed class PricingServiceTests
     }
 
     [Fact]
+    public void OrchestratorAndWorkerModelsCalculateAccurateCostsAndMigrateFromV13Cleanly()
+    {
+        using var workspace = new TempWorkspace();
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+
+        // 1. gemini-flash-worker-agy（按 Hydrogen 计价：$1.5 / $0.075 / $1.875 / $7.5）
+        var workerBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 15), null, "gemini-flash-worker-agy",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        Assert.Equal(9.075m, pricing.Calculate(workerBucket).CostUsd);
+        Assert.Equal(9.2625m, pricing.Calculate(workerBucket with { ModelId = "gemini-flash-worker-agy-high", CacheWriteInputTokens = 500_000 }).CostUsd);
+
+        // 2. Pro Orchestrator (Argon): gemini-pro-orchestrator-g1-pro 与 Ultra Argon: gemini-pro-orchestrator-argon（按 Argon 计价：$2.0 / $0.5 / $2.5 / $10.0）
+        var proArgonBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 15), null, "gemini-pro-orchestrator-g1-pro",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        Assert.Equal(12.5m, pricing.Calculate(proArgonBucket).CostUsd);
+        Assert.Equal(12.75m, pricing.Calculate(proArgonBucket with { CacheWriteInputTokens = 500_000 }).CostUsd);
+        Assert.Equal(12.5m, pricing.Calculate(proArgonBucket with { ModelId = "gemini-pro-orchestrator-argon" }).CostUsd);
+
+        // 3. Ultra Orchestrator (Carbon): gemini-pro-orchestrator（按 Carbon 计价：$4.0 / $0.2 / $20.0）
+        var ultraCarbonBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 15), null, "gemini-pro-orchestrator",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        Assert.Equal(24.2m, pricing.Calculate(ultraCarbonBucket).CostUsd);
+
+        // 4. 未知后缀不误匹配 Carbon（Exact-only 保护，回退至 gemini-pro* 未核验拦截）
+        var unknownVariant = pricing.Calculate(ultraCarbonBucket with { ModelId = "gemini-pro-orchestrator-unknown" });
+        Assert.Equal(CostQuality.Unavailable, unknownVariant.Quality);
+        Assert.Null(unknownVariant.CostUsd);
+        Assert.Equal("gemini-pro*", unknownVariant.Rule?.ModelPattern);
+        Assert.Equal("动态默认模型未核验", unknownVariant.Rule?.UnverifiedReason);
+
+        // 5. Schema 13 -> 14 迁移测试：自动补齐新规则且不重复
+        var newPatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "gemini-flash-worker-agy",
+            "gemini-flash-worker-agy*",
+            "gemini-pro-orchestrator",
+            "gemini-pro-orchestrator-g1-pro",
+            "gemini-pro-orchestrator-g1-pro*",
+            "gemini-pro-orchestrator-argon",
+            "gemini-pro-orchestrator-argon*"
+        };
+        var v13Doc = PricingService.BuiltInDefaults() with
+        {
+            SchemaVersion = 13,
+            Rules = PricingService.BuiltInDefaults().Rules
+                .Where(r => !newPatterns.Contains(r.ModelPattern))
+                .ToList()
+        };
+        var migrated = new PricingService(workspace.File("v13.json"), v13Doc);
+        Assert.Equal(PricingService.DefaultDocumentVersion, migrated.Document.SchemaVersion);
+        foreach (var pattern in newPatterns)
+        {
+            Assert.Equal(1, migrated.Rules.Count(r => r.Provider == "Antigravity" && r.ModelPattern == pattern));
+        }
+    }
+
+    [Fact]
     public void MigrateDocumentPreservesWildcardAndDeduplicatesClonedGpt6Rules()
     {
         using var workspace = new TempWorkspace();
@@ -531,6 +601,32 @@ public sealed class PricingServiceTests
                 Assert.Equal("$0.075", hydrogenRow.Cells[4].Value);
                 Assert.Equal("$1.875", hydrogenRow.Cells[5].Value);
                 Assert.Equal("$7.5", hydrogenRow.Cells[6].Value);
+
+                var workerRow = grid.Rows.Cast<DataGridViewRow>()
+                    .FirstOrDefault(r => string.Equals(r.Cells[0].Value?.ToString(), "Antigravity", StringComparison.Ordinal) &&
+                                         string.Equals(r.Cells[1].Value?.ToString(), "gemini-flash-worker-agy", StringComparison.Ordinal));
+                Assert.NotNull(workerRow);
+                Assert.Equal("$1.5", workerRow!.Cells[3].Value);
+                Assert.Equal("$0.075", workerRow.Cells[4].Value);
+                Assert.Equal("$1.875", workerRow.Cells[5].Value);
+                Assert.Equal("$7.5", workerRow.Cells[6].Value);
+
+                var proOrchestratorRow = grid.Rows.Cast<DataGridViewRow>()
+                    .FirstOrDefault(r => string.Equals(r.Cells[0].Value?.ToString(), "Antigravity", StringComparison.Ordinal) &&
+                                         string.Equals(r.Cells[1].Value?.ToString(), "gemini-pro-orchestrator-g1-pro", StringComparison.Ordinal));
+                Assert.NotNull(proOrchestratorRow);
+                Assert.Equal("$2", proOrchestratorRow!.Cells[3].Value);
+                Assert.Equal("$0.5", proOrchestratorRow.Cells[4].Value);
+                Assert.Equal("$2.5", proOrchestratorRow.Cells[5].Value);
+                Assert.Equal("$10", proOrchestratorRow.Cells[6].Value);
+
+                var ultraOrchestratorRow = grid.Rows.Cast<DataGridViewRow>()
+                    .FirstOrDefault(r => string.Equals(r.Cells[0].Value?.ToString(), "Antigravity", StringComparison.Ordinal) &&
+                                         string.Equals(r.Cells[1].Value?.ToString(), "gemini-pro-orchestrator", StringComparison.Ordinal));
+                Assert.NotNull(ultraOrchestratorRow);
+                Assert.Equal("$4", ultraOrchestratorRow!.Cells[3].Value);
+                Assert.Equal("$0.2", ultraOrchestratorRow.Cells[4].Value);
+                Assert.Equal("$20", ultraOrchestratorRow.Cells[6].Value);
 
                 form.Font = largeFont;
                 Application.DoEvents();

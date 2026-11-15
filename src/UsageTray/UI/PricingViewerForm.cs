@@ -313,7 +313,7 @@ public sealed class PricingViewerForm : Form
             var columnSpecs = new (int MinBasePx, string Sample)[]
             {
                 (96, "Antigravity"),
-                (200, "gemini-3.6-flash-tiered*"),
+                (200, "gemini-pro-orchestrator-g1-pro*"),
                 (88, "Wildcard"),
                 (84, "$100.00"),
                 (88, "$0.3125"),

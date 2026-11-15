@@ -25,7 +25,11 @@ public sealed class AntigravityQuotaEstimatorTests
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-2.5-pro"));
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-hydrogen"));
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-carbon"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-flash-worker-agy"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator"));
         Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon"));
+        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-g1-pro"));
+        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-argon"));
         Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon-trial"));
         Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("argon"));
         Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("argon-pro"));
@@ -38,10 +42,16 @@ public sealed class AntigravityQuotaEstimatorTests
         // 场景 1：无 Argon 独立配额桶（如 Ultra 计划用户）-> 归入 gemini
         var geminiSnap = new QuotaSnapshot(ProviderKind.Antigravity, DateTimeOffset.UtcNow, "gemini-weekly", "Gemini Models", 0.75, DateTimeOffset.UtcNow.AddDays(5), "weekly", "src", "Ultra");
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon", [geminiSnap]));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-argon", [geminiSnap]));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-g1-pro", [geminiSnap]));
 
         // 场景 2：Argon 独立配额桶发生实际扣减（如 Pro 计划用户消耗至 0.6138）-> 归入 argon 专属池
         var argonDeductedSnap = new QuotaSnapshot(ProviderKind.Antigravity, DateTimeOffset.UtcNow, "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.6138, DateTimeOffset.UtcNow.AddDays(5), "weekly", "src", "Pro");
         Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon", [geminiSnap, argonDeductedSnap]));
+        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-g1-pro", [geminiSnap, argonDeductedSnap]));
+        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-argon", [geminiSnap, argonDeductedSnap]));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-flash-worker-agy", [geminiSnap, argonDeductedSnap]));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator", [geminiSnap, argonDeductedSnap]));
 
         // 场景 3：Argon 桶未实质扣减（0.998），而 Gemini 扣减显著（0.75，降幅 25%），且存在 Argon 生成请求 -> 自动归入 gemini
         var argonFrozenSnap = new QuotaSnapshot(ProviderKind.Antigravity, DateTimeOffset.UtcNow, "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.998, DateTimeOffset.UtcNow.AddDays(5), "weekly", "src", "Pro");
