@@ -138,10 +138,16 @@ public sealed class PricingServiceTests
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-g1-pro*" && r.MatchMode == MatchMode.Wildcard);
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-argon" && r.MatchMode == MatchMode.Exact);
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-argon*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Codex" && r.ModelPattern == "gpt-6.2-astra" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Codex" && r.ModelPattern == "gpt-6.2-astra-fast*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Codex" && r.ModelPattern == "gpt-6.2-sol" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gpt-6.2-sol*" && r.MatchMode == MatchMode.Wildcard);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-neon" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-neon*" && r.MatchMode == MatchMode.Wildcard);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-4-6*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-5-5*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-opus-5-5*");
-        Assert.Equal(14, loaded.Document.SchemaVersion);
+        Assert.Equal(15, loaded.Document.SchemaVersion);
         Assert.Equal(PricingService.DefaultDocumentVersion, loaded.Document.SchemaVersion);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-pro-default*");
@@ -162,6 +168,8 @@ public sealed class PricingServiceTests
         Assert.Equal("gemini-4-hydrogen", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Hydrogen"));
         Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Carbon (High)"));
         Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Carbon"));
+        Assert.Equal("gemini-4-neon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Neon (XHigh)"));
+        Assert.Equal("gemini-4-neon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Neon"));
         Assert.Equal("gemini-flash-worker-agy", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini Flash"));
         Assert.Equal("gemini-flash-worker-agy", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini Flash (Orchestrator Worker)"));
         Assert.Equal("gemini-pro-orchestrator", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Orchestrator"));
@@ -173,6 +181,8 @@ public sealed class PricingServiceTests
         Assert.Equal("gpt-6-sol", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Sol (Preview)"));
         Assert.Equal("gpt-6.1-terra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6.1 Terra (Thinking)"));
         Assert.Equal("gpt-6.1-terra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Terra"));
+        Assert.Equal("gpt-6.2-astra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6.2 Astra (High)"));
+        Assert.Equal("gpt-6.2-sol", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6.2 Sol (Thinking)"));
         Assert.Equal("gpt-5.6-terra", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-5.6 Terra"));
         Assert.Equal("gpt-6-luna", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("GPT-6 Luna (Thinking)"));
         Assert.Equal("gpt-6-sol", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Sol"));
@@ -369,6 +379,108 @@ public sealed class PricingServiceTests
         var agBucket = stdBucket with { Provider = ProviderKind.Antigravity };
         Assert.Equal(6.05m, pricing.Calculate(agBucket).CostUsd);
         Assert.Equal(6.05m, pricing.Calculate(agBucket with { ModelId = "gpt-6.1-terra-preview" }).CostUsd);
+    }
+
+    [Fact]
+    public void Gpt62AstraAndSolCalculateAccurateCostsAndMigrateFromV14Cleanly()
+    {
+        using var workspace = new TempWorkspace();
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+
+        // 1. gpt-6.2-astra 标准档: 2M input (1M uncached @ $8.0, 1M cached @ $0.4) + 1M output @ $40.0 = $48.40
+        var astraBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 11, 19), null, "gpt-6.2-astra",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        Assert.Equal(48.4m, pricing.Calculate(astraBucket).CostUsd);
+
+        // 2. gpt-6.2-astra 含 cache write: 1M uncached @ $8.0 + 500k read @ $0.4 + 500k write @ $10.0 + 1M output @ $40.0 = $53.20
+        var astraWriteBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 11, 19), null, "gpt-6.2-astra",
+            2_000_000, 500_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 500_000, CostQuality.ExactTokenSplit);
+        Assert.Equal(53.2m, pricing.Calculate(astraWriteBucket).CostUsd);
+
+        // 3. gpt-6.2-astra 长上下文 (>272K): 300k uncached @ $16.0 + 200k read @ $0.8 + 100k output @ $60.0 = $10.96
+        var astraLongBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 11, 19), null, "gpt-6.2-astra",
+            500_000, 200_000, 100_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit,
+            null, 1, 0, 500_000, 200_000, 0, 100_000, true);
+        Assert.Equal(10.96m, pricing.Calculate(astraLongBucket).CostUsd);
+
+        // 4. gpt-6.2-astra Fast 档位与 Fast 模型后缀: 1M uncached @ $20.0 + 1M cached @ $1.0 + 1M output @ $100.0 = $121.00
+        Assert.Equal(121.0m, pricing.Calculate(astraBucket with { ServiceTier = "fast" }).CostUsd);
+        Assert.Equal(121.0m, pricing.Calculate(astraBucket with { ModelId = "gpt-6.2-astra-fast" }).CostUsd);
+
+        // 5. gpt-6.2-astra 长上下文 Fast: 300k uncached @ $40.0 + 200k read @ $2.0 + 100k output @ $150.0 = $27.40
+        Assert.Equal(27.4m, pricing.Calculate(astraLongBucket with { ServiceTier = "fast" }).CostUsd);
+
+        // 6. gpt-6.2-sol 标准档: 2M input (1M uncached @ $2.0, 1M cached @ $0.1) + 1M output @ $10.0 = $12.10
+        var solBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 11, 19), null, "gpt-6.2-sol",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        Assert.Equal(12.1m, pricing.Calculate(solBucket).CostUsd);
+
+        // 7. gpt-6.2-sol 含 cache write: 1M uncached @ $2.0 + 500k read @ $0.1 + 500k write @ $2.5 + 1M output @ $10.0 = $13.30
+        var solWriteBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 11, 19), null, "gpt-6.2-sol",
+            2_000_000, 500_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 500_000, CostQuality.ExactTokenSplit);
+        Assert.Equal(13.3m, pricing.Calculate(solWriteBucket).CostUsd);
+
+        // 8. gpt-6.2-sol 长上下文 (>272K): 300k uncached @ $4.0 + 200k read @ $0.2 + 100k output @ $15.0 = $2.74
+        var solLongBucket = new UsageBucket(ProviderKind.Codex, new DateOnly(2026, 11, 19), null, "gpt-6.2-sol",
+            500_000, 200_000, 100_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit,
+            null, 1, 0, 500_000, 200_000, 0, 100_000, true);
+        Assert.Equal(2.74m, pricing.Calculate(solLongBucket).CostUsd);
+
+        // 9. gpt-6.2-sol Fast 档位与长上下文 Fast: $30.25 / $6.85
+        Assert.Equal(30.25m, pricing.Calculate(solBucket with { ServiceTier = "fast" }).CostUsd);
+        Assert.Equal(6.85m, pricing.Calculate(solLongBucket with { ServiceTier = "fast" }).CostUsd);
+
+        // 10. Antigravity GPT-6.2 变体通配计价
+        var agAstraBucket = astraBucket with { Provider = ProviderKind.Antigravity };
+        Assert.Equal(48.4m, pricing.Calculate(agAstraBucket).CostUsd);
+        Assert.Equal(48.4m, pricing.Calculate(agAstraBucket with { ModelId = "gpt-6.2-astra-preview" }).CostUsd);
+        Assert.Equal(12.1m, pricing.Calculate(agAstraBucket with { ModelId = "gpt-6.2-sol" }).CostUsd);
+
+        // 11. Schema 14 -> 15 迁移测试：自动补齐 GPT-6.2 与 Neon 规则且不重复
+        var newRuleKeys = new (string Provider, string Pattern)[]
+        {
+            ("Codex", "gpt-6.2-astra"),
+            ("Codex", "gpt-6.2-astra*"),
+            ("Codex", "gpt-6.2-astra-fast*"),
+            ("Codex", "gpt-6.2-sol"),
+            ("Codex", "gpt-6.2-sol*"),
+            ("Codex", "gpt-6.2-sol-fast*"),
+            ("Antigravity", "gpt-6.2-astra"),
+            ("Antigravity", "gpt-6.2-astra*"),
+            ("Antigravity", "gpt-6.2-sol"),
+            ("Antigravity", "gpt-6.2-sol*"),
+            ("Antigravity", "gemini-4-neon"),
+            ("Antigravity", "gemini-4-neon*")
+        };
+        var newPatterns = new HashSet<string>(newRuleKeys.Select(k => k.Pattern), StringComparer.OrdinalIgnoreCase);
+        var v14Doc = PricingService.BuiltInDefaults() with
+        {
+            SchemaVersion = 14,
+            Rules = PricingService.BuiltInDefaults().Rules
+                .Where(r => !newPatterns.Contains(r.ModelPattern))
+                .ToList()
+        };
+        var migrated = new PricingService(workspace.File("v14.json"), v14Doc);
+        Assert.Equal(15, migrated.Document.SchemaVersion);
+        foreach (var (provider, pattern) in newRuleKeys)
+        {
+            Assert.Equal(1, migrated.Rules.Count(r => r.Provider == provider && r.ModelPattern == pattern));
+        }
+    }
+
+    [Fact]
+    public void Gemini4NeonCalculatesAccurateCostAndMatchesWildcardVariants()
+    {
+        var pricing = new PricingService("dummy", PricingService.BuiltInDefaults());
+
+        // gemini-4-neon: 2M input (1M uncached @ $3.0, 1M cacheRead @ $0.15) + 1M output @ $15.0 = $18.15
+        var bucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 19), null, "gemini-4-neon",
+            2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
+        Assert.Equal(18.15m, pricing.Calculate(bucket).CostUsd);
+
+        // 变体后缀与显示名归一化均命中通配规则
+        Assert.Equal(18.15m, pricing.Calculate(bucket with { ModelId = "gemini-4-neon-xhigh" }).CostUsd);
+        Assert.Equal(18.15m, pricing.Calculate(bucket with { ModelId = "Gemini 4 Neon" }).CostUsd);
     }
 
     [Fact]

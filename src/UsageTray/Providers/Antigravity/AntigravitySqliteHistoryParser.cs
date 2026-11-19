@@ -160,9 +160,12 @@ public sealed class AntigravitySqliteHistoryParser
         }
         if (name.Contains("hydrogen", StringComparison.Ordinal)) return "gemini-4-hydrogen";
         if (name.Contains("carbon", StringComparison.Ordinal)) return "gemini-4-carbon";
+        if (name.Contains("neon", StringComparison.Ordinal)) return "gemini-4-neon";
         if (name.Contains("gemini") && name.Contains("pro")) return "gemini-3.1-pro";
         if (name.Contains("gemini") && name.Contains("flash")) return "gemini-3.5-flash";
 
+        if (name.Contains("gpt-6.2") && name.Contains("astra")) return "gpt-6.2-astra";
+        if (name.Contains("gpt-6.2") && name.Contains("sol")) return "gpt-6.2-sol";
         if (name.Contains("gpt-6.1") && name.Contains("terra")) return "gpt-6.1-terra";
         if (name.Contains("gpt-6.1") && name.Contains("sol")) return "gpt-6.1-sol";
         if (name.Contains("gpt-6.1") && name.Contains("luna")) return "gpt-6.1-luna";
