@@ -97,7 +97,7 @@ public sealed class QuotaSummaryControl : UserControl
         {
             y += _sectionFont.Height + 6;
             var rawAgSnapshots = _snapshot.Quotas
-                .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity)
+                .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(q.Snapshot))
                 .Select(q => q.Snapshot).ToList();
             var agSnapshots = DeduplicateAntigravityQuotas(rawAgSnapshots);
             if (agSnapshots.Count == 0)
@@ -116,7 +116,7 @@ public sealed class QuotaSummaryControl : UserControl
 
             // Antigravity Weekly Cycle Estimates
             var agWeeklyEstimates = (_snapshot.AntigravityEstimates?
-                .Where(e => e.WindowKind == "weekly")
+                .Where(e => e.WindowKind == "weekly" && !IsArgonEstimate(e))
                 .ToList() ?? []).ToList();
 
             if (agWeeklyEstimates.Count == 0)
@@ -127,8 +127,7 @@ public sealed class QuotaSummaryControl : UserControl
                     agWeeklyEstimates = weeklySnaps.Select(w =>
                     {
                         var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
-                        var isArgon = (w.DisplayLabel?.Contains("Argon", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Argon", StringComparison.OrdinalIgnoreCase) == true);
-                        var name = isGemini ? "Gemini Models" : isArgon ? "Argon Models" : "Claude and GPT models";
+                        var name = isGemini ? "Gemini Models" : "Claude and GPT models";
                         var rem = w.EffectiveRemainingFraction();
                         var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
                         return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, null, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
@@ -289,7 +288,9 @@ public sealed class QuotaSummaryControl : UserControl
         // Section 1: Antigravity
         if (EnableAntigravity)
         {
-            var agViews = _snapshot.Quotas.Where(q => q.Snapshot.Provider == ProviderKind.Antigravity).ToList();
+            var agViews = _snapshot.Quotas
+                .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(q.Snapshot))
+                .ToList();
             var rawAgSnapshots = agViews.Select(q => q.Snapshot).ToList();
             var agSnapshots = DeduplicateAntigravityQuotas(rawAgSnapshots);
             var agPlan = agSnapshots
@@ -311,27 +312,24 @@ public sealed class QuotaSummaryControl : UserControl
             else
             {
                 var fiveHour = agSnapshots.Where(IsFiveHour)
-                    .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 :
-                                  (s.DisplayLabel?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true) ? 2 : 1)
+                    .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
                     .ToList();
                 if (fiveHour.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, I18n.T("5 小时窗口", "5-Hour Window"), fiveHour);
 
                 var weekly = agSnapshots.Where(IsWeekly)
-                    .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 :
-                                  (s.DisplayLabel?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true) ? 2 : 1)
+                    .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
                     .ToList();
                 if (weekly.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, I18n.T("周窗口", "Weekly Window"), weekly);
 
                 var others = agSnapshots.Where(s => !IsFiveHour(s) && !IsWeekly(s))
-                    .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 :
-                                  (s.DisplayLabel?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true) ? 2 : 1)
+                    .OrderBy(s => (s.DisplayLabel?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) || (s.ModelOrPoolId?.Contains("gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
                     .ToList();
                 if (others.Count > 0) DrawQuotaWindowLine(g, padX + 8, ref y, I18n.T("其他窗口", "Other Windows"), others);
             }
 
-            // Antigravity Weekly Cycle Estimates (Gemini, Claude/GPT, Argon)
+            // Antigravity Weekly Cycle Estimates (Gemini, Claude/GPT)
             var agWeeklyEstimates = (_snapshot.AntigravityEstimates?
-                .Where(e => e.WindowKind == "weekly")
+                .Where(e => e.WindowKind == "weekly" && !IsArgonEstimate(e))
                 .ToList() ?? []).ToList();
 
             if (agWeeklyEstimates.Count == 0)
@@ -342,8 +340,7 @@ public sealed class QuotaSummaryControl : UserControl
                     agWeeklyEstimates = weeklySnaps.Select(w =>
                     {
                         var isGemini = (w.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true);
-                        var isArgon = (w.DisplayLabel?.Contains("Argon", StringComparison.OrdinalIgnoreCase) == true) || (w.ModelOrPoolId?.Contains("Argon", StringComparison.OrdinalIgnoreCase) == true);
-                        var name = isGemini ? "Gemini Models" : isArgon ? "Argon Models" : "Claude and GPT models";
+                        var name = isGemini ? "Gemini Models" : "Claude and GPT models";
                         var rem = w.EffectiveRemainingFraction();
                         var used = rem.HasValue ? Math.Clamp(1.0 - rem.Value, 0.0, 1.0) : (double?)null;
                         return new AntigravityQuotaEstimate(w.ModelOrPoolId ?? string.Empty, "weekly", name, rem, w.ResetAt, null, used, null, QuotaEstimateConfidence.Low, 0, null, null, null, null);
@@ -352,8 +349,7 @@ public sealed class QuotaSummaryControl : UserControl
             }
 
             agWeeklyEstimates = agWeeklyEstimates
-                .OrderBy(e => (e.DisplayName?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 :
-                              (e.DisplayName?.Contains("Argon", StringComparison.OrdinalIgnoreCase) == true) ? 2 : 1)
+                .OrderBy(e => (e.DisplayName?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) ? 0 : 1)
                 .ToList();
 
             if (agWeeklyEstimates.Count > 0)
@@ -660,13 +656,20 @@ public sealed class QuotaSummaryControl : UserControl
             value.Contains("5小时", StringComparison.Ordinal);
     }
 
+    private static bool IsArgon(QuotaSnapshot snapshot) =>
+        (snapshot.ModelOrPoolId?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true) ||
+        (snapshot.DisplayLabel?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true);
+
+    private static bool IsArgonEstimate(AntigravityQuotaEstimate estimate) =>
+        (estimate.PoolId?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true) ||
+        (estimate.DisplayName?.Contains("argon", StringComparison.OrdinalIgnoreCase) == true);
+
     private static IReadOnlyList<QuotaSnapshot> DeduplicateAntigravityQuotas(IEnumerable<QuotaSnapshot> snapshots)
     {
         var list = snapshots.ToList();
         var hasSpecific = list.Any(s => (s.DisplayLabel?.Contains("Gemini", StringComparison.OrdinalIgnoreCase) == true) ||
                                         (s.DisplayLabel?.Contains("Claude", StringComparison.OrdinalIgnoreCase) == true) ||
-                                        (s.DisplayLabel?.Contains("GPT", StringComparison.OrdinalIgnoreCase) == true) ||
-                                        (s.DisplayLabel?.Contains("Argon", StringComparison.OrdinalIgnoreCase) == true));
+                                        (s.DisplayLabel?.Contains("GPT", StringComparison.OrdinalIgnoreCase) == true));
         if (hasSpecific)
         {
             list = list.Where(s => !string.Equals(s.ModelOrPoolId, "Five Hour Limit Remaining", StringComparison.OrdinalIgnoreCase) &&

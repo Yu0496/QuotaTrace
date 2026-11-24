@@ -184,9 +184,11 @@ CREATE TABLE IF NOT EXISTS app_metadata (
         EnsureColumn(connection, "file_usage", "long_context_output_tokens", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "file_usage", "cache_write_available", "INTEGER NOT NULL DEFAULT 1");
         EnsureFileUsagePrimaryKey(connection);
-        using var cleanupSpark = connection.CreateCommand();
-        cleanupSpark.CommandText = "DELETE FROM quota_snapshots WHERE model_or_pool_id LIKE '%spark%' OR label LIKE '%spark%';";
-        cleanupSpark.ExecuteNonQuery();
+        using var cleanupObsolete = connection.CreateCommand();
+        cleanupObsolete.CommandText = @"
+            DELETE FROM quota_snapshots WHERE model_or_pool_id LIKE '%spark%' OR label LIKE '%spark%';
+            DELETE FROM quota_snapshots WHERE provider='Antigravity' AND (model_or_pool_id LIKE '%argon%' OR label LIKE '%argon%');";
+        cleanupObsolete.ExecuteNonQuery();
 
         using var metadata = connection.CreateCommand();
         metadata.CommandText = "SELECT value FROM app_metadata WHERE key='codex_schema_version'";

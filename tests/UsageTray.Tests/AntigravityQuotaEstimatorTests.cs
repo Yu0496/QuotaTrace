@@ -25,38 +25,21 @@ public sealed class AntigravityQuotaEstimatorTests
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-2.5-pro"));
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-hydrogen"));
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-carbon"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-carbon-low"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-neon"));
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-flash-worker-agy"));
         Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator"));
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon"));
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-g1-pro"));
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-argon"));
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon-trial"));
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("argon"));
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("argon-pro"));
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("argon-flash"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-carbon"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-g1-pro"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-argon"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon-trial"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("argon"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("argon-pro"));
+        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("argon-flash"));
         Assert.Equal("3p", AntigravityQuotaEstimator.GetModelQuotaPool("claude-3-7-sonnet"));
         Assert.Equal("3p", AntigravityQuotaEstimator.GetModelQuotaPool("claude-3-5-sonnet"));
         Assert.Equal("3p", AntigravityQuotaEstimator.GetModelQuotaPool("gpt-4o"));
-
-        // 动态根据实际扣减区分池子测试：
-        // 场景 1：无 Argon 独立配额桶（如 Ultra 计划用户）-> 归入 gemini
-        var geminiSnap = new QuotaSnapshot(ProviderKind.Antigravity, DateTimeOffset.UtcNow, "gemini-weekly", "Gemini Models", 0.75, DateTimeOffset.UtcNow.AddDays(5), "weekly", "src", "Ultra");
-        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon", [geminiSnap]));
-        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-argon", [geminiSnap]));
-        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-g1-pro", [geminiSnap]));
-
-        // 场景 2：Argon 独立配额桶发生实际扣减（如 Pro 计划用户消耗至 0.6138）-> 归入 argon 专属池
-        var argonDeductedSnap = new QuotaSnapshot(ProviderKind.Antigravity, DateTimeOffset.UtcNow, "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.6138, DateTimeOffset.UtcNow.AddDays(5), "weekly", "src", "Pro");
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon", [geminiSnap, argonDeductedSnap]));
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-g1-pro", [geminiSnap, argonDeductedSnap]));
-        Assert.Equal("argon", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator-argon", [geminiSnap, argonDeductedSnap]));
-        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-flash-worker-agy", [geminiSnap, argonDeductedSnap]));
-        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-pro-orchestrator", [geminiSnap, argonDeductedSnap]));
-
-        // 场景 3：Argon 桶未实质扣减（0.998），而 Gemini 扣减显著（0.75，降幅 25%），且存在 Argon 生成请求 -> 自动归入 gemini
-        var argonFrozenSnap = new QuotaSnapshot(ProviderKind.Antigravity, DateTimeOffset.UtcNow, "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.998, DateTimeOffset.UtcNow.AddDays(5), "weekly", "src", "Pro");
-        var gen = new AntigravityGenerationUsage("c1", "g1", "r1", DateTimeOffset.UtcNow.AddHours(-1), "gemini-4-argon", null, 1000, 0, 0, 0, 100, 100, null, "db", 1);
-        Assert.Equal("gemini", AntigravityQuotaEstimator.GetModelQuotaPool("gemini-4-argon", [geminiSnap, argonFrozenSnap], [gen]));
     }
 
     [Fact]
@@ -70,7 +53,7 @@ public sealed class AntigravityQuotaEstimatorTests
         Assert.False(AntigravityQuotaEstimator.SnapshotMatchesPool(geminiSnap, "3p"));
         Assert.False(AntigravityQuotaEstimator.SnapshotMatchesPool(geminiSnap, "argon"));
 
-        Assert.True(AntigravityQuotaEstimator.SnapshotMatchesPool(argonSnap, "argon"));
+        Assert.False(AntigravityQuotaEstimator.SnapshotMatchesPool(argonSnap, "argon"));
         Assert.False(AntigravityQuotaEstimator.SnapshotMatchesPool(argonSnap, "gemini"));
         Assert.False(AntigravityQuotaEstimator.SnapshotMatchesPool(argonSnap, "3p"));
 
@@ -88,8 +71,8 @@ public sealed class AntigravityQuotaEstimatorTests
         var snapshots = new List<QuotaSnapshot>
         {
             new(ProviderKind.Antigravity, baseTime, "gemini-weekly", "Gemini Models", 1.0, baseTime.AddDays(7), "weekly", "local_api", "Pro"),
-            // Legacy Argon trial bucket at 0.998 should be ignored and not contaminate Gemini pool
-            new(ProviderKind.Antigravity, baseTime.AddHours(12), "gemini-argon-wtu-weekly", "Gemini 4 Argon (周额度)", 0.998, baseTime.AddDays(7), "weekly", "local_api", "Pro"),
+            // Legacy Argon bucket should be ignored and never produce a separate pool or contaminate Gemini pool
+            new(ProviderKind.Antigravity, baseTime.AddHours(12), "gemini-argon-wtu-weekly", "Gemini 4 Argon (周额度)", 0.60, baseTime.AddDays(7), "weekly", "local_api", "Pro"),
             new(ProviderKind.Antigravity, baseTime.AddDays(1), "gemini-weekly", "Gemini Models", 0.75, baseTime.AddDays(7), "weekly", "local_api", "Pro") // 25% consumed
         };
 
@@ -105,6 +88,7 @@ public sealed class AntigravityQuotaEstimatorTests
         };
 
         var estimates = estimator.EstimateAll(snapshots, generations);
+        Assert.DoesNotContain(estimates, e => e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase) || e.PoolId.Contains("argon", StringComparison.OrdinalIgnoreCase));
         var weekly = Assert.Single(estimates, e => e.WindowKind == "weekly" && e.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase));
 
         Assert.Equal(0.75, weekly.RemainingFraction);
@@ -118,7 +102,7 @@ public sealed class AntigravityQuotaEstimatorTests
     }
 
     [Fact]
-    public void ArgonUsageIsEstimatedInSeparateArgonPoolWhenArgonQuotaDeducted()
+    public void CarbonAndOrchestratorUsageAreEstimatedInGeminiMainPool()
     {
         var estimator = new AntigravityQuotaEstimator(_pricing);
         var baseTime = DateTimeOffset.UtcNow.AddDays(-1);
@@ -126,31 +110,34 @@ public sealed class AntigravityQuotaEstimatorTests
         var snapshots = new List<QuotaSnapshot>
         {
             new(ProviderKind.Antigravity, baseTime, "gemini-weekly", "Gemini Models", 1.0, baseTime.AddDays(7), "weekly", "local_api", "Pro"),
-            new(ProviderKind.Antigravity, baseTime.AddDays(1), "gemini-weekly", "Gemini Models", 0.999, baseTime.AddDays(7), "weekly", "local_api", "Pro"),
+            new(ProviderKind.Antigravity, baseTime.AddDays(1), "gemini-weekly", "Gemini Models", 0.75, baseTime.AddDays(7), "weekly", "local_api", "Pro"),
             new(ProviderKind.Antigravity, baseTime, "gemini-argon-wtu-weekly", "Gemini 4 Argon", 1.0, baseTime.AddDays(7), "weekly", "local_api", "Pro"),
-            new(ProviderKind.Antigravity, baseTime.AddDays(1), "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.60, baseTime.AddDays(7), "weekly", "local_api", "Pro") // 40% consumed
+            new(ProviderKind.Antigravity, baseTime.AddDays(1), "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.60, baseTime.AddDays(7), "weekly", "local_api", "Pro")
         };
 
+        // gemini-4-carbon* & gemini-pro-orchestrator-carbon: $4.00/M input, $0.20/M cache read, $20.00/M output
+        // 500K input ($2.00) + 1M cache read ($0.20) + 100K output ($2.00) = $4.20 per group => total $8.40
         var generations = new List<AntigravityGenerationUsage>
         {
-            new("c1", "g1", "r1", baseTime.AddHours(2), "gemini-4-argon", null, 1_000_000, 0, 0, 0, 0, 0, null, "db", 1),
-            new("c1", "g2", "r2", baseTime.AddHours(3), "gemini-4-argon", null, 0, 0, 0, 0, 100_000, 100_000, null, "db", 2),
-            new("c1", "g3", "r3", baseTime.AddHours(4), "gemini-4-argon", null, 0, 0, 0, 0, 0, 0, null, "db", 3),
-            new("c1", "g4", "r4", baseTime.AddHours(5), "gemini-4-argon", null, 0, 0, 0, 0, 0, 0, null, "db", 4),
-            new("c1", "g5", "r5", baseTime.AddHours(6), "gemini-4-argon", null, 0, 0, 0, 0, 0, 0, null, "db", 5)
+            new("c1", "g1", "r1", baseTime.AddHours(2), "gemini-4-carbon-low", "Gemini 4 Carbon (Low)", 500_000, 1_000_000, 0, 0, 100_000, 100_000, null, "db", 1),
+            new("c1", "g2", "r2", baseTime.AddHours(3), "gemini-pro-orchestrator-carbon", "Orchestrator (Carbon)", 500_000, 1_000_000, 0, 0, 100_000, 100_000, null, "db", 2),
+            new("c1", "g3", "r3", baseTime.AddHours(4), "gemini-4-carbon", null, 0, 0, 0, 0, 0, 0, null, "db", 3),
+            new("c1", "g4", "r4", baseTime.AddHours(5), "gemini-4-carbon", null, 0, 0, 0, 0, 0, 0, null, "db", 4),
+            new("c1", "g5", "r5", baseTime.AddHours(6), "gemini-4-carbon", null, 0, 0, 0, 0, 0, 0, null, "db", 5)
         };
 
         var estimates = estimator.EstimateAll(snapshots, generations);
-        var argonWeekly = Assert.Single(estimates, e => e.WindowKind == "weekly" && e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(estimates, e => e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase) || e.PoolId.Contains("argon", StringComparison.OrdinalIgnoreCase));
+        var geminiWeekly = Assert.Single(estimates, e => e.WindowKind == "weekly" && e.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase));
 
-        Assert.Equal(0.60, argonWeekly.RemainingFraction);
-        Assert.NotNull(argonWeekly.ConsumedFraction);
-        Assert.Equal(0.40, argonWeekly.ConsumedFraction.Value, 2);
-        Assert.NotNull(argonWeekly.ObservedCostUsd);
-        Assert.Equal(3.00m, argonWeekly.ObservedCostUsd.Value);
-        Assert.NotNull(argonWeekly.EstimatedFullQuotaUsd);
-        // $3.00 / 0.40 = $7.50
-        Assert.Equal(7.50m, Math.Round(argonWeekly.EstimatedFullQuotaUsd.Value, 2));
+        Assert.Equal(0.75, geminiWeekly.RemainingFraction);
+        Assert.NotNull(geminiWeekly.ConsumedFraction);
+        Assert.Equal(0.25, geminiWeekly.ConsumedFraction.Value, 2);
+        Assert.NotNull(geminiWeekly.ObservedCostUsd);
+        Assert.Equal(8.40m, geminiWeekly.ObservedCostUsd.Value);
+        Assert.NotNull(geminiWeekly.EstimatedFullQuotaUsd);
+        // $8.40 / 0.25 = $33.60
+        Assert.Equal(33.60m, Math.Round(geminiWeekly.EstimatedFullQuotaUsd.Value, 2));
     }
 
     [Fact]
@@ -261,7 +248,7 @@ public sealed class AntigravityQuotaEstimatorTests
     }
 
     [Fact]
-    public void AggregatorPopulatesSeparateArgonPoolWhenArgonQuotaDeducted()
+    public void AggregatorMergesArgonAndCarbonIntoGeminiPoolWithoutMissingCycleWarning()
     {
         using var workspace = new TempWorkspace();
         var (database, repository) = RepositoryFactory.Create(workspace);
@@ -270,40 +257,50 @@ public sealed class AntigravityQuotaEstimatorTests
             var now = DateTimeOffset.UtcNow;
             var resetAt = now.AddDays(4);
 
-            // Add Gemini & Argon weekly snapshots (Argon has separate quota with 40% consumption)
+            // 写入 Gemini、3P 与遗留的 Argon 周额度快照；遗留 Argon 桶应被忽略并清理
             repository.AddQuotaSnapshots([
                 new QuotaSnapshot(ProviderKind.Antigravity, now.AddHours(-10), "gemini-weekly", "Gemini (周额度)", 1.0, resetAt, "weekly", "local_api", "Pro"),
-                new QuotaSnapshot(ProviderKind.Antigravity, now, "gemini-weekly", "Gemini (周额度)", 0.999, resetAt, "weekly", "local_api", "Pro"),
+                new QuotaSnapshot(ProviderKind.Antigravity, now, "gemini-weekly", "Gemini (周额度)", 0.75, resetAt, "weekly", "local_api", "Pro"),
+                new QuotaSnapshot(ProviderKind.Antigravity, now.AddHours(-10), "3p-weekly", "Claude / GPT (周额度)", 1.0, resetAt, "weekly", "local_api", "Pro"),
+                new QuotaSnapshot(ProviderKind.Antigravity, now, "3p-weekly", "Claude / GPT (周额度)", 0.90, resetAt, "weekly", "local_api", "Pro"),
                 new QuotaSnapshot(ProviderKind.Antigravity, now.AddHours(-10), "gemini-argon-wtu-weekly", "Gemini 4 Argon (周额度)", 1.0, resetAt, "weekly", "local_api", "Pro"),
                 new QuotaSnapshot(ProviderKind.Antigravity, now, "gemini-argon-wtu-weekly", "Gemini 4 Argon (周额度)", 0.60, resetAt, "weekly", "local_api", "Pro")
             ]);
 
             var date = DateOnly.FromDateTime(now.LocalDateTime);
-            var infoPath = workspace.File("test_argon_separate.db");
+            var infoPath = workspace.File("test_argon_carbon_merged.db");
             File.WriteAllText(infoPath, "fixture");
             var file = new FileInfo(infoPath);
-            var gen = new AntigravityGenerationUsage("c1", "g1", "r1", now.AddHours(-2), "gemini-4-argon", null, 1_000_000, 0, 0, 0, 100_000, 100_000, null, infoPath, 1);
-            var bucket = new UsageBucket(ProviderKind.Antigravity, date, null, "gemini-4-argon", 1_000_000, 0, 100_000, 1, DataQuality.Exact, infoPath);
-            repository.ReplaceAntigravitySource(file, [gen], [bucket], "c1", null, "gemini-4-argon", null);
+            // Argon: 1M input ($2.00) + 100K output ($1.00) = $3.00
+            // Carbon: 1M input ($4.00) + 100K output ($2.00) = $6.00
+            var gens = new List<AntigravityGenerationUsage>
+            {
+                new("c1", "g1", "r1", now.AddHours(-3), "gemini-4-argon", null, 1_000_000, 0, 0, 0, 100_000, 100_000, null, infoPath, 1),
+                new("c1", "g2", "r2", now.AddHours(-2), "gemini-4-carbon", "Gemini 4 Carbon (Low)", 1_000_000, 0, 0, 0, 100_000, 100_000, null, infoPath, 2)
+            };
+            var buckets = new List<UsageBucket>
+            {
+                new(ProviderKind.Antigravity, date, null, "gemini-4-argon", 1_000_000, 0, 100_000, 1, DataQuality.Exact, infoPath),
+                new(ProviderKind.Antigravity, date, null, "gemini-4-carbon", 1_000_000, 0, 100_000, 1, DataQuality.Exact, infoPath)
+            };
+            repository.ReplaceAntigravitySource(file, gens, buckets, "c1", null, "gemini-4-carbon", null);
 
             var pricing = new PricingService(workspace.File("pricing.json"), PricingService.BuiltInDefaults());
             var estimator = new AntigravityQuotaEstimator(pricing);
             var aggregator = new UsageAggregator(repository, pricing, estimator);
 
-            var snapshot = aggregator.BuildSnapshot(new DateRange(date, date));
+            var snapshot = aggregator.BuildSnapshot(DateRange.LastDays(7), ProviderKind.Antigravity, isWeeklyCycle: true);
+
+            Assert.DoesNotContain(snapshot.Quotas, q => q.Snapshot.ModelOrPoolId.Contains("argon", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(snapshot.Warnings, w => w.Contains("缺少有效周周期", StringComparison.Ordinal));
+            Assert.Equal(9.00m, snapshot.AntigravityGeminiApiEquivalentUsd);
+
             var argonModel = Assert.Single(snapshot.Models, m => m.ModelId == "gemini-4-argon");
-
-            Assert.NotNull(argonModel.ApiEquivalentUsd);
-            Assert.Equal(3.00m, argonModel.ApiEquivalentUsd.Value);
-            // 费用自动归入独立的 Argon 通道，而不是 Gemini 主池
-            Assert.Equal(3.00m, snapshot.AntigravityArgonApiEquivalentUsd);
-            Assert.Equal(0m, snapshot.AntigravityGeminiApiEquivalentUsd ?? 0m);
-
+            var carbonModel = Assert.Single(snapshot.Models, m => m.ModelId == "gemini-4-carbon");
+            Assert.Equal(3.00m, argonModel.ApiEquivalentUsd);
+            Assert.Equal(6.00m, carbonModel.ApiEquivalentUsd);
             Assert.NotNull(argonModel.EstimatedWeeklyCostUsd);
-            // $3.00 / 0.40 = $7.50
-            Assert.Equal(7.50m, argonModel.EstimatedWeeklyCostUsd.Value);
-            Assert.NotNull(argonModel.EstimateDetail);
-            Assert.Contains("Gemini 4 Argon", argonModel.EstimateDetail);
+            Assert.NotNull(carbonModel.EstimatedWeeklyCostUsd);
         }
     }
 
@@ -316,14 +313,14 @@ public sealed class AntigravityQuotaEstimatorTests
         var cycleStart = resetAt.AddDays(-7);
 
         // 模拟真实场景：
-        // 1. cycleStart (resetAt - 7d) 开始后，用户在首个快照前产生了大量消耗：191条请求共 $18.17 (约 6M input, 1.2M output)
-        // 2. 首个快照在 cycleStart + 2.5 小时后才记录，剩余额度已掉至 0.5562
-        // 3. 首个快照后仅产生 4 条微量请求共 $0.56，快照随之下跌至 0.4303 (降幅 12.59%)
+        // 1. cycleStart (resetAt - 7d) 开始后，用户在首个快照前产生了大量消耗：共 $18.17
+        // 2. 首个快照在 cycleStart + 2.5 小时后才记录，Gemini 主池剩余额度已掉至 0.5562
+        // 3. 首个快照后仅产生微量请求共 $0.56，快照随之下跌至 0.4303 (降幅 12.59%)
         // 4. 若机械切片外推: $0.56 / 0.1259 = $4.44，产生严重倒挂 ($4.44 << $18.73)！
         var snapshots = new List<QuotaSnapshot>
         {
-            new(ProviderKind.Antigravity, cycleStart.AddHours(2.5), "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.5562, resetAt, "weekly", "local_api", "Pro"),
-            new(ProviderKind.Antigravity, cycleStart.AddHours(4.0), "gemini-argon-wtu-weekly", "Gemini 4 Argon", 0.4303, resetAt, "weekly", "local_api", "Pro")
+            new(ProviderKind.Antigravity, cycleStart.AddHours(2.5), "gemini-weekly", "Gemini Models", 0.5562, resetAt, "weekly", "local_api", "Pro"),
+            new(ProviderKind.Antigravity, cycleStart.AddHours(4.0), "gemini-weekly", "Gemini Models", 0.4303, resetAt, "weekly", "local_api", "Pro")
         };
 
         // 构造生成请求：
@@ -336,23 +333,23 @@ public sealed class AntigravityQuotaEstimatorTests
         };
 
         var estimates = estimator.EstimateAll(snapshots, generations);
-        var argonWeekly = Assert.Single(estimates, e => e.WindowKind == "weekly" && e.DisplayName.Contains("Argon", StringComparison.OrdinalIgnoreCase));
+        var geminiWeekly = Assert.Single(estimates, e => e.WindowKind == "weekly" && e.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase));
 
-        Assert.Equal(0.4303, argonWeekly.RemainingFraction);
-        Assert.NotNull(argonWeekly.ConsumedFraction);
+        Assert.Equal(0.4303, geminiWeekly.RemainingFraction);
+        Assert.NotNull(geminiWeekly.ConsumedFraction);
         // 全周期总降幅: 1 - 0.4303 = 0.5697
-        Assert.Equal(0.5697, argonWeekly.ConsumedFraction.Value, 4);
-        Assert.NotNull(argonWeekly.ObservedCostUsd);
-        Assert.Equal(18.73m, argonWeekly.ObservedCostUsd.Value);
+        Assert.Equal(0.5697, geminiWeekly.ConsumedFraction.Value, 4);
+        Assert.NotNull(geminiWeekly.ObservedCostUsd);
+        Assert.Equal(18.73m, geminiWeekly.ObservedCostUsd.Value);
 
-        Assert.NotNull(argonWeekly.EstimatedFullQuotaUsd);
+        Assert.NotNull(geminiWeekly.EstimatedFullQuotaUsd);
         // 绝对防倒挂：推算周满额绝不能低于已产生的 $18.73
-        Assert.True(argonWeekly.EstimatedFullQuotaUsd.Value >= argonWeekly.ObservedCostUsd.Value,
-            $"推算周满额 ${argonWeekly.EstimatedFullQuotaUsd.Value} 绝不能小于已观测金额 ${argonWeekly.ObservedCostUsd.Value}");
+        Assert.True(geminiWeekly.EstimatedFullQuotaUsd.Value >= geminiWeekly.ObservedCostUsd.Value,
+            $"推算周满额 ${geminiWeekly.EstimatedFullQuotaUsd.Value} 绝不能小于已观测金额 ${geminiWeekly.ObservedCostUsd.Value}");
 
         // 科学外推：$18.73 / 0.5697 = $32.88，绝不为 $4.44
-        Assert.Equal(32.88m, Math.Round(argonWeekly.EstimatedFullQuotaUsd.Value, 2));
-        Assert.Equal("按全周期累计消耗外推", argonWeekly.CalculationDetails);
+        Assert.Equal(32.88m, Math.Round(geminiWeekly.EstimatedFullQuotaUsd.Value, 2));
+        Assert.Equal("按全周期累计消耗外推", geminiWeekly.CalculationDetails);
     }
 
     [Fact]
@@ -434,7 +431,7 @@ public sealed class AntigravityQuotaEstimatorTests
         sw.Stop();
 
         Assert.NotEmpty(results);
-        // 5000 条 generation 与 600 条快照，优化前需上万次 ResolveArgonQuotaPool 耗时几十秒，优化后应在 500ms 以内秒级完成
+        // 5000 条 generation 与 600 条快照应在 1500ms 内完成估算
         Assert.True(sw.ElapsedMilliseconds < 1500, $"EstimateAll took too long: {sw.ElapsedMilliseconds}ms");
     }
 }

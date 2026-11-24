@@ -133,6 +133,8 @@ public sealed class PricingServiceTests
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-carbon" && r.MatchMode == MatchMode.Exact);
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-4-carbon*" && r.MatchMode == MatchMode.Wildcard);
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-carbon" && r.MatchMode == MatchMode.Exact);
+        Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-carbon*" && r.MatchMode == MatchMode.Wildcard);
         Assert.DoesNotContain(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator*" && r.MatchMode == MatchMode.Wildcard);
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-g1-pro" && r.MatchMode == MatchMode.Exact);
         Assert.Contains(loaded.Rules, r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-g1-pro*" && r.MatchMode == MatchMode.Wildcard);
@@ -147,7 +149,7 @@ public sealed class PricingServiceTests
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-4-6*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-sonnet-5-5*");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "claude-opus-5-5*");
-        Assert.Equal(15, loaded.Document.SchemaVersion);
+        Assert.Equal(16, loaded.Document.SchemaVersion);
         Assert.Equal(PricingService.DefaultDocumentVersion, loaded.Document.SchemaVersion);
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-3.7-flash");
         Assert.Contains(loaded.Rules, r => r.ModelPattern == "gemini-pro-default*");
@@ -167,6 +169,8 @@ public sealed class PricingServiceTests
         Assert.Equal("gemini-4-hydrogen", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Hydrogen (High)"));
         Assert.Equal("gemini-4-hydrogen", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Hydrogen"));
         Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Carbon (High)"));
+        Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Carbon (Low)"));
+        Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Carbon (XHigh)"));
         Assert.Equal("gemini-4-carbon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Carbon"));
         Assert.Equal("gemini-4-neon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Gemini 4 Neon (XHigh)"));
         Assert.Equal("gemini-4-neon", UsageTray.Providers.Antigravity.AntigravitySqliteHistoryParser.InferModelFromDisplayName("Neon"));
@@ -461,7 +465,7 @@ public sealed class PricingServiceTests
                 .ToList()
         };
         var migrated = new PricingService(workspace.File("v14.json"), v14Doc);
-        Assert.Equal(15, migrated.Document.SchemaVersion);
+        Assert.Equal(PricingService.DefaultDocumentVersion, migrated.Document.SchemaVersion);
         foreach (var (provider, pattern) in newRuleKeys)
         {
             Assert.Equal(1, migrated.Rules.Count(r => r.Provider == provider && r.ModelPattern == pattern));
@@ -505,6 +509,8 @@ public sealed class PricingServiceTests
         var carbonBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 13), null, "gemini-4-carbon",
             2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
         Assert.Equal(24.2m, pricing.Calculate(carbonBucket).CostUsd);
+        Assert.Equal(24.2m, pricing.Calculate(carbonBucket with { ModelId = "gemini-4-carbon-low" }).CostUsd);
+        Assert.Equal(24.2m, pricing.Calculate(carbonBucket with { ModelId = "gemini-4-carbon-xhigh" }).CostUsd);
         Assert.Equal(24.2m, pricing.Calculate(carbonBucket with { ModelId = "gemini-4-carbon-preview" }).CostUsd);
 
         // 4. Schema 12 -> 13 迁移测试：自动补齐 gemini-4-hydrogen* 与 gemini-4-carbon* 且不重复规则
@@ -543,24 +549,28 @@ public sealed class PricingServiceTests
         Assert.Equal(12.75m, pricing.Calculate(proArgonBucket with { CacheWriteInputTokens = 500_000 }).CostUsd);
         Assert.Equal(12.5m, pricing.Calculate(proArgonBucket with { ModelId = "gemini-pro-orchestrator-argon" }).CostUsd);
 
-        // 3. Ultra Orchestrator (Carbon): gemini-pro-orchestrator（按 Carbon 计价：$4.0 / $0.2 / $20.0）
-        var ultraCarbonBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 15), null, "gemini-pro-orchestrator",
+        // 3. Pro / Ultra Orchestrator (Carbon): gemini-pro-orchestrator 与 gemini-pro-orchestrator-carbon*（按 Carbon 计价：$4.0 / $0.2 / $20.0）
+        var carbonOrchestratorBucket = new UsageBucket(ProviderKind.Antigravity, new DateOnly(2026, 11, 24), null, "gemini-pro-orchestrator",
             2_000_000, 1_000_000, 1_000_000, 1, DataQuality.Exact, "fixture", null, 0, CostQuality.ExactTokenSplit);
-        Assert.Equal(24.2m, pricing.Calculate(ultraCarbonBucket).CostUsd);
+        Assert.Equal(24.2m, pricing.Calculate(carbonOrchestratorBucket).CostUsd);
+        Assert.Equal(24.2m, pricing.Calculate(carbonOrchestratorBucket with { ModelId = "gemini-pro-orchestrator-carbon" }).CostUsd);
+        Assert.Equal(24.2m, pricing.Calculate(carbonOrchestratorBucket with { ModelId = "gemini-pro-orchestrator-carbon-g1-pro" }).CostUsd);
 
         // 4. 未知后缀不误匹配 Carbon（Exact-only 保护，回退至 gemini-pro* 未核验拦截）
-        var unknownVariant = pricing.Calculate(ultraCarbonBucket with { ModelId = "gemini-pro-orchestrator-unknown" });
+        var unknownVariant = pricing.Calculate(carbonOrchestratorBucket with { ModelId = "gemini-pro-orchestrator-unknown" });
         Assert.Equal(CostQuality.Unavailable, unknownVariant.Quality);
         Assert.Null(unknownVariant.CostUsd);
         Assert.Equal("gemini-pro*", unknownVariant.Rule?.ModelPattern);
         Assert.Equal("动态默认模型未核验", unknownVariant.Rule?.UnverifiedReason);
 
-        // 5. Schema 13 -> 14 迁移测试：自动补齐新规则且不重复
+        // 5. Schema 13 -> 16 迁移测试：自动补齐新规则且不重复
         var newPatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "gemini-flash-worker-agy",
             "gemini-flash-worker-agy*",
             "gemini-pro-orchestrator",
+            "gemini-pro-orchestrator-carbon",
+            "gemini-pro-orchestrator-carbon*",
             "gemini-pro-orchestrator-g1-pro",
             "gemini-pro-orchestrator-g1-pro*",
             "gemini-pro-orchestrator-argon",
@@ -579,6 +589,21 @@ public sealed class PricingServiceTests
         {
             Assert.Equal(1, migrated.Rules.Count(r => r.Provider == "Antigravity" && r.ModelPattern == pattern));
         }
+
+        // 6. Schema 15 -> 16 迁移测试：补齐 gemini-pro-orchestrator-carbon* 并更新 gemini-pro-orchestrator 说明且不重复
+        var v15Doc = PricingService.BuiltInDefaults() with
+        {
+            SchemaVersion = 15,
+            Rules = PricingService.BuiltInDefaults().Rules
+                .Where(r => !string.Equals(r.ModelPattern, "gemini-pro-orchestrator-carbon", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(r.ModelPattern, "gemini-pro-orchestrator-carbon*", StringComparison.OrdinalIgnoreCase))
+                .ToList()
+        };
+        var migratedFrom15 = new PricingService(workspace.File("v15.json"), v15Doc);
+        Assert.Equal(16, migratedFrom15.Document.SchemaVersion);
+        Assert.Equal(1, migratedFrom15.Rules.Count(r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-carbon" && r.MatchMode == MatchMode.Exact));
+        Assert.Equal(1, migratedFrom15.Rules.Count(r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator-carbon*" && r.MatchMode == MatchMode.Wildcard));
+        Assert.Equal(1, migratedFrom15.Rules.Count(r => r.Provider == "Antigravity" && r.ModelPattern == "gemini-pro-orchestrator" && r.MatchMode == MatchMode.Exact));
     }
 
     [Fact]
@@ -739,6 +764,22 @@ public sealed class PricingServiceTests
                 Assert.Equal("$4", ultraOrchestratorRow!.Cells[3].Value);
                 Assert.Equal("$0.2", ultraOrchestratorRow.Cells[4].Value);
                 Assert.Equal("$20", ultraOrchestratorRow.Cells[6].Value);
+
+                var carbonRow = grid.Rows.Cast<DataGridViewRow>()
+                    .FirstOrDefault(r => string.Equals(r.Cells[0].Value?.ToString(), "Antigravity", StringComparison.Ordinal) &&
+                                         string.Equals(r.Cells[1].Value?.ToString(), "gemini-4-carbon", StringComparison.Ordinal));
+                Assert.NotNull(carbonRow);
+                Assert.Equal("$4", carbonRow!.Cells[3].Value);
+                Assert.Equal("$0.2", carbonRow.Cells[4].Value);
+                Assert.Equal("$20", carbonRow.Cells[6].Value);
+
+                var carbonOrchestratorRow = grid.Rows.Cast<DataGridViewRow>()
+                    .FirstOrDefault(r => string.Equals(r.Cells[0].Value?.ToString(), "Antigravity", StringComparison.Ordinal) &&
+                                         string.Equals(r.Cells[1].Value?.ToString(), "gemini-pro-orchestrator-carbon", StringComparison.Ordinal));
+                Assert.NotNull(carbonOrchestratorRow);
+                Assert.Equal("$4", carbonOrchestratorRow!.Cells[3].Value);
+                Assert.Equal("$0.2", carbonOrchestratorRow.Cells[4].Value);
+                Assert.Equal("$20", carbonOrchestratorRow.Cells[6].Value);
 
                 form.Font = largeFont;
                 Application.DoEvents();

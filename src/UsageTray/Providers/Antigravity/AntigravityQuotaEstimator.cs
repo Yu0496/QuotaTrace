@@ -15,14 +15,6 @@ public sealed class AntigravityQuotaEstimator
         _pricingService = pricingService;
     }
 
-    public static bool IsArgon(string modelId)
-    {
-        if (string.IsNullOrWhiteSpace(modelId)) return false;
-        var model = modelId.Trim();
-        return model.Contains("argon", StringComparison.OrdinalIgnoreCase)
-            || model.Equals("gemini-pro-orchestrator-g1-pro", StringComparison.OrdinalIgnoreCase);
-    }
-
     public static bool IsClaudeOrGpt(string modelId)
     {
         if (string.IsNullOrWhiteSpace(modelId)) return false;
@@ -35,147 +27,28 @@ public sealed class AntigravityQuotaEstimator
     }
 
     public static string GetModelQuotaPool(string modelId) =>
-        GetModelQuotaPool(modelId, null, null);
-
-    public static string GetModelQuotaPool(string modelId, string argonPool)
-    {
-        if (IsClaudeOrGpt(modelId))
-        {
-            return "3p";
-        }
-        if (IsArgon(modelId))
-        {
-            return argonPool;
-        }
-        return "gemini";
-    }
-
-    public static string GetModelQuotaPool(
-        string modelId,
-        IReadOnlyList<QuotaSnapshot>? snapshots = null,
-        IReadOnlyList<AntigravityGenerationUsage>? generations = null)
-    {
-        if (IsClaudeOrGpt(modelId))
-        {
-            return "3p";
-        }
-        if (IsArgon(modelId))
-        {
-            return ResolveArgonQuotaPool(snapshots, generations);
-        }
-        return "gemini";
-    }
-
-    public static string ResolveArgonQuotaPool(
-        IReadOnlyList<QuotaSnapshot>? snapshots,
-        IReadOnlyList<AntigravityGenerationUsage>? generations)
-    {
-        // 1. 若无快照数据，无法基于实际配额扣减进行判断，默认作为独立 Argon 池处理
-        if (snapshots == null || snapshots.Count == 0)
-        {
-            return "argon";
-        }
-
-        // 查找所有属于 Argon 的快照
-        var argonSnapshots = snapshots
-            .Where(s => SnapshotMatchesPool(s, "argon"))
-            .OrderBy(s => s.CapturedAt)
-            .ToList();
-
-        // 1.1 若配额接口中根本不存在任何 Argon 专属配额桶（例如 Ultra 订阅用户），则只能扣减 Gemini 主池
-        if (argonSnapshots.Count == 0)
-        {
-            return "gemini";
-        }
-
-        var latestArgon = argonSnapshots.Last();
-
-        // 2. 统计 Argon 桶在当前快照/序列中的实际扣减量
-        var argonConsumed = latestArgon.RemainingFraction.HasValue
-            ? Math.Max(0.0, 1.0 - latestArgon.RemainingFraction.Value)
-            : 0.0;
-        var argonStep = 0.0;
-        if (argonSnapshots.Count >= 2)
-        {
-            var validF = argonSnapshots.Where(s => s.RemainingFraction.HasValue).Select(s => s.RemainingFraction!.Value).ToList();
-            if (validF.Count >= 2)
-            {
-                argonStep = Math.Max(0.0, validF.Max() - validF.Min());
-            }
-        }
-        var argonDeduction = Math.Max(argonConsumed, argonStep);
-
-        // 3. 统计 Gemini 主池的实际扣减量
-        var geminiSnapshots = snapshots
-            .Where(s => SnapshotMatchesPool(s, "gemini"))
-            .OrderBy(s => s.CapturedAt)
-            .ToList();
-        var geminiDeduction = 0.0;
-        if (geminiSnapshots.Count > 0)
-        {
-            var latestGemini = geminiSnapshots.Last();
-            var geminiConsumed = latestGemini.RemainingFraction.HasValue
-                ? Math.Max(0.0, 1.0 - latestGemini.RemainingFraction.Value)
-                : 0.0;
-            var geminiStep = 0.0;
-            if (geminiSnapshots.Count >= 2)
-            {
-                var validG = geminiSnapshots.Where(s => s.RemainingFraction.HasValue).Select(s => s.RemainingFraction!.Value).ToList();
-                if (validG.Count >= 2)
-                {
-                    geminiStep = Math.Max(0.0, validG.Max() - validG.Min());
-                }
-            }
-            geminiDeduction = Math.Max(geminiConsumed, geminiStep);
-        }
-
-        // 4. 结合生成请求裁决：
-        var hasArgonGens = generations != null && generations.Any(g => IsArgon(g.Model));
-        if (hasArgonGens)
-        {
-            // 当产生 Argon 请求时：
-            // 若 Gemini 主池扣减显著（>= 5%）且扣减量显著主导（高于 Argon 扣减 3 倍以上或 Argon 扣减 < 1%），判定为扣减 Gemini 主池
-            if (geminiDeduction >= 0.05 && (geminiDeduction > argonDeduction * 3 || argonDeduction < 0.01))
-            {
-                return "gemini";
-            }
-
-            // 若 Argon 专属池有实质扣减（>= 0.5%）或主导扣减，判定为扣减 Argon 专属池
-            if (argonDeduction >= 0.005)
-            {
-                return "argon";
-            }
-        }
-        else
-        {
-            // 若尚未检测到请求或生成未传入，若 Argon 专属池已有实质扣减，直接认定
-            if (argonDeduction >= 0.005)
-            {
-                return "argon";
-            }
-        }
-
-        // 默认根据是否存在有效 Argon 专属配额桶归入专属池
-        return "argon";
-    }
+        IsClaudeOrGpt(modelId) ? "3p" : "gemini";
 
     public static bool SnapshotMatchesPool(QuotaSnapshot snapshot, string poolCategory)
     {
         var id = $"{snapshot.ModelOrPoolId} {snapshot.DisplayLabel}".ToLowerInvariant();
-        if (poolCategory == "argon")
+        if (id.Contains("argon", StringComparison.OrdinalIgnoreCase))
         {
-            return id.Contains("argon", StringComparison.OrdinalIgnoreCase);
+            return false;
         }
         if (poolCategory == "gemini")
         {
-            return id.Contains("gemini", StringComparison.OrdinalIgnoreCase) && !id.Contains("argon", StringComparison.OrdinalIgnoreCase);
+            return id.Contains("gemini", StringComparison.OrdinalIgnoreCase);
         }
-        return (id.Contains("3p", StringComparison.OrdinalIgnoreCase) ||
-               id.Contains("claude", StringComparison.OrdinalIgnoreCase) ||
-               id.Contains("gpt", StringComparison.OrdinalIgnoreCase) ||
-               id.Contains("other", StringComparison.OrdinalIgnoreCase)) &&
-               !id.Contains("gemini", StringComparison.OrdinalIgnoreCase) &&
-               !id.Contains("argon", StringComparison.OrdinalIgnoreCase);
+        if (poolCategory == "3p")
+        {
+            return (id.Contains("3p", StringComparison.OrdinalIgnoreCase) ||
+                    id.Contains("claude", StringComparison.OrdinalIgnoreCase) ||
+                    id.Contains("gpt", StringComparison.OrdinalIgnoreCase) ||
+                    id.Contains("other", StringComparison.OrdinalIgnoreCase)) &&
+                   !id.Contains("gemini", StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
     }
 
     public IReadOnlyList<AntigravityQuotaEstimate> EstimateAll(
@@ -184,19 +57,11 @@ public sealed class AntigravityQuotaEstimator
     {
         var results = new List<AntigravityQuotaEstimate>();
 
-        var argonPool = ResolveArgonQuotaPool(allSnapshots, allGenerations);
-        var hasArgonSnapshot = allSnapshots.Any(s => SnapshotMatchesPool(s, "argon"));
-
-        var poolList = new List<(string Category, string Display)>
+        var poolList = new (string Category, string Display)[]
         {
             ("gemini", "Gemini Models"),
             ("3p", "Claude and GPT models")
         };
-
-        if (hasArgonSnapshot && argonPool == "argon")
-        {
-            poolList.Add(("argon", "Gemini 4 Argon"));
-        }
 
         var windows = new[] { "5h", "weekly" };
 
@@ -204,7 +69,7 @@ public sealed class AntigravityQuotaEstimator
         {
             foreach (var win in windows)
             {
-                var estimate = EstimatePoolWindow(pool.Category, pool.Display, win, allSnapshots, allGenerations, argonPool);
+                var estimate = EstimatePoolWindow(pool.Category, pool.Display, win, allSnapshots, allGenerations);
                 if (estimate is not null)
                 {
                     results.Add(estimate);
@@ -220,11 +85,8 @@ public sealed class AntigravityQuotaEstimator
         string poolDisplayName,
         string windowKind,
         IReadOnlyList<QuotaSnapshot> allSnapshots,
-        IReadOnlyList<AntigravityGenerationUsage> allGenerations,
-        string? resolvedArgonPool = null)
+        IReadOnlyList<AntigravityGenerationUsage> allGenerations)
     {
-        var argonPool = resolvedArgonPool ?? ResolveArgonQuotaPool(allSnapshots, allGenerations);
-
         // Filter snapshots
         var matchingSnapshots = allSnapshots
             .Where(s => SnapshotMatchesPool(s, poolCategory) && IsMatchingWindow(s, windowKind) && s.RemainingFraction.HasValue)
@@ -235,7 +97,7 @@ public sealed class AntigravityQuotaEstimator
 
         var latestSnapshot = matchingSnapshots.Last();
         var poolGenerations = allGenerations
-            .Where(g => GetModelQuotaPool(g.Model, argonPool) == poolCategory)
+            .Where(g => GetModelQuotaPool(g.Model) == poolCategory)
             .OrderBy(g => g.Timestamp)
             .ToList();
 

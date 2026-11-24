@@ -83,7 +83,7 @@ public sealed class AntigravityQuotaParserTests
     }
 
     [Fact]
-    public void QuotaParserCorrectlyExtractsArgonGroupsAndBuckets()
+    public void QuotaParserIgnoresObsoleteArgonGroupsAndBuckets()
     {
         using var document = JsonDocument.Parse("""
         {
@@ -97,6 +97,18 @@ public sealed class AntigravityQuotaParserTests
                     "displayName": "Weekly Limit Remaining",
                     "window": "weekly",
                     "remainingFraction": 0.84,
+                    "resetTime": "2026-11-07T05:51:07Z"
+                  }
+                ]
+              },
+              {
+                "displayName": "Claude and GPT models",
+                "buckets": [
+                  {
+                    "bucketId": "3p-weekly",
+                    "displayName": "Weekly Limit Remaining",
+                    "window": "weekly",
+                    "remainingFraction": 0.91,
                     "resetTime": "2026-11-07T05:51:07Z"
                   }
                 ]
@@ -123,10 +135,21 @@ public sealed class AntigravityQuotaParserTests
         Assert.Equal(2, result.Snapshots.Count);
         var geminiWeekly = Assert.Single(result.Snapshots, s => s.ModelOrPoolId == "gemini-weekly");
         Assert.Equal(0.84, geminiWeekly.RemainingFraction);
+        var claudeWeekly = Assert.Single(result.Snapshots, s => s.ModelOrPoolId == "3p-weekly");
+        Assert.Equal(0.91, claudeWeekly.RemainingFraction);
+        Assert.DoesNotContain(result.Snapshots, s => s.ModelOrPoolId.Contains("argon", StringComparison.OrdinalIgnoreCase));
 
-        var argonWeekly = Assert.Single(result.Snapshots, s => s.ModelOrPoolId == "gemini-argon-wtu-weekly");
-        Assert.Equal(0.6138, argonWeekly.RemainingFraction);
-        Assert.Contains("Argon", argonWeekly.DisplayLabel);
+        using var flatDoc = JsonDocument.Parse("""
+        {
+          "quotaInfo": [
+            { "model_id": "gemini-weekly", "display_name": "Gemini", "remainingFraction": 0.88, "windowKind": "weekly" },
+            { "model_id": "gemini-argon-wtu-weekly", "display_name": "Gemini 4 Argon", "remainingFraction": 0.50, "windowKind": "weekly" }
+          ]
+        }
+        """);
+        var flatResult = new AntigravityQuotaParser().Parse(flatDoc.RootElement, DateTimeOffset.UtcNow, "fixture-flat");
+        var onlyGemini = Assert.Single(flatResult.Snapshots);
+        Assert.Equal("gemini-weekly", onlyGemini.ModelOrPoolId);
     }
 }
 

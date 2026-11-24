@@ -20,7 +20,7 @@ public sealed class PricingService
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public const int DefaultDocumentVersion = 15;
+    public const int DefaultDocumentVersion = 16;
 
     public string FilePath { get; }
     public PricingDocument Document { get; private set; }

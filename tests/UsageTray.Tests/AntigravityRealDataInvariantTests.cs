@@ -130,7 +130,10 @@ public sealed class AntigravityRealDataInvariantTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var quota = await api.TryGetQuotaAsync(ports, csrfToken, cts.Token);
 
-        if (procs.Any(p => p.Name.Contains("language", StringComparison.OrdinalIgnoreCase)))
+        var hasAuthenticatedLanguageServer = procs.Any(p =>
+            p.Name.Contains("language", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(p.CsrfToken));
+        if (hasAuthenticatedLanguageServer)
         {
             Assert.NotNull(quota);
             Assert.NotEmpty(quota.Snapshots);
@@ -139,6 +142,10 @@ public sealed class AntigravityRealDataInvariantTests
             {
                 _output.WriteLine($"  - [{snap.WindowKind}] {snap.DisplayLabel} (ID={snap.ModelOrPoolId}): Remaining={snap.RemainingFraction:P1}, Reset={snap.ResetAt:yyyy-MM-dd HH:mm:ss}");
             }
+        }
+        else if (procs.Any(p => p.Name.Contains("language", StringComparison.OrdinalIgnoreCase)))
+        {
+            _output.WriteLine("Language server process detected, but CLI CSRF token is not exposed; skipping live quota assertion (matches AntigravityProvider graceful skip).");
         }
     }
 }

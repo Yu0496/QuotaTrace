@@ -147,14 +147,14 @@ public static class QuotaDisplayFormatter
     private static string BuildAntigravitySection(DashboardSnapshot snapshot)
     {
         var models = snapshot.Models.Where(item => item.Provider == ProviderKind.Antigravity).ToList();
-        var snapshots = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity)
+        var snapshots = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(item.Snapshot))
             .Select(item => item.Snapshot).ToList();
         var plan = snapshots
             .Where(item => !string.IsNullOrWhiteSpace(item.PlanTier))
             .OrderByDescending(item => item.CapturedAt)
             .Select(item => item.PlanTier)
             .FirstOrDefault();
-        var status = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity).ToList() is { Count: > 0 } views &&
+        var status = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(item.Snapshot)).ToList() is { Count: > 0 } views &&
             views.All(item => item.IsOffline)
             ? I18n.T("离线，显示最后一次快照", "Offline, showing last snapshot")
             : I18n.T("当前快照", "Active snapshot");
@@ -176,7 +176,9 @@ public static class QuotaDisplayFormatter
         if (snapshots.Count == 0)
             lines.Add(I18n.T("暂无可用 quota 快照，请先刷新并确保 Antigravity 正在运行。", "No quota snapshots available. Refresh and ensure Antigravity is running."));
 
-        foreach (var est in snapshot.AntigravityEstimates ?? [])
+        foreach (var est in (snapshot.AntigravityEstimates ?? [])
+                     .Where(e => !e.PoolId.Contains("argon", StringComparison.OrdinalIgnoreCase) &&
+                                 !e.DisplayName.Contains("argon", StringComparison.OrdinalIgnoreCase)))
         {
             var isStale = est.CalculationDetails == "快照待更新";
             var badge = isStale ? I18n.T("（待更新）", " (Pending Update)") : I18n.T("（仅本机样本外推）", " (Local Sample Projection)");

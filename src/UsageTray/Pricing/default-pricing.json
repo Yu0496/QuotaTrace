@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 15,
-  "lastVerifiedAt": "2026-11-19",
+  "schemaVersion": 16,
+  "lastVerifiedAt": "2026-11-24",
   "rules": [
     {
       "provider": "Codex",
@@ -1619,9 +1619,35 @@
       "cacheWritePerMillionUsd": null,
       "outputPerMillionUsd": 20.0,
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "lastVerifiedAt": "2026-11-15",
+      "lastVerifiedAt": "2026-11-24",
       "cacheSplitValidated": true,
-      "referenceBasis": "Ultra 订阅 Orchestrator (Carbon) 模式，按 Gemini 4 Carbon 官方常规基准 $4.0/$0.2/$20.0（1M 上下文统一费率）"
+      "referenceBasis": "Orchestrator (Carbon) 模式（Pro / Ultra 订阅通用），按 Gemini 4 Carbon 官方常规基准 $4.0/$0.2/$20.0（1M 上下文统一费率）"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro-orchestrator-carbon",
+      "matchMode": "Exact",
+      "inputPerMillionUsd": 4.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 20.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-11-24",
+      "cacheSplitValidated": true,
+      "referenceBasis": "Orchestrator (Carbon) 显式变体（Pro / Ultra 订阅通用），按 Gemini 4 Carbon 官方常规基准 $4.0/$0.2/$20.0（1M 上下文统一费率）"
+    },
+    {
+      "provider": "Antigravity",
+      "modelPattern": "gemini-pro-orchestrator-carbon*",
+      "matchMode": "Wildcard",
+      "inputPerMillionUsd": 4.0,
+      "cacheReadPerMillionUsd": 0.2,
+      "cacheWritePerMillionUsd": null,
+      "outputPerMillionUsd": 20.0,
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "lastVerifiedAt": "2026-11-24",
+      "cacheSplitValidated": true,
+      "referenceBasis": "Orchestrator (Carbon) 显式变体（Pro / Ultra 订阅通用），按 Gemini 4 Carbon 官方常规基准 $4.0/$0.2/$20.0（1M 上下文统一费率）"
     },
     {
       "provider": "Antigravity",

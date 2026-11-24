@@ -207,7 +207,7 @@ public sealed class AccuracyRepairTests
     }
 
     [Fact]
-    public void RepositoryPreservesArgonQuotaSnapshotsAndDashboardAdaptsThreeChannels()
+    public void RepositoryCleansUpObsoleteArgonQuotaSnapshotsAndDashboardDisplaysTwoChannels()
     {
         using var workspace = new TempWorkspace();
         var (database, repo) = RepositoryFactory.Create(workspace);
@@ -220,9 +220,8 @@ public sealed class AccuracyRepairTests
             ]);
 
             var latest = repo.GetLatestQuotas(ProviderKind.Antigravity);
-            Assert.Equal(2, latest.Count);
-            Assert.Contains(latest, s => s.ModelOrPoolId == "gemini-weekly");
-            Assert.Contains(latest, s => s.ModelOrPoolId == "gemini-argon-wtu-weekly");
+            Assert.Equal("gemini-weekly", Assert.Single(latest).ModelOrPoolId);
+            Assert.Equal("gemini-weekly", Assert.Single(repo.GetQuotaSnapshots(ProviderKind.Antigravity)).ModelOrPoolId);
 
             var settingsStore = new UsageTray.App.AppSettingsStore(workspace.File("settings.json"));
             var pricing = Pricing();
@@ -235,13 +234,12 @@ public sealed class AccuracyRepairTests
                 CodexReserveApiEquivalentUsd = null,
                 AntigravityGeminiApiEquivalentUsd = 7m,
                 AntigravityClaudeApiEquivalentUsd = 3m,
-                AntigravityArgonApiEquivalentUsd = 2m,
                 Quotas = latest.Select(s => new QuotaView(s, false)).ToList()
             });
             IEnumerable<System.Windows.Forms.Control> Descendants(System.Windows.Forms.Control c) =>
                 c.Controls.Cast<System.Windows.Forms.Control>().SelectMany(child => Descendants(child).Prepend(child));
             var labels = Descendants(form).OfType<System.Windows.Forms.Label>().Select(l => l.Text).ToList();
-            Assert.Contains("Antigravity: $7.00 | $3.00 | $2.00", labels);
+            Assert.Contains("Antigravity: $7.00 | $3.00", labels);
         }
     }
 }
