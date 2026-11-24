@@ -183,8 +183,8 @@ public sealed class SettingsForm : Form
                 MessageBox.Show(
                     this,
                     I18n.Format(
-                        "已复制以下 statusLine 配置片段到剪贴板，请将其合并到 ~/.gemini/settings.json：\r\n\r\n{0}",
-                        "Copied the statusLine snippet below to clipboard. Merge it into ~/.gemini/settings.json:\r\n\r\n{0}",
+                        "已复制以下 statusLine 配置片段到剪贴板，请将其合并到 ~/.gemini/antigravity-cli/settings.json：\r\n\r\n{0}",
+                        "Copied the statusLine snippet below to clipboard. Merge it into ~/.gemini/antigravity-cli/settings.json:\r\n\r\n{0}",
                         snippet),
                     "QuotaTrace",
                     MessageBoxButtons.OK,
@@ -212,12 +212,12 @@ public sealed class SettingsForm : Form
         {
             Text = I18n.T(
                 "• 机制变化：自 Antigravity v2.34.0 起桌面端隐藏了进程令牌，旧版不再显示“离线”，改为“待校准”。\r\n" +
-                "• 方案 1（被动 CLI 同步）：在 ~/.gemini/settings.json 配置 statusLine 调用本程序 --status-recorder。\r\n" +
+                "• 方案 1（被动 CLI 同步）：在 ~/.gemini/antigravity-cli/settings.json 配置 statusLine 调用本程序 --status-recorder。\r\n" +
                 "  仅在您主动开启 agy CLI 或触发 /usage 查询对话时顺便写入剩余额度，软件绝不后台静默启动 CLI。\r\n" +
                 "• 方案 2（手动临时校准）：可输入面板周倒计时（天/小时/分）或具体重置日期及当前剩余百分比。\r\n" +
                 "  校准后会据此识别当前周周期并结合本地对话 Token 消费外推满额基准；若未使用 CLI，建议周期变更时更新。",
                 "• Background: Since Antigravity v2.34.0, the desktop app hides process CSRF tokens; QuotaTrace now shows 'Pending' instead of misleading 'Offline'.\r\n" +
-                "• Method 1 (Passive CLI Sync): Configure statusLine in ~/.gemini/settings.json to pipe into --status-recorder.\r\n" +
+                "• Method 1 (Passive CLI Sync): Configure statusLine in ~/.gemini/antigravity-cli/settings.json to pipe into --status-recorder.\r\n" +
                 "  Quota updates only when you proactively launch agy CLI or run /usage; QuotaTrace never spawns agy in the background.\r\n" +
                 "• Method 2 (Manual Calibration): Enter the weekly countdown (days/hours/minutes) or exact reset date plus remaining %.\r\n" +
                 "  Used to align the active weekly cycle and project full quota from local consumption until the next sync or reset."),
