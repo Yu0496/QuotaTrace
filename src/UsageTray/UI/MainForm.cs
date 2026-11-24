@@ -39,7 +39,11 @@ public sealed class MainForm : Form
     private readonly DataGridView _projects;
     private readonly DailyBarChartControl _chart;
     private readonly QuotaSummaryControl _quotaControl;
+    private readonly Panel _quotaHeaderPanel;
+    private readonly Label _quotaStatusHintLabel;
+    private readonly Button _calibrateAntigravityButton;
     private readonly CodexHistoryControl _codexHistory;
+    private DashboardSnapshot? _latestAppliedSnapshot;
     private readonly TabControl _tabs;
     private readonly TabPage _modelPage;
     private readonly TabPage _projectPage;
@@ -331,13 +335,50 @@ public sealed class MainForm : Form
         _models.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _projects.ColumnWidthChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
         _quotaControl = new QuotaSummaryControl { Dock = DockStyle.Fill, ShowHeader = false, ShowDismissHint = false, ShowFooterNote = true, BackColor = Color.White };
+        _quotaStatusHintLabel = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = false,
+            AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.FromArgb(51, 65, 85),
+            Text = I18n.T("Antigravity 桌面端未自动暴露接口时，可手动校准或使用 agy CLI 同步。", "Use manual calibration or agy CLI sync when Antigravity desktop API is restricted.")
+        };
+        _calibrateAntigravityButton = new Button
+        {
+            Text = I18n.T("手动校准 Antigravity 额度…", "Calibrate Antigravity Quota..."),
+            AutoSize = true,
+            Height = Math.Max(28, textHeight + 10),
+            Padding = new Padding(10, 2, 10, 2),
+            Dock = DockStyle.Right,
+            Margin = new Padding(8, 0, 0, 0)
+        };
+        _calibrateAntigravityButton.Click += (_, _) => OpenManualAntigravityCalibration();
+
+        _quotaHeaderPanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = Math.Max(42, textHeight + 22),
+            Padding = new Padding(12, 6, 12, 6),
+            BackColor = Color.FromArgb(248, 250, 252)
+        };
+        _quotaHeaderPanel.Controls.Add(_quotaStatusHintLabel);
+        _quotaHeaderPanel.Controls.Add(_calibrateAntigravityButton);
+
+        var quotaLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        quotaLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        quotaLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        quotaLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        quotaLayout.Controls.Add(_quotaHeaderPanel, 0, 0);
+        quotaLayout.Controls.Add(_quotaControl, 0, 1);
+
         _codexHistory = new CodexHistoryControl { Dock = DockStyle.Fill };
         _codexHistory.ColumnWidthsChanged += (_, _) => { if (!_isRestoringColumns) ColumnWidthsChanged?.Invoke(this, EventArgs.Empty); };
 
         _tabs = new TabControl { Dock = DockStyle.Fill, Margin = new Padding(12, 0, 12, 0) };
         _modelPage = new TabPage(I18n.T("按模型", "By Model")); _modelPage.Controls.Add(_models);
         _projectPage = new TabPage(I18n.T("按项目", "By Project")); _projectPage.Controls.Add(_projects);
-        _quotaPage = new TabPage(I18n.T("额度", "Quotas")); _quotaPage.Controls.Add(_quotaControl);
+        _quotaPage = new TabPage(I18n.T("额度", "Quotas")); _quotaPage.Controls.Add(quotaLayout);
         _codexHistoryPage = new TabPage(I18n.T("Codex 周历史", "Codex Weekly History")); _codexHistoryPage.Controls.Add(_codexHistory);
         _tabs.TabPages.AddRange([_modelPage, _projectPage, _quotaPage, _codexHistoryPage]);
 
@@ -395,6 +436,8 @@ public sealed class MainForm : Form
         _projectPage.Text = I18n.T("按项目", "By Project");
         _quotaPage.Text = I18n.T("额度", "Quotas");
         _codexHistoryPage.Text = I18n.T("Codex 周历史", "Codex Weekly History");
+        _calibrateAntigravityButton.Text = I18n.T("手动校准 Antigravity 额度…", "Calibrate Antigravity Quota...");
+        UpdateAntigravityCalibrationBanner(_latestAppliedSnapshot);
 
         UpdateGridHeaders(_models, ModelColumns);
         UpdateGridHeaders(_projects, ProjectColumns);
@@ -456,6 +499,7 @@ public sealed class MainForm : Form
         // Quota control provider toggles
         _quotaControl.EnableCodex = enableCodex;
         _quotaControl.EnableAntigravity = enableAntigravity;
+        _quotaHeaderPanel.Visible = enableAntigravity;
 
         // Cards visibility
         _codexApiValue.Visible = enableCodex;
@@ -468,6 +512,7 @@ public sealed class MainForm : Form
     {
         if (IsDisposed) return;
         if (InvokeRequired) { BeginInvoke(() => ApplySnapshot(snapshot)); return; }
+        _latestAppliedSnapshot = snapshot;
 
         var enableCodex = _coordinator.Settings.EnableCodex;
         var enableAntigravity = _coordinator.Settings.EnableAntigravity;
@@ -530,14 +575,26 @@ public sealed class MainForm : Form
 
             var geminiEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && e.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase));
             var claudeEst = snapshot.AntigravityEstimates?.FirstOrDefault(e => e.WindowKind == "weekly" && (e.DisplayName.Contains("Claude", StringComparison.OrdinalIgnoreCase) || e.DisplayName.Contains("3p", StringComparison.OrdinalIgnoreCase)));
+            var geminiSnap = snapshot.Quotas.Select(q => q.Snapshot)
+                .FirstOrDefault(s => s.Provider == ProviderKind.Antigravity && AntigravityQuotaEstimator.SnapshotMatchesPool(s, "gemini") && s.WindowKind.Contains("week", StringComparison.OrdinalIgnoreCase));
+            var claudeSnap = snapshot.Quotas.Select(q => q.Snapshot)
+                .FirstOrDefault(s => s.Provider == ProviderKind.Antigravity && AntigravityQuotaEstimator.SnapshotMatchesPool(s, "3p") && s.WindowKind.Contains("week", StringComparison.OrdinalIgnoreCase));
 
-            string geminiCycle = geminiEst?.ResetAt.HasValue == true
-                ? I18n.Format("Gemini: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Gemini: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", geminiEst.ResetAt.Value.AddDays(-7).ToLocalTime(), geminiEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(geminiEst.ResetAt.Value))
-                : I18n.T("Gemini: 暂无配额", "Gemini: No quota");
+            static string FormatPoolCycle(string name, AntigravityQuotaEstimate? est, QuotaSnapshot? snap)
+            {
+                if (est?.ResetAt is not { } resetAt) return I18n.T($"{name}: 暂无配额", $"{name}: No quota");
+                var rel = TimeFormatter.FormatRelativeFuture(resetAt);
+                var tag = snap?.IsManualCalibration == true
+                    ? I18n.T("手动 · ", "Manual · ")
+                    : snap?.IsStatusLineSync == true
+                        ? "CLI · "
+                        : string.Empty;
+                return I18n.Format($"{name}: {{0:MM-dd HH:mm}}~{{1:MM-dd HH:mm}}（{tag}{{2}}）", $"{name}: {{0:MM-dd HH:mm}}~{{1:MM-dd HH:mm}} ({tag}{{2}})",
+                    resetAt.AddDays(-7).ToLocalTime(), resetAt.ToLocalTime(), rel);
+            }
 
-            string claudeCycle = claudeEst?.ResetAt.HasValue == true
-                ? I18n.Format("Claude: {0:MM-dd HH:mm}~{1:MM-dd HH:mm}（{2}）", "Claude: {0:MM-dd HH:mm}~{1:MM-dd HH:mm} ({2})", claudeEst.ResetAt.Value.AddDays(-7).ToLocalTime(), claudeEst.ResetAt.Value.ToLocalTime(), TimeFormatter.FormatRelativeFuture(claudeEst.ResetAt.Value))
-                : I18n.T("Claude: 暂无配额", "Claude: No quota");
+            string geminiCycle = FormatPoolCycle("Gemini", geminiEst, geminiSnap);
+            string claudeCycle = FormatPoolCycle("Claude", claudeEst, claudeSnap);
 
             _antigravityCycleNote.Text = I18n.T("周期：", "Cycle: ") + $"{geminiCycle} | {claudeCycle}";
         }
@@ -569,6 +626,7 @@ public sealed class MainForm : Form
 
         _chart.SetData(snapshot.Daily);
         _quotaControl.SetSnapshot(snapshot);
+        UpdateAntigravityCalibrationBanner(snapshot);
 
         if (enableCodex)
         {
@@ -1015,6 +1073,59 @@ public sealed class MainForm : Form
 
     private static string FormatTokens(long value) => value switch { >= 1_000_000 => $"{value / 1_000_000d:0.##}M", >= 1_000 => $"{value / 1_000d:0.##}K", _ => value.ToString("N0") };
     private static string FormatCost(decimal? value) => value.HasValue ? "$" + value.Value.ToString("0.00") : "—";
+
+    private void UpdateAntigravityCalibrationBanner(DashboardSnapshot? snapshot)
+    {
+        var weeklySnaps = snapshot?.Quotas
+            .Select(q => q.Snapshot)
+            .Where(s => s.Provider == ProviderKind.Antigravity &&
+                        string.Equals(s.WindowKind, "weekly", StringComparison.OrdinalIgnoreCase) &&
+                        !s.IsResetPassed())
+            .ToList() ?? [];
+
+        var active = weeklySnaps.FirstOrDefault();
+        if (active is { IsManualCalibration: true })
+        {
+            _quotaStatusHintLabel.ForeColor = Color.FromArgb(29, 78, 216);
+            _quotaStatusHintLabel.Text = I18n.Format(
+                "当前使用手动校准周期（校准于 {0:MM-dd HH:mm}）；Token 与金额仍自动统计。",
+                "Using manual calibration ({0:MM-dd HH:mm}); tokens & amounts update automatically.",
+                active.CapturedAt.ToLocalTime());
+        }
+        else if (active is { IsStatusLineSync: true })
+        {
+            _quotaStatusHintLabel.ForeColor = Color.FromArgb(4, 120, 87);
+            _quotaStatusHintLabel.Text = I18n.Format(
+                "已通过 agy CLI statusLine 同步（{0:MM-dd HH:mm}）；也可随时手动校准或修正。",
+                "Synced via agy CLI statusLine ({0:MM-dd HH:mm}); manual calibration is also available.",
+                active.CapturedAt.ToLocalTime());
+        }
+        else if (active is not null && !active.IsStale())
+        {
+            _quotaStatusHintLabel.ForeColor = Color.FromArgb(51, 65, 85);
+            _quotaStatusHintLabel.Text = I18n.T(
+                "Antigravity 实时配额已连接；如重置后未及时同步，也可手动校准。",
+                "Antigravity live quota connected; manual calibration is also available.");
+        }
+        else
+        {
+            _quotaStatusHintLabel.ForeColor = Color.FromArgb(180, 83, 9);
+            _quotaStatusHintLabel.Text = I18n.T(
+                "桌面端新版本未暴露自动接口（待校准）；可点右侧手动校准，或在主动用 agy CLI 时自动同步。",
+                "Desktop API restricted; click right to calibrate manually or sync automatically when running agy CLI.");
+        }
+    }
+
+    private void OpenManualAntigravityCalibration()
+    {
+        var existing = _coordinator.GetLatestQuotas(ProviderKind.Antigravity);
+        using var dlg = new AntigravityManualQuotaDialog(existing);
+        if (dlg.ShowDialog(this) == DialogResult.OK && dlg.ResultSnapshots.Count > 0)
+        {
+            _coordinator.SaveManualAntigravityQuotas(dlg.ResultSnapshots);
+            ApplyCurrentSelection();
+        }
+    }
 
     protected override void Dispose(bool disposing)
     {

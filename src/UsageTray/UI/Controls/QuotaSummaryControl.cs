@@ -97,7 +97,9 @@ public sealed class QuotaSummaryControl : UserControl
         {
             y += _sectionFont.Height + 6;
             var rawAgSnapshots = _snapshot.Quotas
-                .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(q.Snapshot))
+                .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity &&
+                            !IsArgon(q.Snapshot) &&
+                            !q.Snapshot.IsExpiredStaleAntigravityFiveHour())
                 .Select(q => q.Snapshot).ToList();
             var agSnapshots = DeduplicateAntigravityQuotas(rawAgSnapshots);
             if (agSnapshots.Count == 0)
@@ -289,7 +291,9 @@ public sealed class QuotaSummaryControl : UserControl
         if (EnableAntigravity)
         {
             var agViews = _snapshot.Quotas
-                .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(q.Snapshot))
+                .Where(q => q.Snapshot.Provider == ProviderKind.Antigravity &&
+                            !IsArgon(q.Snapshot) &&
+                            !q.Snapshot.IsExpiredStaleAntigravityFiveHour())
                 .ToList();
             var rawAgSnapshots = agViews.Select(q => q.Snapshot).ToList();
             var agSnapshots = DeduplicateAntigravityQuotas(rawAgSnapshots);
@@ -298,15 +302,17 @@ public sealed class QuotaSummaryControl : UserControl
                 .OrderByDescending(s => s.CapturedAt)
                 .Select(s => s.PlanTier)
                 .FirstOrDefault();
-            var agOffline = agViews.Count > 0 && agViews.All(v => v.IsOffline);
+
+            var (agStatusBadge, agStatusBg, agStatusBorder, agStatusFore) = ResolveAntigravityStatusBadge(agSnapshots);
 
             var agTitle = I18n.T("Antigravity 额度与周订阅", "Antigravity Quota & Weekly Sub");
-            DrawSectionHeader(g, padX, ref y, agTitle, agPlan, agOffline ? I18n.T("离线", "Offline") : null, Color.FromArgb(59, 130, 246));
+            DrawSectionHeader(g, padX, ref y, agTitle, agPlan, agStatusBadge, Color.FromArgb(59, 130, 246),
+                agStatusBg, agStatusBorder, agStatusFore);
 
             if (agSnapshots.Count == 0)
             {
                 using var muted = new SolidBrush(Color.FromArgb(148, 163, 184));
-                g.DrawString(I18n.T("暂无可用快照，请确保 Antigravity 正在运行并刷新。", "No snapshot available. Ensure Antigravity is running and refresh."), _regularFont, muted, padX + 8, y);
+                g.DrawString(I18n.T("暂无可用额度快照，可点击“手动校准”或在 agy CLI 中运行 /usage 同步。", "No quota snapshot. Use 'Calibrate Quota' or run /usage in agy CLI."), _regularFont, muted, padX + 8, y);
                 y += _regularFont.Height + 4;
             }
             else
@@ -367,10 +373,20 @@ public sealed class QuotaSummaryControl : UserControl
                         ? I18n.Format("约 ${0:0.00}", "~ ${0:0.00}", est.EstimatedFullQuotaUsd.Value)
                         : LocalizeEstimateNote(est.CalculationDetails);
 
+                    var matchingWeeklySnap = agSnapshots.FirstOrDefault(s =>
+                        IsWeekly(s) &&
+                        ((est.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase) &&
+                          (s.ModelOrPoolId.Contains("gemini", StringComparison.OrdinalIgnoreCase) || s.DisplayLabel.Contains("gemini", StringComparison.OrdinalIgnoreCase))) ||
+                         (!est.DisplayName.Contains("Gemini", StringComparison.OrdinalIgnoreCase) &&
+                          !s.ModelOrPoolId.Contains("gemini", StringComparison.OrdinalIgnoreCase))));
                     var isStale = est.CalculationDetails == "快照待更新";
-                    var estBadge = est.EstimatedFullQuotaUsd.HasValue
-                        ? (isStale ? I18n.T("（待更新）", " (Pending Update)") : I18n.T("（仅本机样本）", " (Local Samples)"))
-                        : string.Empty;
+                    var estBadge = !est.EstimatedFullQuotaUsd.HasValue
+                        ? string.Empty
+                        : matchingWeeklySnap?.IsManualCalibration == true
+                            ? I18n.T("（手动校准）", " (Manual)")
+                            : matchingWeeklySnap?.IsStatusLineSync == true
+                                ? I18n.T("（CLI 同步）", " (CLI Sync)")
+                                : isStale ? I18n.T("（待更新）", " (Pending Update)") : I18n.T("（仅本机样本）", " (Local Samples)");
 
                     var cycleKey = I18n.Format("{0} 本轮参考金额", "{0} Cycle Sub Ref", est.DisplayName);
                     var fullKey = I18n.Format("{0} 满额样本外推", "{0} Est. Full Quota", est.DisplayName);
@@ -498,11 +514,43 @@ public sealed class QuotaSummaryControl : UserControl
             using var noteBrush = new SolidBrush(Color.FromArgb(160, 174, 192));
             g.DrawString(I18n.T("• 订阅参考金额按固定基准计量，并非账单或可用余额。", "• Subscription reference values use fixed benchmarks and are not bills or balances."), _smallFont, noteBrush, padX, y);
             y += _smallFont.Height + 3;
-            g.DrawString(I18n.T("• 满额金额仅按同周期本机样本外推；过期额度等待新快照。", "• Full projections are estimated solely from local samples; expired quotas await new snapshots."), _smallFont, noteBrush, padX, y);
+            g.DrawString(I18n.T("• 满额金额仅按本机样本外推；Antigravity 支持手动校准或主动 CLI 同步。", "• Full projections use local samples; Antigravity supports manual calibration or active CLI sync."), _smallFont, noteBrush, padX, y);
         }
     }
 
-    private void DrawSectionHeader(Graphics g, int x, ref int y, string title, string? badge, string? statusBadge, Color dotColor)
+    private static (string? Text, Color Bg, Color Border, Color Fore) ResolveAntigravityStatusBadge(IReadOnlyList<QuotaSnapshot> snapshots)
+    {
+        var active = snapshots.Where(s => !s.IsResetPassed()).ToList();
+        var activeWeekly = active.FirstOrDefault(IsWeekly) ?? active.FirstOrDefault();
+        if (activeWeekly is null)
+        {
+            return (I18n.T("待校准 / CLI同步", "Manual / CLI Sync"),
+                Color.FromArgb(255, 251, 235), Color.FromArgb(253, 230, 138), Color.FromArgb(180, 83, 9));
+        }
+
+        if (activeWeekly.IsManualCalibration)
+        {
+            return (I18n.T("手动校准", "Manual"),
+                Color.FromArgb(239, 246, 255), Color.FromArgb(191, 219, 254), Color.FromArgb(29, 78, 216));
+        }
+
+        if (activeWeekly.IsStatusLineSync)
+        {
+            return (I18n.T("CLI 同步", "CLI Sync"),
+                Color.FromArgb(236, 253, 245), Color.FromArgb(167, 243, 208), Color.FromArgb(4, 120, 87));
+        }
+
+        if (activeWeekly.IsStale())
+        {
+            return (I18n.T("待校准 / CLI同步", "Manual / CLI Sync"),
+                Color.FromArgb(255, 251, 235), Color.FromArgb(253, 230, 138), Color.FromArgb(180, 83, 9));
+        }
+
+        return (null, default, default, default);
+    }
+
+    private void DrawSectionHeader(Graphics g, int x, ref int y, string title, string? badge, string? statusBadge, Color dotColor,
+        Color? statusBg = null, Color? statusBorder = null, Color? statusFore = null)
     {
         using var dotBrush = new SolidBrush(dotColor);
         g.FillEllipse(dotBrush, x, y + 4, 8, 8);
@@ -529,9 +577,9 @@ public sealed class QuotaSummaryControl : UserControl
 
         if (!string.IsNullOrWhiteSpace(statusBadge))
         {
-            using var badgeBg = new SolidBrush(Color.FromArgb(254, 242, 242));
-            using var badgePen = new Pen(Color.FromArgb(254, 202, 202));
-            using var badgeText = new SolidBrush(Color.FromArgb(220, 38, 38));
+            using var badgeBg = new SolidBrush(statusBg ?? Color.FromArgb(254, 242, 242));
+            using var badgePen = new Pen(statusBorder ?? Color.FromArgb(254, 202, 202));
+            using var badgeText = new SolidBrush(statusFore ?? Color.FromArgb(220, 38, 38));
             var text = statusBadge.Trim();
             var size = TextRenderer.MeasureText(g, text, _smallFont);
             var rect = new Rectangle(currentX, y + 1, size.Width + 8, size.Height + 2);
@@ -558,7 +606,11 @@ public sealed class QuotaSummaryControl : UserControl
             using var brush = new SolidBrush(color);
             g.DrawString(text, _boldFont, brush, x + 12 + TextRenderer.MeasureText(g, label, _regularFont).Width, y);
             y += _regularFont.Height + 3;
-            var detail = I18n.Format("采样 {0:MM-dd HH:mm} · 重置 {1}", "Sampled {0:MM-dd HH:mm} · Reset {1}", snapshot.CapturedAt.ToLocalTime(), FormatReset(snapshot));
+            var detail = snapshot.IsManualCalibration
+                ? I18n.Format("手动校准 {0:MM-dd HH:mm} · 重置 {1}", "Manual {0:MM-dd HH:mm} · Reset {1}", snapshot.CapturedAt.ToLocalTime(), FormatReset(snapshot))
+                : snapshot.IsStatusLineSync
+                    ? I18n.Format("CLI 同步 {0:MM-dd HH:mm} · 重置 {1}", "CLI Sync {0:MM-dd HH:mm} · Reset {1}", snapshot.CapturedAt.ToLocalTime(), FormatReset(snapshot))
+                    : I18n.Format("采样 {0:MM-dd HH:mm} · 重置 {1}", "Sampled {0:MM-dd HH:mm} · Reset {1}", snapshot.CapturedAt.ToLocalTime(), FormatReset(snapshot));
             g.DrawString(detail, _smallFont, detailBrush, x + 12, y);
             y += _smallFont.Height + 4;
         }
@@ -595,7 +647,9 @@ public sealed class QuotaSummaryControl : UserControl
         var frac = snapshot.RemainingFraction.Value;
         if (snapshot.IsResetPassed())
         {
-            return (I18n.Format("待同步（上次 {0:P0}）", "Syncing (Last {0:P0})", frac), Color.FromArgb(100, 116, 139));
+            return snapshot.IsManualCalibration
+                ? (I18n.Format("周期已重置（上次手动校准 {0:P0}）", "Cycle Reset (Last Manual {0:P0})", frac), Color.FromArgb(100, 116, 139))
+                : (I18n.Format("待同步（上次 {0:P0}）", "Syncing (Last {0:P0})", frac), Color.FromArgb(100, 116, 139));
         }
         var staleText = snapshot.IsStale() ? I18n.T("（旧快照）", " (Stale)") : "";
         var text = I18n.Format("{0:P0} 剩余{1}", "{0:P0} Remaining{1}", frac, staleText);
@@ -621,6 +675,11 @@ public sealed class QuotaSummaryControl : UserControl
             "额度或周期未知" => I18n.T("额度或周期未知", "Quota unknown"),
             "缺少对应本机用量" => I18n.T("缺少对应本机用量", "No local usage"),
             "样本含未定价用量" => I18n.T("样本含未定价用量", "Unpriced usage"),
+            "按手动校准外推" => I18n.T("按手动校准外推", "Projected from manual calibration"),
+            "按手动校准全周期外推" => I18n.T("按手动校准全周期外推", "Full-cycle manual projection"),
+            "按 CLI 同步样本外推" => I18n.T("按 CLI 同步样本外推", "Projected from CLI sync"),
+            "按 CLI 同步全周期外推" => I18n.T("按 CLI 同步全周期外推", "Full-cycle CLI sync projection"),
+            "按全周期累计消耗外推" => I18n.T("按全周期累计消耗外推", "Full-cycle cumulative projection"),
             _ => note
         };
     }

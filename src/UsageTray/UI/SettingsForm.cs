@@ -1,4 +1,6 @@
 using UsageTray.App;
+using UsageTray.Core;
+using UsageTray.Providers.Antigravity;
 using UsageTray.Services;
 
 namespace UsageTray.UI;
@@ -16,6 +18,8 @@ public sealed class SettingsForm : Form
     private readonly NumericUpDown _refresh;
     private readonly NumericUpDown _retention;
     private readonly TextBox _extraRoots;
+
+    public DashboardSnapshot? LatestManualSnapshot { get; private set; }
 
     public SettingsForm(AppSettingsStore settingsStore, RefreshCoordinator coordinator)
     {
@@ -124,6 +128,105 @@ public sealed class SettingsForm : Form
             Margin = new Padding(0, 0, 0, 6)
         };
 
+        var agSyncTitle = new Label
+        {
+            Text = I18n.T("Antigravity 配额同步与手动校准说明", "Antigravity Quota Sync & Manual Calibration"),
+            AutoSize = true,
+            Font = new Font(Font, FontStyle.Bold),
+            Margin = new Padding(0, 12, 0, 6)
+        };
+
+        var calibrateAgButton = new Button
+        {
+            Text = I18n.T("手动校准 Antigravity 额度...", "Calibrate Antigravity Quota..."),
+            AutoSize = true,
+            Height = buttonHeight,
+            Padding = new Padding(10, 2, 10, 2),
+            Margin = new Padding(0, 0, 8, 0)
+        };
+        calibrateAgButton.Click += (_, _) =>
+        {
+            var existing = _coordinator.GetLatestQuotas(ProviderKind.Antigravity);
+            using var dialog = new AntigravityManualQuotaDialog(existing);
+            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.ResultSnapshots.Count == 0)
+                return;
+
+            LatestManualSnapshot = _coordinator.SaveManualAntigravityQuotas(dialog.ResultSnapshots);
+            MessageBox.Show(
+                this,
+                I18n.Format(
+                    "已写入 {0} 条 Antigravity 手动校准记录，周期归属与额度测算已立即更新。",
+                    "Saved {0} manual Antigravity quota entries. Cycle tracking and projections are updated.",
+                    dialog.ResultSnapshots.Count),
+                "QuotaTrace",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        };
+
+        var copyStatusLineButton = new Button
+        {
+            Text = I18n.T("复制 agy CLI statusLine 配置", "Copy agy CLI statusLine Config"),
+            AutoSize = true,
+            Height = buttonHeight,
+            Padding = new Padding(10, 2, 10, 2),
+            Margin = Padding.Empty
+        };
+        copyStatusLineButton.Click += (_, _) =>
+        {
+            var exePath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(exePath) || !exePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                exePath = Path.Combine(AppContext.BaseDirectory, "UsageTray.exe");
+            var snippet = AntigravityManualQuotaHelper.BuildAgyStatusLineConfigSnippet(exePath);
+            try
+            {
+                Clipboard.SetText(snippet);
+                MessageBox.Show(
+                    this,
+                    I18n.Format(
+                        "已复制以下 statusLine 配置片段到剪贴板，请将其合并到 ~/.gemini/settings.json：\r\n\r\n{0}",
+                        "Copied the statusLine snippet below to clipboard. Merge it into ~/.gemini/settings.json:\r\n\r\n{0}",
+                        snippet),
+                    "QuotaTrace",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch
+            {
+                MessageBox.Show(this, snippet, "QuotaTrace", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        };
+
+        var agSyncButtonsPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0, 2, 0, 4)
+        };
+        agSyncButtonsPanel.Controls.Add(calibrateAgButton);
+        agSyncButtonsPanel.Controls.Add(copyStatusLineButton);
+
+        var maxNoteWidth = Math.Max(500, (int)(580 * (DeviceDpi / 96f)));
+        var agSyncNote = new Label
+        {
+            Text = I18n.T(
+                "• 机制变化：自 Antigravity v2.34.0 起桌面端隐藏了进程令牌，旧版不再显示“离线”，改为“待校准”。\r\n" +
+                "• 方案 1（被动 CLI 同步）：在 ~/.gemini/settings.json 配置 statusLine 调用本程序 --status-recorder。\r\n" +
+                "  仅在您主动开启 agy CLI 或触发 /usage 查询对话时顺便写入剩余额度，软件绝不后台静默启动 CLI。\r\n" +
+                "• 方案 2（手动临时校准）：可输入面板周倒计时（天/小时/分）或具体重置日期及当前剩余百分比。\r\n" +
+                "  校准后会据此识别当前周周期并结合本地对话 Token 消费外推满额基准；若未使用 CLI，建议周期变更时更新。",
+                "• Background: Since Antigravity v2.34.0, the desktop app hides process CSRF tokens; QuotaTrace now shows 'Pending' instead of misleading 'Offline'.\r\n" +
+                "• Method 1 (Passive CLI Sync): Configure statusLine in ~/.gemini/settings.json to pipe into --status-recorder.\r\n" +
+                "  Quota updates only when you proactively launch agy CLI or run /usage; QuotaTrace never spawns agy in the background.\r\n" +
+                "• Method 2 (Manual Calibration): Enter the weekly countdown (days/hours/minutes) or exact reset date plus remaining %.\r\n" +
+                "  Used to align the active weekly cycle and project full quota from local consumption until the next sync or reset."),
+            AutoSize = true,
+            MaximumSize = new Size(maxNoteWidth, 0),
+            ForeColor = Color.FromArgb(71, 85, 105),
+            Margin = new Padding(0, 4, 0, 10)
+        };
+
         var pricingTitle = new Label
         {
             Text = I18n.T("模型定价", "Model Pricing"),
@@ -215,8 +318,8 @@ public sealed class SettingsForm : Form
         var reviewNote = new Label
         {
             Text = I18n.T(
-                "• Reserve 按约定使用 GPT-5.6 Luna 参考价：输入 $0.2 / 缓存读取 $0.02 / 缓存创建 $0.25 / 输出 $1.2（每百万 Token）；长上下文及 Fast 档位同 Luna。\r\n• 官方自动审批（Auto-Review / 审核模型）现已直接免费，不再计价（费用为 $0.00）。\r\n• 这是本软件的参考计量约定，底层模型身份及官方实际扣减仍存在不确定性。\r\n• 本软件统计订阅消耗参考价值：Token × 非促销基准价；Codex Fast 采用订阅倍率。金额并非实际扣费或订阅余额。\r\n• 额度来自官方快照；满额参考金额只能基于同周期本机用量样本外推，其他设备、云端任务及缺失日志都会影响结果。",
-                "• Reserve uses GPT-5.6 Luna benchmark: Input $0.2 / CacheRead $0.02 / CacheCreation $0.25 / Output $1.2 per 1M tokens; long context and Fast tiers match Luna.\r\n• Official Auto-Review / Moderation is now free of charge and no longer priced ($0.00).\r\n• This is a local benchmark convention; underlying models and official consumption carry uncertainty.\r\n• Subscription reference values reflect estimated equivalent worth, not actual bills or account balances.\r\n• Quotas reflect official snapshots; full projections are estimated solely from local samples."),
+                "• 额度来自官方快照、主动 CLI 同步或手动校准；满额参考金额只能基于同周期本机用量样本外推，其他设备、云端任务及缺失日志都会影响结果。",
+                "• Reserve uses GPT-5.6 Luna benchmark: Input $0.2 / CacheRead $0.02 / CacheCreation $0.25 / Output $1.2 per 1M tokens; long context and Fast tiers match Luna.\r\n• Official Auto-Review / Moderation is now free of charge and no longer priced ($0.00).\r\n• This is a local benchmark convention; underlying models and official consumption carry uncertainty.\r\n• Subscription reference values reflect estimated equivalent worth, not actual bills or account balances.\r\n• Quotas reflect official snapshots, user-initiated CLI sync, or manual calibration; full projections are estimated solely from local samples."),
             AutoSize = true,
             ForeColor = Color.FromArgb(71, 85, 105),
             Margin = new Padding(0, 4, 0, 10)
@@ -470,7 +573,7 @@ public sealed class SettingsForm : Form
         {
             Dock = DockStyle.Top,
             ColumnCount = 1,
-            RowCount = 21,
+            RowCount = 24,
             AutoSize = true,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
@@ -484,19 +587,22 @@ public sealed class SettingsForm : Form
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 5: numericTable
         mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 6: extraLabel
         mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 85)); // 7: extraRoots
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 8: pricingTitle
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 9: pricingButtonsPanel
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 10: pricingNote
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 11: reviewNoteTitle
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 12: reviewNote
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 13: speedNoteTitle
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 14: speedNote
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 15: note
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 16: updateTitle
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 17: versionLabel
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 18: _checkUpdates
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 19: updateButtonsPanel
-        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 20: githubRepoLink
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 8: agSyncTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 9: agSyncButtonsPanel
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 10: agSyncNote
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 11: pricingTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 12: pricingButtonsPanel
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 13: pricingNote
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 14: reviewNoteTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 15: reviewNote
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 16: speedNoteTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 17: speedNote
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 18: note
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 19: updateTitle
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 20: versionLabel
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 21: _checkUpdates
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 22: updateButtonsPanel
+        mainPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 23: githubRepoLink
 
         mainPanel.Controls.Add(title, 0, 0);
         mainPanel.Controls.Add(CreateLabel(I18n.T("监测提供商 (至少开启一项)：", "Monitored Providers (Enable at least one):")), 0, 1);
@@ -506,19 +612,22 @@ public sealed class SettingsForm : Form
         mainPanel.Controls.Add(numericTable, 0, 5);
         mainPanel.Controls.Add(CreateLabel(I18n.T("额外 Codex sessions 目录（每行一个）：", "Extra Codex sessions directories (one per line):")), 0, 6);
         mainPanel.Controls.Add(_extraRoots, 0, 7);
-        mainPanel.Controls.Add(pricingTitle, 0, 8);
-        mainPanel.Controls.Add(pricingButtonsPanel, 0, 9);
-        mainPanel.Controls.Add(pricingNote, 0, 10);
-        mainPanel.Controls.Add(reviewNoteTitle, 0, 11);
-        mainPanel.Controls.Add(reviewNote, 0, 12);
-        mainPanel.Controls.Add(speedNoteTitle, 0, 13);
-        mainPanel.Controls.Add(speedNote, 0, 14);
-        mainPanel.Controls.Add(note, 0, 15);
-        mainPanel.Controls.Add(updateTitle, 0, 16);
-        mainPanel.Controls.Add(versionLabel, 0, 17);
-        mainPanel.Controls.Add(_checkUpdates, 0, 18);
-        mainPanel.Controls.Add(updateButtonsPanel, 0, 19);
-        mainPanel.Controls.Add(githubRepoLink, 0, 20);
+        mainPanel.Controls.Add(agSyncTitle, 0, 8);
+        mainPanel.Controls.Add(agSyncButtonsPanel, 0, 9);
+        mainPanel.Controls.Add(agSyncNote, 0, 10);
+        mainPanel.Controls.Add(pricingTitle, 0, 11);
+        mainPanel.Controls.Add(pricingButtonsPanel, 0, 12);
+        mainPanel.Controls.Add(pricingNote, 0, 13);
+        mainPanel.Controls.Add(reviewNoteTitle, 0, 14);
+        mainPanel.Controls.Add(reviewNote, 0, 15);
+        mainPanel.Controls.Add(speedNoteTitle, 0, 16);
+        mainPanel.Controls.Add(speedNote, 0, 17);
+        mainPanel.Controls.Add(note, 0, 18);
+        mainPanel.Controls.Add(updateTitle, 0, 19);
+        mainPanel.Controls.Add(versionLabel, 0, 20);
+        mainPanel.Controls.Add(_checkUpdates, 0, 21);
+        mainPanel.Controls.Add(updateButtonsPanel, 0, 22);
+        mainPanel.Controls.Add(githubRepoLink, 0, 23);
 
         contentPanel.Controls.Add(mainPanel);
 

@@ -129,9 +129,17 @@ public sealed class AntigravityProvider : IUsageProvider, IDisposable
                 }
                 else
                 {
-                    warnings.Add(processes.All(process => string.IsNullOrWhiteSpace(process.CsrfToken))
-                        ? "Antigravity 进程存在，但未读取到本地 CSRF token，无法通过 quota 接口校验。"
-                        : "Antigravity 进程存在，但未探测到可用的本地 quota 接口；保留最后成功快照。");
+                    var latestKnown = context.Repository.GetLatestQuotas(ProviderKind.Antigravity);
+                    var hasActiveAlternative = latestKnown.Any(s =>
+                        (s.IsManualCalibration || s.IsStatusLineSync) &&
+                        !s.IsResetPassed() &&
+                        string.Equals(s.WindowKind, "weekly", StringComparison.OrdinalIgnoreCase));
+                    if (!hasActiveAlternative)
+                    {
+                        warnings.Add(processes.All(process => string.IsNullOrWhiteSpace(process.CsrfToken))
+                            ? "Antigravity 新版未暴露本地命令行凭据，无法自动轮询桌面端额度；请在「额度」页手动校准，或在主动使用 agy CLI 时通过 statusLine 同步。"
+                            : "Antigravity 进程存在，但未探测到可用的本地 quota 接口；请在「额度」页手动校准或通过 agy CLI 同步。");
+                    }
                 }
             }
             catch (Exception exception) when (exception is HttpRequestException or IOException)

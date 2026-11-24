@@ -21,8 +21,8 @@ public static class QuotaProjector
         if (duration is null || latest.CapturedAt < latest.ResetAt.Value - duration.Value || latest.CapturedAt > at.AddMinutes(5))
             return new(null, "额度或周期未知");
         var samples = history.Where(q => q.Provider == latest.Provider && q.ModelOrPoolId == latest.ModelOrPoolId &&
-            q.WindowKind == latest.WindowKind && q.CapturedAt >= latest.ResetAt.Value - duration.Value && q.CapturedAt <= latest.CapturedAt && q.ResetAt.HasValue &&
-            Math.Abs((q.ResetAt.Value - latest.ResetAt.Value).TotalSeconds) <= 60 &&
+            q.WindowKind == latest.WindowKind && q.CapturedAt >= latest.ResetAt.Value - duration.Value && q.CapturedAt <= latest.CapturedAt &&
+            IsSameResetCycle(q, latest) &&
             q.HasValidFraction && q.RemainingFraction.HasValue).OrderBy(q => q.CapturedAt).ToList();
         if (!samples.Any(q => q.CapturedAt == latest.CapturedAt)) samples.Add(latest);
         QuotaSnapshot? baseline = null;
@@ -31,7 +31,7 @@ public static class QuotaProjector
         {
             if (previous is null || sample.PlanTier != previous.PlanTier ||
                 sample.RemainingFraction > previous.RemainingFraction + JitterTolerance ||
-                sample.CapturedAt - previous.CapturedAt > TimeSpan.FromHours(36)) baseline = sample;
+                ExceedsGapLimit(previous, sample)) baseline = sample;
             baseline ??= sample;
             previous = sample;
         }
@@ -43,7 +43,9 @@ public static class QuotaProjector
         if (cost <= 0) return new(null, "缺少对应本机用量");
         var fullValue = Math.Max(cost.Value, Math.Round(cost.Value / (decimal)fraction, 2, MidpointRounding.AwayFromZero));
         var isStale = latest.IsStale(at);
-        var note = isStale ? "快照待更新" : "仅本机样本外推";
+        var note = latest.IsManualCalibration ? "按手动校准外推"
+            : latest.IsStatusLineSync ? "按 CLI 同步样本外推"
+            : isStale ? "快照待更新" : "仅本机样本外推";
         return new(fullValue, note);
     }
 
@@ -63,8 +65,8 @@ public static class QuotaProjector
             return [];
 
         var samples = history.Where(q => q.Provider == latest.Provider && q.ModelOrPoolId == latest.ModelOrPoolId &&
-            q.WindowKind == latest.WindowKind && q.CapturedAt >= latest.ResetAt.Value - duration.Value && q.CapturedAt <= latest.CapturedAt && q.ResetAt.HasValue &&
-            Math.Abs((q.ResetAt.Value - latest.ResetAt.Value).TotalSeconds) <= 60 &&
+            q.WindowKind == latest.WindowKind && q.CapturedAt >= latest.ResetAt.Value - duration.Value && q.CapturedAt <= latest.CapturedAt &&
+            IsSameResetCycle(q, latest) &&
             q.HasValidFraction && q.RemainingFraction.HasValue).OrderBy(q => q.CapturedAt).ToList();
         if (!samples.Any(q => q.CapturedAt == latest.CapturedAt)) samples.Add(latest);
 
@@ -76,7 +78,7 @@ public static class QuotaProjector
             {
                 if (sample.PlanTier != anchor.PlanTier ||
                     sample.RemainingFraction > anchor.RemainingFraction + JitterTolerance ||
-                    sample.CapturedAt - anchor.CapturedAt > TimeSpan.FromHours(36))
+                    ExceedsGapLimit(anchor, sample))
                 {
                     slices.Clear();
                     anchor = sample;
@@ -233,5 +235,23 @@ public static class QuotaProjector
         }
 
         return results.OrderByDescending(r => r.EstimatedWeeklyCostUsd).ToList();
+    }
+
+    private static bool IsSameResetCycle(QuotaSnapshot a, QuotaSnapshot b)
+    {
+        if (!a.ResetAt.HasValue || !b.ResetAt.HasValue) return false;
+        var tolerance = (a.IsManualCalibration || b.IsManualCalibration)
+            ? TimeSpan.FromHours(2)
+            : (a.IsStatusLineSync || b.IsStatusLineSync)
+                ? TimeSpan.FromMinutes(10)
+                : TimeSpan.FromSeconds(60);
+        return (a.ResetAt.Value - b.ResetAt.Value).Duration() <= tolerance;
+    }
+
+    private static bool ExceedsGapLimit(QuotaSnapshot prev, QuotaSnapshot curr)
+    {
+        if (prev.IsManualCalibration || curr.IsManualCalibration || prev.IsStatusLineSync || curr.IsStatusLineSync)
+            return false;
+        return curr.CapturedAt - prev.CapturedAt > TimeSpan.FromHours(36);
     }
 }

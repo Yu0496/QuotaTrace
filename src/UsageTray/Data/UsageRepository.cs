@@ -717,13 +717,24 @@ public sealed class UsageRepository
         }
         else
         {
-            command.CommandText = @"SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
-                q.window_kind,q.source,q.plan_tier FROM quota_snapshots q
+            command.CommandText = @"
+                SELECT q.provider,q.captured_at_utc,q.model_or_pool_id,q.label,q.remaining_fraction,q.reset_at_utc,
+                    q.window_kind,q.source,q.plan_tier
+                FROM quota_snapshots q
+                INNER JOIN (
+                    SELECT model_or_pool_id, window_kind, MAX(captured_at_utc) AS max_captured
+                    FROM quota_snapshots
+                    WHERE provider=$provider
+                      AND model_or_pool_id NOT LIKE '%argon%' AND label NOT LIKE '%argon%'
+                      AND lower(model_or_pool_id) NOT LIKE 'unknown%' AND lower(window_kind) NOT LIKE 'unknown%'
+                    GROUP BY model_or_pool_id, window_kind
+                ) latest
+                    ON q.model_or_pool_id = latest.model_or_pool_id
+                   AND q.window_kind = latest.window_kind
+                   AND q.captured_at_utc = latest.max_captured
                 WHERE q.provider=$provider
-                AND q.model_or_pool_id NOT LIKE '%argon%' AND q.label NOT LIKE '%argon%'
-                AND q.captured_at_utc=(
-                    SELECT MAX(captured_at_utc) FROM quota_snapshots
-                    WHERE provider=$provider AND model_or_pool_id NOT LIKE '%argon%' AND label NOT LIKE '%argon%')
+                  AND q.model_or_pool_id NOT LIKE '%argon%' AND q.label NOT LIKE '%argon%'
+                  AND lower(q.model_or_pool_id) NOT LIKE 'unknown%' AND lower(q.window_kind) NOT LIKE 'unknown%'
                 ORDER BY q.model_or_pool_id,q.window_kind";
         }
         command.Parameters.AddWithValue("$provider", provider.ToStorageString());
@@ -745,7 +756,16 @@ public sealed class UsageRepository
         else if (provider == ProviderKind.Antigravity)
         {
             list.RemoveAll(item => item.ModelOrPoolId.Contains("argon", StringComparison.OrdinalIgnoreCase) ||
-                                   item.DisplayLabel.Contains("argon", StringComparison.OrdinalIgnoreCase));
+                                   item.DisplayLabel.Contains("argon", StringComparison.OrdinalIgnoreCase) ||
+                                   item.ModelOrPoolId.StartsWith("unknown", StringComparison.OrdinalIgnoreCase) ||
+                                   item.WindowKind.StartsWith("unknown", StringComparison.OrdinalIgnoreCase));
+
+            return list
+                .GroupBy(NormalizeAntigravityPoolWindowKey)
+                .Select(group => group.OrderByDescending(item => item.CapturedAt).First())
+                .OrderBy(item => AntigravityQuotaEstimator.SnapshotMatchesPool(item, "gemini") ? 0 : 1)
+                .ThenBy(item => item.WindowKind)
+                .ToList();
         }
 
         return list
@@ -753,6 +773,15 @@ public sealed class UsageRepository
             .Select(group => group.OrderByDescending(item => item.CapturedAt).First())
             .OrderBy(item => item.ModelOrPoolId.Equals("codex-reserve", StringComparison.OrdinalIgnoreCase) ? 1 : 0)
             .ToList();
+    }
+
+    private static string NormalizeAntigravityPoolWindowKey(QuotaSnapshot snapshot)
+    {
+        var pool = AntigravityQuotaEstimator.SnapshotMatchesPool(snapshot, "gemini") ? "gemini"
+            : AntigravityQuotaEstimator.SnapshotMatchesPool(snapshot, "3p") ? "3p"
+            : snapshot.ModelOrPoolId.ToLowerInvariant();
+        var win = snapshot.WindowKind.ToLowerInvariant();
+        return $"{pool}_{win}";
     }
 
     public void CleanupArgonSnapshots()

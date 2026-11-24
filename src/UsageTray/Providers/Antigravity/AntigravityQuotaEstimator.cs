@@ -126,7 +126,9 @@ public sealed class AntigravityQuotaEstimator
             if (isContaminated)
             {
                 fullValue = Math.Max(macroFull, cost.Value);
-                note = "按全周期累计消耗外推";
+                note = latestSnapshot.IsManualCalibration ? "按手动校准全周期外推"
+                    : latestSnapshot.IsStatusLineSync ? "按 CLI 同步全周期外推"
+                    : "按全周期累计消耗外推";
             }
             else
             {

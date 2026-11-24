@@ -1,4 +1,5 @@
 using UsageTray.App;
+using UsageTray.Core;
 using UsageTray.Data;
 using UsageTray.Pricing;
 using UsageTray.Providers.Antigravity;
@@ -20,6 +21,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private readonly ToolStripMenuItem _openDashboardMenuItem;
     private readonly ToolStripMenuItem _refreshNowMenuItem;
+    private readonly ToolStripMenuItem _calibrateAntigravityMenuItem;
     private readonly ToolStripMenuItem _quotaMenuItem;
     private readonly ToolStripMenuItem _pinQuotaMenuItem;
     private readonly ToolStripMenuItem _startupMenuItem;
@@ -104,6 +106,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _openDashboardMenuItem = new ToolStripMenuItem(string.Empty, null, (_, _) => ShowMainForm());
         _refreshNowMenuItem = new ToolStripMenuItem(string.Empty, null, async (_, _) => await RefreshAsync(false));
+        _calibrateAntigravityMenuItem = new ToolStripMenuItem(string.Empty, null, (_, _) => CalibrateAntigravity());
         _quotaMenuItem = new ToolStripMenuItem(string.Empty) { Enabled = false };
         _pinQuotaMenuItem = new ToolStripMenuItem(string.Empty) { CheckOnClick = true };
         _pinQuotaMenuItem.Click += (_, _) => SetQuotaPopupPinned(_pinQuotaMenuItem.Checked);
@@ -117,6 +120,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         menu.Items.Add(_openDashboardMenuItem);
         menu.Items.Add(_refreshNowMenuItem);
+        menu.Items.Add(_calibrateAntigravityMenuItem);
         menu.Items.Add(_quotaMenuItem);
         menu.Items.Add(_pinQuotaMenuItem);
         menu.Items.Add(_startupMenuItem);
@@ -168,6 +172,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         _openDashboardMenuItem.Text = I18n.T("打开仪表盘", "Open Dashboard");
         _refreshNowMenuItem.Text = I18n.T("立即刷新（增量）", "Refresh Now (Incremental)");
+        _calibrateAntigravityMenuItem.Text = I18n.T("校准 Antigravity 额度...", "Calibrate Antigravity Quota...");
+        _calibrateAntigravityMenuItem.Visible = _coordinator.Settings.EnableAntigravity;
         _pinQuotaMenuItem.Text = I18n.T("固定显示额度摘要", "Pin Quota Summary");
         _startupMenuItem.Text = I18n.T("开机启动", "Start with Windows");
         _settingsMenuItem.Text = I18n.T("设置", "Settings");
@@ -216,7 +222,27 @@ public sealed class TrayApplicationContext : ApplicationContext
         using var form = new SettingsForm(_settingsStore, _coordinator);
         form.ShowDialog(_mainForm);
         UpdateMenuTexts();
+        if (form.LatestManualSnapshot is not null)
+        {
+            ApplySnapshot(form.LatestManualSnapshot);
+        }
         _quotaPopup?.UpdateProviderSettings(_coordinator.Settings.EnableCodex, _coordinator.Settings.EnableAntigravity);
+        _mainForm?.RefreshCurrentSelection();
+    }
+
+    private void CalibrateAntigravity()
+    {
+        var existing = _coordinator.GetLatestQuotas(ProviderKind.Antigravity);
+        using var dialog = new AntigravityManualQuotaDialog(existing);
+        var owner = _mainForm is { IsDisposed: false, Visible: true } ? _mainForm : null;
+        if ((owner is not null ? dialog.ShowDialog(owner) : dialog.ShowDialog()) != DialogResult.OK)
+            return;
+
+        if (dialog.ResultSnapshots.Count == 0)
+            return;
+
+        var snapshot = _coordinator.SaveManualAntigravityQuotas(dialog.ResultSnapshots);
+        ApplySnapshot(snapshot);
         _mainForm?.RefreshCurrentSelection();
     }
 

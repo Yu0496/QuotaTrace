@@ -28,15 +28,28 @@ public static class QuotaDisplayFormatter
         if (enableAntigravity)
         {
             var antigravitySnapshots = snapshot.Quotas
-                .Where(item => item.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(item.Snapshot))
+                .Where(item => item.Snapshot.Provider == ProviderKind.Antigravity &&
+                               !IsArgon(item.Snapshot) &&
+                               !item.Snapshot.IsExpiredStaleAntigravityFiveHour())
                 .Select(item => item.Snapshot).ToList();
             var ag5h = antigravitySnapshots.Where(IsFiveHour).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
             var agWeekly = antigravitySnapshots.Where(IsWeekly).OrderBy(s => s.RemainingFraction ?? 1.0).FirstOrDefault();
 
-            var shortText = FormatCompactWithResetOnZero(ag5h);
-            var weeklyText = FormatCompactWithResetOnZero(agWeekly);
             var wkLabel = I18n.T("周", "Wk");
-            agPart = $"AG 5h {shortText} / {wkLabel} {weeklyText}";
+            var weeklyText = FormatCompactWithResetOnZero(agWeekly);
+            if (ag5h is null && agWeekly is not null)
+            {
+                agPart = $"AG {wkLabel} {weeklyText}";
+            }
+            else if (ag5h is null && agWeekly is null)
+            {
+                agPart = $"AG {I18n.T("待校准", "Pending")}";
+            }
+            else
+            {
+                var shortText = FormatCompactWithResetOnZero(ag5h);
+                agPart = $"AG 5h {shortText} / {wkLabel} {weeklyText}";
+            }
         }
 
         string? codexText = null;
@@ -147,17 +160,24 @@ public static class QuotaDisplayFormatter
     private static string BuildAntigravitySection(DashboardSnapshot snapshot)
     {
         var models = snapshot.Models.Where(item => item.Provider == ProviderKind.Antigravity).ToList();
-        var snapshots = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(item.Snapshot))
+        var snapshots = snapshot.Quotas
+            .Where(item => item.Snapshot.Provider == ProviderKind.Antigravity &&
+                           !IsArgon(item.Snapshot) &&
+                           !item.Snapshot.IsExpiredStaleAntigravityFiveHour())
             .Select(item => item.Snapshot).ToList();
         var plan = snapshots
             .Where(item => !string.IsNullOrWhiteSpace(item.PlanTier))
             .OrderByDescending(item => item.CapturedAt)
             .Select(item => item.PlanTier)
             .FirstOrDefault();
-        var status = snapshot.Quotas.Where(item => item.Snapshot.Provider == ProviderKind.Antigravity && !IsArgon(item.Snapshot)).ToList() is { Count: > 0 } views &&
-            views.All(item => item.IsOffline)
-            ? I18n.T("离线，显示最后一次快照", "Offline, showing last snapshot")
-            : I18n.T("当前快照", "Active snapshot");
+        var activeWeekly = snapshots.FirstOrDefault(s => IsWeekly(s) && !s.IsResetPassed()) ?? snapshots.FirstOrDefault(s => !s.IsResetPassed());
+        var status = activeWeekly switch
+        {
+            { IsManualCalibration: true } => I18n.T("手动校准", "Manual calibration"),
+            { IsStatusLineSync: true } => I18n.T("CLI 同步", "CLI sync"),
+            { } s when !s.IsStale() => I18n.T("当前快照", "Active snapshot"),
+            _ => I18n.T("未自动同步（桌面端接口受限，可手动校准或通过 agy CLI 同步）", "Not auto-synced (Desktop API restricted; use manual calibration or agy CLI)")
+        };
 
         var titlePrefix = I18n.T("Antigravity 额度与用量", "Antigravity Quota & Usage");
         var statusPrefix = I18n.T("状态：", "Status: ");
@@ -298,7 +318,14 @@ public static class QuotaDisplayFormatter
         var sampleLbl = I18n.T("采样 ", "Sampled ");
         var resetLbl = I18n.T("；重置 ", "; Reset ");
         var values = snapshots.Select(snapshot =>
-            $"{ShortLabel(snapshot)} {FormatRemaining(snapshot)}（{sampleLbl}{snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}{resetLbl}{FormatReset(snapshot)}）");
+        {
+            var srcLabel = snapshot.IsManualCalibration
+                ? I18n.T("手动校准 ", "Manual ")
+                : snapshot.IsStatusLineSync
+                    ? I18n.T("CLI 同步 ", "CLI Sync ")
+                    : sampleLbl;
+            return $"{ShortLabel(snapshot)} {FormatRemaining(snapshot)}（{srcLabel}{snapshot.CapturedAt.ToLocalTime():MM-dd HH:mm}{resetLbl}{FormatReset(snapshot)}）";
+        });
         return $"{label}：{string.Join("；", values)}";
     }
 
@@ -314,7 +341,12 @@ public static class QuotaDisplayFormatter
     private static string FormatRemaining(QuotaSnapshot snapshot)
     {
         if (!snapshot.HasValidFraction || !snapshot.RemainingFraction.HasValue) return I18n.T("剩余未知", "Remaining Unknown");
-        if (snapshot.IsResetPassed()) return I18n.Format("待同步（上次 {0:P0}）", "Syncing (Last {0:P0})", snapshot.RemainingFraction.Value);
+        if (snapshot.IsResetPassed())
+        {
+            return snapshot.IsManualCalibration
+                ? I18n.Format("周期已重置（上次手动校准 {0:P0}）", "Cycle Reset (Last Manual {0:P0})", snapshot.RemainingFraction.Value)
+                : I18n.Format("待同步（上次 {0:P0}）", "Syncing (Last {0:P0})", snapshot.RemainingFraction.Value);
+        }
         var staleNote = snapshot.IsStale() ? I18n.T("（旧快照）", " (Stale)") : "";
         return I18n.Format("{0:P0} 剩余{1}", "{0:P0} Remaining{1}", snapshot.RemainingFraction.Value, staleNote);
     }

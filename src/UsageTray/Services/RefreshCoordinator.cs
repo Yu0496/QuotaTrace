@@ -98,6 +98,26 @@ public sealed class RefreshCoordinator : IDisposable
     public DashboardSnapshot BuildSnapshot(DateRange range, ProviderKind? provider = null, bool isWeeklyCycle = false) =>
         _aggregator.BuildSnapshot(range, provider, isWeeklyCycle);
 
+    public IReadOnlyList<QuotaSnapshot> GetLatestQuotas(ProviderKind provider) =>
+        _repository.GetLatestQuotas(provider);
+
+    public DashboardSnapshot SaveManualAntigravityQuotas(IReadOnlyList<QuotaSnapshot> snapshots)
+    {
+        if (snapshots.Count == 0) return CurrentSnapshot;
+        _refreshLock.Wait();
+        try
+        {
+            _repository.AddQuotaSnapshots(snapshots);
+            CurrentSnapshot = _aggregator.BuildSnapshot(CurrentSnapshot.Range, CurrentSnapshot.ProviderFilter, CurrentSnapshot.IsWeeklyCycleWindow);
+            SnapshotChanged?.Invoke(this, CurrentSnapshot);
+            return CurrentSnapshot;
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
     public void UpdateSettings(AppSettings settings)
     {
         settings.Normalize();
